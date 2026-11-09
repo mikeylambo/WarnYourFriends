@@ -27,9 +27,10 @@ src/sim/             pure TS simulation (no three/DOM): sim.ts, layout.ts, bot.t
 src/render/          three.js views: world, giant, camera rig, palette
 src/audio.ts         Web Audio, music/sfx/voice buses (synth placeholders)
 src/input.ts         KBM, gamepad, touch → SimInput
-src/main.ts          boot, fixed-step loop, event presentation, window.__GAME
+src/main.ts          bootstrap: WebGL check, then loads game.ts; boot errors shown on screen
+src/game.ts          fixed-step loop, event presentation, window.__GAME
 tools/soak.ts        headless N-seed soak with invariants
-tools/e2e-smoke.mjs  headless Chromium smoke against the built game
+tools/e2e-smoke.mjs  headless Chromium smoke against the production build (E2E_URL= for a deployed URL)
 ```
 
 ## Commands

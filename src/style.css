@@ -101,3 +101,10 @@ html, body {
 #tune input[type=range] { width: 100%; }
 #tune output { text-align: right; }
 #tune output.dirty { color: #ff8a96; font-weight: 700; }
+
+#fatal .card h2 { margin-top: 10px; letter-spacing: 0.02em; }
+#fatal .detail { font: 12px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace; opacity: 0.7; word-break: break-word; }
+html[data-boot='failed'] #tierbar,
+html[data-boot='failed'] #btn-pause { display: none; }
+/* The game module loads after the WebGL check; show the start button as pending until it's live. */
+html:not([data-boot='ok']) #start { opacity: 0.55; cursor: progress; }
