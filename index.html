@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+    <meta name="theme-color" content="#1c0b30" />
+    <title>Warn Your Friends</title>
+    <link rel="stylesheet" href="/src/style.css" />
+  </head>
+  <body>
+    <div id="app">
+      <canvas id="view"></canvas>
+      <div id="flash"></div>
+
+      <div id="debug" hidden></div>
+      <div id="tierbar" aria-hidden="true"><span class="name">JOG</span><span class="meter"><i></i></span></div>
+
+      <div id="touch-ui" hidden>
+        <div id="stick"><div id="stick-knob"></div></div>
+        <button id="btn-ability" disabled aria-label="Ability (none equipped)">ABL</button>
+        <button id="btn-shoulder" aria-label="Shoulder Check">SHLDR</button>
+      </div>
+      <button id="btn-pause" aria-label="Pause">II</button>
+
+      <div id="title" class="overlay">
+        <div class="card">
+          <div class="kicker">PHASE 0 · THE RUN</div>
+          <h1>WARN YOUR FRIENDS</h1>
+          <p class="sub">Greybox feel test. No ratings, no cops. Just run.</p>
+          <ul class="controls">
+            <li><b>Steer</b> A/D or mouse direction · left stick · drag left half</li>
+            <li><b>Brake</b> Space · LT · hold left thumb still</li>
+            <li><b>Shoulder Check</b> Shift / click · RB · right button</li>
+            <li><b>Pause</b> Esc · Start · II</li>
+          </ul>
+          <button id="start" class="go">Press any key, click or tap to run</button>
+        </div>
+      </div>
+
+      <div id="paused" class="overlay" hidden>
+        <div class="card">
+          <h2>PAUSED</h2>
+          <label><input type="checkbox" id="opt-reduced" /> Reduced Motion (no wobble, no camera jolt)</label>
+          <label><input type="checkbox" id="opt-flashes" /> Reduce Flashes</label>
+          <label><input type="checkbox" id="opt-debug" /> Debug overlay</label>
+          <button id="resume" class="go">Resume</button>
+        </div>
+      </div>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

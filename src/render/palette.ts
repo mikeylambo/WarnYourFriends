@@ -1,0 +1,55 @@
+import type { Material, PropKind } from '../sim/types';
+
+/**
+ * §23 value rule: the city sits light, the giant is always the darkest thing,
+ * props are mid-value. Sun-bleached, slightly toy-like.
+ */
+export const PALETTE = {
+  sky: 0xf1ebdf,
+  road: 0xbfb8ab,
+  roadLine: 0xf6f1e4,
+  sidewalk: 0xe4ddcf,
+  plaza: 0xeadcc0,
+  lot: 0xcdc7bb,
+  wall: 0xd9d2c4,
+  buildings: [0xf0e6d2, 0xdfe6e3, 0xf2d9c9, 0xe5e0ee, 0xf3ecc9, 0xd7e3d0],
+  roofTrim: 0xc8bfae,
+  roofUnit: 0xb9b4aa,
+  shadow: 0x2a2230,
+
+  giantBody: 0x2b1446,
+  giantArmor: 0x3a1c5c,
+  giantCape: 0x1c0b30,
+  giantBone: 0xe6dcc3,
+  giantHair: 0xfaf7f0,
+  giantSkin: 0x6b4a5e,
+  giantBand: 0xd9ccb0,
+
+  peds: [0xe07a5f, 0x81b29a, 0xf2cc8f, 0x6d9dc5, 0xc06c84, 0x9fa8da, 0xf4a259, 0x8fb339],
+  skin: [0xf1c27d, 0xc68642, 0x8d5524, 0xe0ac69],
+};
+
+export const KIND_COLORS: Partial<Record<PropKind, number[]>> = {
+  bin: [0x5f7f6a, 0x7a7f86],
+  mailbox: [0x3c66b5],
+  newsbox: [0xd64545, 0xe8b931, 0x3d8fd1],
+  cart: [0xf28c28, 0xe4412b, 0x7cbf3a],
+  planter: [0xc27a4a],
+  stall: [0xd94f4f, 0x2fa3a0, 0xe6b422, 0xc0508f],
+  fence: [0xa07850],
+  bench: [0x9a6b45],
+  bikerack: [0x8a9099],
+  car: [0xcf4b3e, 0x3b8ea5, 0xd9a43b, 0x6b8f5a, 0x4a5d8c],
+  van: [0xf2efe8, 0xd3dbe0, 0xe9d7a8],
+  barricade: [0xd3cec4],
+  pillar: [0xcbc6bb],
+};
+
+export const MATERIAL_DEBRIS: Record<Material, number[]> = {
+  wood: [0xa67c52, 0xc89b6d, 0x8a6240],
+  glass: [0xbfe3ef, 0xdff3f8, 0x9fcfe0],
+  metal: [0x8c939b, 0xb0b5ba, 0x6d737a],
+  fruit: [0xf28c28, 0xe4412b, 0x7cbf3a, 0xf5d33b],
+  concrete: [0xcfcac0, 0xb5b0a6, 0xe0dbd1],
+  paper: [0xf4f0e6, 0xe8e2d4, 0x333333],
+};

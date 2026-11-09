@@ -1,0 +1,27 @@
+{
+  "name": "warn-your-friends",
+  "private": true,
+  "version": "0.0.1",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview --port 4173 --strictPort",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "soak": "tsx tools/soak.ts",
+    "e2e": "node tools/e2e-smoke.mjs",
+    "gates": "npm run typecheck && npm run test && npm run soak && npm run build && npm run e2e"
+  },
+  "dependencies": {
+    "three": "^0.187.0"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.6",
+    "@types/three": "^0.187.0",
+    "tsx": "^4.23.15",
+    "typescript": "5.9",
+    "vite": "^8.3.6",
+    "vitest": "^5.1.0"
+  }
+}
