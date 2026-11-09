@@ -62,6 +62,12 @@ let giant: GiantView;
 let bot: Bot | null = null;
 const audio = new Audio();
 const input = new Input(canvas, $('btn-shoulder'), $('btn-pause'));
+input.aimFromScreenDir = (sx, sy) => rig.screenDirToHeading(sx, sy);
+input.aimFromCursor = (cx, cy) => {
+  const p = rig.screenToGround(cx, cy);
+  if (!p) return null;
+  return Math.atan2(p.z - sim.giant.z, p.x - sim.giant.x);
+};
 
 const prev = { x: 0, z: 0, heading: 0, travel: 0 };
 let started = false;
@@ -83,7 +89,13 @@ function newRun(seed: number) {
   giant = new GiantView();
   scene.add(world.group, ...giant.objects);
   giant.reset(sim.giant);
-  rig.snap(sim.giant.x, sim.giant.z, sim.giant.tier);
+  rig.setOccluders(
+    sim.props
+      .filter((p) => p.kind === 'building' || p.kind === 'wall')
+      // Buildings carry a parapet and roof units; include them in the line-of-sight box.
+      .map((p) => ({ minX: p.x - p.hw, maxX: p.x + p.hw, minZ: p.z - p.hd, maxZ: p.z + p.hd, top: p.h + (p.kind === 'building' ? 1.6 : 0) })),
+  );
+  rig.snap(sim.giant.x, sim.giant.z, sim.giant.travel, sim.giant.speed, sim.giant.tier);
   bot = flags.bot ? new Bot(sim) : null;
   prev.x = sim.giant.x;
   prev.z = sim.giant.z;
@@ -337,7 +349,7 @@ function frame(now: number) {
   giant.update(animDt, x, z, heading, g);
   world.update(animDt, alpha);
   rig.setTier(g.tier);
-  rig.update(paused ? 0 : realDt, x, z, travel);
+  rig.update(paused ? 0 : realDt, x, z, travel, g.speed, g.angVel);
 
   // Mouse-direction steering needs the giant on screen.
   proj.set(x, 1.6, z).project(rig.camera);
@@ -389,7 +401,8 @@ function updateHud(dt: number) {
       `tier-up ${Number.isFinite(T.tierUpAfter) ? `${g.tierTimer.toFixed(2)}/${T.tierUpAfter}s` : '—'}  drift ${drift.toFixed(0)}°\n` +
       `brake ${g.braking ? 'ON' : '-'}  stumble ${g.stumble.toFixed(2)}  shoulder cd ${g.shoulderCd.toFixed(1)}\n` +
       `smash ${sim.stats.smashes}  knock ${sim.stats.knocks}  bounce ${sim.stats.bounces}  shove ${sim.stats.shoves}\n` +
-      `input ${input.device}${bot ? ' (BOT)' : ''}  timescale ${flags.timescale}`;
+      `input ${input.device}${bot ? ' (BOT)' : ''}  timescale ${flags.timescale}\n` +
+      `cam ahead ${rig.info.aheadSeconds.toFixed(1)}s (${rig.info.aheadMetres.toFixed(0)}m)  giant y ${rig.info.giantScreenY.toFixed(2)}  side ${rig.info.side.toFixed(2)}  climb ${rig.info.raise.toFixed(1)}m`;
   }
 }
 
@@ -422,6 +435,9 @@ window.__GAME = {
   /** Step mode: advance N ticks with a fixed input (or the bot). */
   step(n: number, inp?: SimInput) {
     for (let i = 0; i < n; i++) stepSim(inp ?? (bot ? bot.input() : NO_INPUT));
+  },
+  camera() {
+    return { ...rig.info };
   },
   state() {
     const g = sim.giant;

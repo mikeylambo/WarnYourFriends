@@ -239,11 +239,23 @@ Rises when Ratings cross 30 / 50 / 70 / 90, and +1 every 45s regardless. Never f
 
 ## 15. Camera
 
-Top-down, 70° pitch, perspective FOV 40. Height: Jog 28m, Stride 34m, Rampage 42m, eased over 0.6s. Lags the giant 0.25s and leads 3m toward heading. Wobble ±0.3° at 0.4 Hz (off with Reduced Motion).
+> **Revised 2026-11-10** (Mike): the near-top-down rig is replaced by an oblique news-chopper shot. Original v0.2 text: *"Top-down, 70° pitch, perspective FOV 40. Height: Jog 28m, Stride 34m, Rampage 42m, eased over 0.6s. Lags the giant 0.25s and leads 3m toward heading."*
+
+An oblique news-chopper camera, like a real broadcast shot: high, angled, offset to the side, looking down the street ahead. All values live in `tuning.ts` (`camera`, per-tier `cameraDistance`) and in the T panel.
+
+- **Pitch** 48° from horizontal. **FOV** 35 (slightly telephoto; flattens like a long lens).
+- **Side offset:** the camera sits 25° off the giant's heading, to one side. It swings sides only on sustained turns (>2s one way), slowly (2.5s ease), never on brief steering, so it reads as a pilot repositioning. It swings to the outside of the turn, looking across it.
+- **Look-ahead:** frames the point `speed × 1.6s` ahead of the giant, not the giant itself. The giant sits in the lower third: its look-ahead is pulled in whenever the giant would sit lower than 85% of screen height. Goal: at least ~2s of visible road ahead at every tier.
+- **Distance by tier** (camera to framed point): Jog 30m, Stride 38m, Rampage 50m, eased over 0.8s.
+- **Lag** 0.35s on position, 0.2s on look target. **Wobble** ±0.3° at 0.4 Hz (off with Reduced Motion).
+- **Never clips into buildings:** if a building blocks the line of sight to the giant, the camera climbs until it's clear rather than cutting through, then settles back.
+- **Steering is camera-relative:** stick and touch "up" means into the shot; mouse steering aims at the ground point under the cursor.
+- Impact shake (§10) and the tier-up pull-out apply on top.
 
 | Event | Response |
 |---|---|
 | Heavy smash | 5px jolt, 0.1s |
+| Tier-up | +6m distance pull-out, decays over 0.5s |
 | Landmark set piece | Instant replay, 3s, from a low angle |
 | Pin above 60 | Zoom in 4m, red vignette |
 | Busted | Slow-mo 0.3×, freeze-frame |

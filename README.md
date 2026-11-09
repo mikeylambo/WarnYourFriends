@@ -19,7 +19,7 @@ Open the printed URL. Any key, click or tap starts the run.
 
 | | Keyboard / mouse | Gamepad | Touch |
 |---|---|---|---|
-| Steer | A/D rotate, or point the mouse | Left stick (absolute) | Drag on left half |
+| Steer | A/D rotate, or point the mouse at the ground | Left stick (camera-relative) | Drag on left half (camera-relative) |
 | Brake | Space | LT | Hold left thumb still |
 | Shoulder Check | Shift / left click | RB | Red button |
 | Pause | Esc | Start | II |

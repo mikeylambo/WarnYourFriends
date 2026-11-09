@@ -36,8 +36,8 @@ export interface TierTuning {
   strideLength: number;
   /** Forward lean for the run cycle, degrees (§10, §24). */
   leanDeg: number;
-  /** §15 camera height for this tier. */
-  cameraHeight: number;
+  /** §15 camera distance (slant, camera to framed point) for this tier. */
+  cameraDistance: number;
 }
 
 export const TUNING = {
@@ -63,9 +63,9 @@ export const TUNING = {
 
   /** §9 momentum tiers. */
   tiers: [
-    { name: 'Jog', topSpeed: 6, accel: 8, turnRateDeg: 220, tierUpAfter: 2.0, grip: 16, turnLag: 0.06, smashes: 'light', strideLength: 2.2, leanDeg: 10, cameraHeight: 28 },
-    { name: 'Stride', topSpeed: 10, accel: 6, turnRateDeg: 140, tierUpAfter: 3.0, grip: 7.5, turnLag: 0.09, smashes: 'medium', strideLength: 3.2, leanDeg: 18, cameraHeight: 34 },
-    { name: 'Rampage', topSpeed: 15, accel: 4, turnRateDeg: 85, tierUpAfter: Infinity, grip: 3.6, turnLag: 0.13, smashes: 'heavy', strideLength: 4.4, leanDeg: 28, cameraHeight: 42 },
+    { name: 'Jog', topSpeed: 6, accel: 8, turnRateDeg: 220, tierUpAfter: 2.0, grip: 16, turnLag: 0.06, smashes: 'light', strideLength: 2.2, leanDeg: 10, cameraDistance: 30 },
+    { name: 'Stride', topSpeed: 10, accel: 6, turnRateDeg: 140, tierUpAfter: 3.0, grip: 7.5, turnLag: 0.09, smashes: 'medium', strideLength: 3.2, leanDeg: 18, cameraDistance: 38 },
+    { name: 'Rampage', topSpeed: 15, accel: 4, turnRateDeg: 85, tierUpAfter: Infinity, grip: 3.6, turnLag: 0.13, smashes: 'heavy', strideLength: 4.4, leanDeg: 28, cameraDistance: 50 },
   ] as TierTuning[],
 
   tierDrop: {
@@ -121,20 +121,49 @@ export const TUNING = {
     bounce: { hitstop: 2, shake: 3, flashFrames: 0, haptic: 90, hapticStrength: 0.5 },
   },
 
-  /** §15 camera. */
+  /**
+   * §15 oblique news-chopper camera (rev 2026-11-10): high, angled, offset to
+   * one side, looking down the street ahead like a real broadcast shot.
+   */
   camera: {
-    pitchDeg: 70,
-    fov: 40,
-    heightEase: 0.6,
-    lag: 0.25,
-    lead: 3,
+    /** Tilt below horizontal. Oblique, not top-down: you see the street ahead. */
+    pitchDeg: 48,
+    /** Slightly telephoto; flattens the city like a long lens. */
+    fov: 35,
+    /** The camera sits this far off the giant's heading, to one side. */
+    sideAngleDeg: 25,
+    /** Swing sides only after turning one way this long: a pilot repositioning, not a twitch. */
+    sideSwitchAfter: 2,
+    /** Turning slower than this (deg/s) doesn't count toward a side swing. */
+    sideSwitchMinTurnDegPerSec: 25,
+    /** How long the swing to the other side takes (eased). */
+    sideSwitchTime: 2.5,
+    /** Frame the point this many seconds ahead of the giant (speed × time). */
+    lookAheadTime: 1.6,
+    /**
+     * Cap on the look-ahead so the giant never sits lower than this fraction of
+     * the screen height (0 top, 1 bottom). Keeps it in the lower third with room
+     * for what's behind it. At §15 distances the cap binds at Stride and Rampage.
+     */
+    giantMaxScreenY: 0.85,
+    /** Distance changes between tiers ease over this long. */
+    distanceEase: 0.8,
+    /** Lag on the camera's position and on its look target. */
+    positionLag: 0.35,
+    lookLag: 0.2,
     wobbleDeg: 0.3,
     wobbleHz: 0.4,
+    /** Line-of-sight: raise the camera (never cut through) when a building blocks the giant. */
+    occlusionRaiseStep: 2,
+    occlusionMaxRaise: 60,
+    /** Raise fast so the giant is never hidden for long; settle back slowly. */
+    occlusionRaiseLag: 0.15,
+    occlusionLowerLag: 0.8,
     /** §15 heavy smash jolt. */
     joltPx: 5,
     joltTime: 0.1,
-    /** §10 tier-up: brief camera pull-out (extra metres, decays). */
-    tierUpPullOut: 5,
+    /** §10 tier-up: brief camera pull-out (extra metres of distance, decays). */
+    tierUpPullOut: 6,
     tierUpPullOutTime: 0.5,
     /** Footfall micro-shake by tier, px. Rampage footfalls must be felt. */
     footfallShakePx: [0, 0.6, 1.6],

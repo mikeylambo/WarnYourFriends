@@ -19,8 +19,16 @@ export class Input {
   private padConnected = false;
   onPadDisconnect: (() => void) | null = null;
   onAnyInput: (() => void) | null = null;
-  /** Screen position of the giant (CSS px), for mouse-direction steering. */
+  /** Screen position of the giant (CSS px): the mouse dead zone is centred on it. */
   giantScreen = { x: 0, y: 0 };
+  /**
+   * Set by the game from the camera. The chopper camera rotates, so screen
+   * directions are converted to world headings through it:
+   *   screenDir: stick/touch vector (x right, y down) → heading
+   *   cursor:    mouse position → heading from the giant to the ground point under it
+   */
+  aimFromScreenDir: (sx: number, sy: number) => number = (sx, sy) => Math.atan2(sy, sx);
+  aimFromCursor: (cx: number, cy: number) => number | null = () => null;
 
   constructor(el: HTMLElement, shoulderBtn: HTMLElement, pauseBtn: HTMLElement) {
     window.addEventListener('keydown', (e) => {
@@ -114,6 +122,7 @@ export class Input {
   }
 
   private pad: { aim: number | null; brake: boolean } = { aim: null, brake: false };
+  private padStick = { x: 0, y: 0, active: false };
 
   private pollPad(pauseOnly = false) {
     const pads = navigator.getGamepads?.() ?? [];
@@ -121,6 +130,7 @@ export class Input {
     for (const p of pads) if (p && p.connected) { gp = p; break; }
     if (!gp) {
       this.pad = { aim: null, brake: false };
+      this.padStick.active = false;
       return;
     }
     this.padConnected = true;
@@ -135,8 +145,9 @@ export class Input {
     const ly = gp.axes[1] ?? 0;
     const mag = Math.hypot(lx, ly);
     const lt = (gp.buttons[6]?.value ?? 0) > 0.3;
-    // Screen up is world -Z, screen right is +X: stick maps straight onto (x, z).
-    this.pad = { aim: mag > 0.3 ? Math.atan2(ly, lx) : null, brake: lt };
+    // Stick is in screen space; converted to a world heading at sample time.
+    this.padStick = { x: lx, y: ly, active: mag > 0.3 };
+    this.pad = { aim: null, brake: lt };
     if (mag > 0.3 || lt || rb) {
       this.device = 'gamepad';
       this.onAnyInput?.();
@@ -162,10 +173,10 @@ export class Input {
       const dx = this.mouse.x - this.giantScreen.x;
       const dy = this.mouse.y - this.giantScreen.y;
       // Dead zone around the giant so a resting cursor doesn't jitter the heading.
-      if (Math.hypot(dx, dy) > 40) aim = Math.atan2(dy, dx);
+      if (Math.hypot(dx, dy) > 40) aim = this.aimFromCursor(this.mouse.x, this.mouse.y);
     }
 
-    if (this.pad.aim !== null) aim = this.pad.aim;
+    if (this.padStick.active) aim = this.aimFromScreenDir(this.padStick.x, this.padStick.y);
     if (this.pad.brake) brake = true;
 
     if (this.touch) {
@@ -173,7 +184,7 @@ export class Input {
       const dx = t.x - t.sx;
       const dy = t.y - t.sy;
       if (Math.hypot(dx, dy) > 14) {
-        aim = Math.atan2(dy, dx);
+        aim = this.aimFromScreenDir(dx, dy);
         t.still = 0;
       } else {
         // §46 working default: hold the thumb still for 0.15s to brake.

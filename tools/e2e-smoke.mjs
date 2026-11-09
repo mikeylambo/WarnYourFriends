@@ -130,7 +130,21 @@ try {
     const problems = watch(page);
     await page.goto(`${URL}?seed=3&bot=1&timescale=3&debug=1`);
     await page.waitForFunction(() => window.__GAME && window.__GAME.started, null, { timeout: 15000 });
-    await page.waitForFunction(() => window.__GAME.state().time > 30, null, { timeout: 40000 });
+    // Sample the camera through the run: it must never sit inside a building, and
+    // a building may only hide the giant briefly while the camera climbs.
+    const cam = { samples: 0, inside: 0, blocked: 0, minAhead: Infinity, maxGiantY: 0 };
+    while ((await page.evaluate(() => window.__GAME.state().time)) < 30) {
+      const c = await page.evaluate(() => ({ ...window.__GAME.camera(), speed: window.__GAME.state().speed }));
+      cam.samples++;
+      if (c.insideBuilding) cam.inside++;
+      if (c.losBlocked) cam.blocked++;
+      if (c.speed >= 5.9) cam.minAhead = Math.min(cam.minAhead, c.aheadSeconds);
+      cam.maxGiantY = Math.max(cam.maxGiantY, c.giantScreenY);
+      await page.waitForTimeout(100);
+    }
+    console.log(`  camera: ${cam.samples} samples, inside building ${cam.inside}, giant hidden ${cam.blocked}, min road ahead ${cam.minAhead.toFixed(2)}s, lowest giant y ${cam.maxGiantY.toFixed(2)}`);
+    if (cam.inside > 0) fail('camera went inside a building');
+    if (cam.blocked > cam.samples * 0.05) fail(`a building hid the giant in ${cam.blocked}/${cam.samples} samples`);
     const s = await page.evaluate(() => window.__GAME.state());
     await page.screenshot({ path: 'test-results/e2e-bot.png' });
     console.log(`  bot: t=${s.time.toFixed(1)}s tier=${s.tier} speed=${s.speed.toFixed(1)} smashes=${s.stats.smashes} rampage=${s.stats.timeAtTier[2].toFixed(1)}s`);

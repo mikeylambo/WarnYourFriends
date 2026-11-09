@@ -31,14 +31,21 @@ TUNING.tiers.forEach((t, i) => {
     { label: `${t.name} turn °/s`, obj: tier(i), key: 'turnRateDeg', min: 30, max: 360, step: 5, path: p },
     { label: `${t.name} grip`, obj: tier(i), key: 'grip', min: 1, max: 30, step: 0.5, path: p },
     { label: `${t.name} turn lag s`, obj: tier(i), key: 'turnLag', min: 0, max: 0.4, step: 0.01, path: p },
-    { label: `${t.name} cam height`, obj: tier(i), key: 'cameraHeight', min: 15, max: 90, step: 1, path: p },
+    { label: `${t.name} cam distance`, obj: tier(i), key: 'cameraDistance', min: 15, max: 120, step: 1, path: p },
   );
   if (Number.isFinite(t.tierUpAfter)) KNOBS.push({ label: `${t.name} tier-up s`, obj: tier(i), key: 'tierUpAfter', min: 0.5, max: 8, step: 0.25, path: p });
 });
 KNOBS.push(
-  { label: 'Camera lead m', obj: cam, key: 'lead', min: 0, max: 20, step: 0.5, path: 'camera' },
-  { label: 'Camera lag s', obj: cam, key: 'lag', min: 0, max: 1, step: 0.05, path: 'camera' },
-  { label: 'Camera FOV', obj: cam, key: 'fov', min: 20, max: 70, step: 1, path: 'camera' },
+  { label: 'Cam pitch °', obj: cam, key: 'pitchDeg', min: 20, max: 89, step: 1, path: 'camera' },
+  { label: 'Cam FOV', obj: cam, key: 'fov', min: 15, max: 70, step: 1, path: 'camera' },
+  { label: 'Cam side angle °', obj: cam, key: 'sideAngleDeg', min: 0, max: 60, step: 1, path: 'camera' },
+  { label: 'Cam side swap after s', obj: cam, key: 'sideSwitchAfter', min: 0.5, max: 6, step: 0.25, path: 'camera' },
+  { label: 'Cam side swing s', obj: cam, key: 'sideSwitchTime', min: 0.5, max: 6, step: 0.25, path: 'camera' },
+  { label: 'Cam look-ahead s', obj: cam, key: 'lookAheadTime', min: 0, max: 3, step: 0.1, path: 'camera' },
+  { label: 'Cam giant max screen Y', obj: cam, key: 'giantMaxScreenY', min: 0.5, max: 0.98, step: 0.01, path: 'camera' },
+  { label: 'Cam distance ease s', obj: cam, key: 'distanceEase', min: 0.1, max: 2, step: 0.1, path: 'camera' },
+  { label: 'Cam position lag s', obj: cam, key: 'positionLag', min: 0, max: 1, step: 0.05, path: 'camera' },
+  { label: 'Cam look lag s', obj: cam, key: 'lookLag', min: 0, max: 1, step: 0.05, path: 'camera' },
   { label: 'Bounce speed kept', obj: () => TUNING.collision as unknown as Num, key: 'bounceSpeedKeep', min: 0.2, max: 1, step: 0.05, path: 'collision' },
   { label: 'Brake decel', obj: () => TUNING.brake as unknown as Num, key: 'decel', min: 4, max: 30, step: 1, path: 'brake' },
 );
@@ -108,7 +115,7 @@ export function mountTuningPanel(onCameraChange: () => void): { toggle(): void }
       out.textContent = input.value;
       out.classList.toggle('dirty', Number(input.value) !== defaults.get(k));
       persist();
-      if (k.path === 'camera' || k.key === 'cameraHeight') onCameraChange();
+      if (k.path === 'camera' || k.key === 'cameraDistance') onCameraChange();
     });
     // Keep keyboard input for the game, not the slider.
     input.addEventListener('keydown', (e) => e.preventDefault());
