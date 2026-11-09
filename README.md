@@ -28,6 +28,10 @@ Dev keys: **T** tuning panel · **`** (backtick) debug overlay · **R** new layo
 
 URL flags: `?seed=N` fixed layout · `?timescale=0.5` · `?bot` autopilot · `?tune` open the tuning panel · `?reducedmotion` · `?reduceflashes` · `?step` (headless step mode via `window.__GAME.step(n)`).
 
+## Deploy (Vercel)
+
+`vercel.json` pins the build (Vite, `npm run build`, output `dist/`). Import the repo once at vercel.com/new; after that every push to a branch gets its own preview URL, and pushes to the production branch update the main URL.
+
 ## Feel check (Phase 0 exit)
 
 > Mike plays 5 minutes in an empty block and wants to keep going. (§40)
