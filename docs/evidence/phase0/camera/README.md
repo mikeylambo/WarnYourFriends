@@ -16,3 +16,5 @@ Side over the sustained turn, `[sim time, side]`: held from t=17.8; swing starts
 `[17.77,1] [19.57,1] [19.88,0.86] [20.33,0.41] [20.88,-0.24] [21.30,-0.68] [21.78,-0.98] [23.53,-1]`
 
 E2E bot run (30s, erratic steering): camera inside a building 0/154 samples; giant hidden by a building 4/154 (brief, while climbing); worst-case road ahead 1.3s and giant Y 0.91 during sharp swerves while the lagged camera catches up.
+
+`live-bot-run.png`: the deployed build at https://warn-your-friends.vercel.app/ (asset `index-8FzMCEN4.js`) after `E2E_URL=… npm run e2e` passed: start via click/tap/key, no failed requests, bot at Rampage with the new camera; camera inside a building 0/155 samples, giant hidden 5/155.
