@@ -1,15 +1,15 @@
 # CLAUDE.md — Warn Your Friends
 
-This file is the law for anyone (human or agent) building this repo. The design source of truth is [`docs/GDD.md`](docs/GDD.md) (Build Handoff v0.2). Build-time calls go in [`DECISIONS.md`](DECISIONS.md).
+This file is the law for anyone (human or agent) building this repo. The design source of truth is [`docs/GDD-v0.3-lane-runner.md`](docs/GDD-v0.3-lane-runner.md) (v0.3 Lane Runner), which supersedes the listed sections of [`docs/GDD.md`](docs/GDD.md) (Build Handoff v0.2); everything else in v0.2 stands. Build-time calls go in [`DECISIONS.md`](DECISIONS.md).
 
 ## Current phase
 
-**Phase 0 — Thesis proof. STOPPED for Mike's feel check.** Do not start Phase 1 (§40) until Mike signs off that the run feels great in an empty block. If asked to continue, confirm the feel check happened first.
+**Phase 0b — Lane-runner thesis proof. STOPPED for Mike's feel check.** Do not start Phase 1 (§40) until Mike plays 5 minutes and wants to keep going. If asked to continue, confirm the feel check happened first.
 
 ## Rules
 
 1. **Protect the run's feel first, the broadcast joke second** (§44–45). When in doubt, pick the option that keeps the giant moving and readable.
-2. **Design Laws (§1) are hard constraints:** the giant never stops unless the player chooses to (speed floor 2 m/s, LOCKED); every destruction is readable from the chopper; the chyron never lies; pursuers never spawn on camera or within 40m (LOCKED); no combat system.
+2. **Design Laws (§1) are hard constraints:** the giant never stops unless the player chooses to (speed floor 2 m/s, LOCKED); every destruction is readable from the chopper; the chyron never lies; pursuers never spawn on camera or within 40m (LOCKED); no combat system. **Screen-up law (LOCKED, v0.3):** travel points up the screen within ±35° in every camera angle. **Distinctness from Sticker Runners (LOCKED, v0.3):** weight, destruction, spectacle; lanes are smashed across.
 3. **All gameplay numbers live in `src/tuning.ts`** with a one-line reason. No magic numbers in sim or presentation code for anything the GDD specifies. LOCKED values (§31) change only with a GDD revision.
 4. **Sim is independent of rendering** (§29): `src/sim/**` must not import `three`, the DOM or `window`. 60 Hz fixed step. Seeded `Rng` inside the sim; `Math.random()` only for cosmetics.
 5. **Events drive presentation.** The sim emits `SimEvent`s; renderer, audio, camera and haptics react. Presentation never writes sim state.
@@ -23,13 +23,14 @@ This file is the law for anyone (human or agent) building this repo. The design 
 
 ```
 src/tuning.ts        every number, with reasons
-src/sim/             pure TS simulation (no three/DOM): sim.ts, layout.ts, bot.ts, rng.ts
-src/render/          three.js views: world, giant, camera rig, palette
+src/sim/             pure TS simulation (no three/DOM): sim.ts, track.ts (highway + props), bot.ts, rng.ts
+src/anim/gait.ts     run cycle: pinned feet, two-bone IK, phase locked to distance (pure math, tested)
+src/render/          three.js views: highway, giant, camera rig + director, palette, toon
 src/audio.ts         Web Audio, music/sfx/voice buses (synth placeholders)
 src/input.ts         KBM, gamepad, touch → SimInput
 src/main.ts          bootstrap: WebGL check, then loads game.ts; boot errors shown on screen
 src/game.ts          fixed-step loop, event presentation, window.__GAME
-tools/soak.ts        headless N-seed soak with invariants
+tools/soak.ts        headless N-seed soak: sim + gait + camera invariants (cadence, foot slide, screen-up, cuts, framing)
 tools/e2e-smoke.mjs  headless Chromium smoke against the production build (E2E_URL= for a deployed URL)
 ```
 

@@ -1,64 +1,45 @@
 import { TUNING, type MassClass } from '../tuning';
-import { angleDiff, approach, clamp, DEG, wrap } from './math';
+import { clamp } from './math';
 import { Rng } from './rng';
-import { generateLayout, type Layout } from './layout';
-import type { GiantState, Ped, Prop, SimEvent, SimInput } from './types';
+import { Track } from './track';
+import type { GiantState, Prop, SimEvent, SimInput, TierDropReason } from './types';
 
-const CLASS_RANK: Record<MassClass, number> = { light: 0, medium: 1, heavy: 2, immovable: 3 };
+export const CLASS_RANK: Record<MassClass, number> = { light: 0, medium: 1, heavy: 2, immovable: 3 };
 
-/** Static spatial hash for props (props never move; they only die and respawn). */
-class PropGrid {
-  private cells = new Map<number, number[]>();
-  constructor(private props: Prop[], private size = 8) {
-    for (const p of props) {
-      const x0 = Math.floor((p.x - p.hw) / size);
-      const x1 = Math.floor((p.x + p.hw) / size);
-      const z0 = Math.floor((p.z - p.hd) / size);
-      const z1 = Math.floor((p.z + p.hd) / size);
-      for (let i = x0; i <= x1; i++) {
-        for (let j = z0; j <= z1; j++) {
-          const k = this.key(i, j);
-          let arr = this.cells.get(k);
-          if (!arr) this.cells.set(k, (arr = []));
-          arr.push(p.id);
-        }
-      }
-    }
+/**
+ * v0.3 run cycle: cadence (steps/s) as a function of speed. Knots sit at each
+ * tier's top speed, so cadence stays inside 2.0–2.3 at every speed. Step length
+ * is speed ÷ cadence: speed comes from stride length, not leg speed.
+ */
+export function cadenceAt(speed: number): number {
+  const tiers = TUNING.tiers;
+  let c: number;
+  if (speed <= tiers[0].topSpeed) c = tiers[0].cadence;
+  else if (speed >= tiers[tiers.length - 1].topSpeed) c = tiers[tiers.length - 1].cadence;
+  else {
+    let i = 0;
+    while (speed > tiers[i + 1].topSpeed) i++;
+    const a = tiers[i];
+    const b = tiers[i + 1];
+    c = a.cadence + ((b.cadence - a.cadence) * (speed - a.topSpeed)) / (b.topSpeed - a.topSpeed);
   }
-  private key(i: number, j: number) {
-    return (i + 4096) * 8192 + (j + 4096);
-  }
-  /** Unique live-or-dead props whose cells touch the circle's bounds. */
-  query(x: number, z: number, r: number, out: Prop[]): Prop[] {
-    out.length = 0;
-    const s = this.size;
-    const x0 = Math.floor((x - r) / s);
-    const x1 = Math.floor((x + r) / s);
-    const z0 = Math.floor((z - r) / s);
-    const z1 = Math.floor((z + r) / s);
-    for (let i = x0; i <= x1; i++) {
-      for (let j = z0; j <= z1; j++) {
-        const arr = this.cells.get(this.key(i, j));
-        if (!arr) continue;
-        for (const id of arr) {
-          const p = this.props[id];
-          if (!out.includes(p)) out.push(p);
-        }
-      }
-    }
-    return out;
-  }
+  return clamp(c, TUNING.gait.cadenceMin, TUNING.gait.cadenceMax);
+}
+
+export function stepLengthAt(speed: number): number {
+  return speed / cadenceAt(speed);
 }
 
 export interface SimStats {
   timeAtTier: [number, number, number];
   smashes: number;
-  knocks: number;
+  smashesAcross: number;
   bounces: number;
-  scrapes: number;
+  wallBumps: number;
+  laneChanges: number;
   tierUps: number;
   tierDowns: number;
-  shoves: number;
+  footfalls: number;
   minSpeed: number;
 }
 
@@ -66,41 +47,48 @@ export interface SimOptions {
   seed: number;
 }
 
+const smoothstep = (t: number) => t * t * (3 - 2 * t);
+
 /**
- * The Phase 0 simulation: the giant, a block of breakable props, pedestrians.
- * Pure TypeScript, no rendering, deterministic for a given seed and input stream.
+ * Phase 0b simulation: the giant on a procedural highway. Pure TypeScript,
+ * deterministic for a seed and input stream, no rendering.
  */
 export class Sim {
   readonly dt = 1 / TUNING.sim.hz;
   readonly seed: number;
-  readonly layout: Layout;
-  readonly props: Prop[];
-  readonly peds: Ped[];
+  readonly track: Track;
   readonly giant: GiantState;
   readonly rng: Rng;
   tick = 0;
   time = 0;
-  stats: SimStats = { timeAtTier: [0, 0, 0], smashes: 0, knocks: 0, bounces: 0, scrapes: 0, tierUps: 0, tierDowns: 0, shoves: 0, minSpeed: Infinity };
+  stats: SimStats = { timeAtTier: [0, 0, 0], smashes: 0, smashesAcross: 0, bounces: 0, wallBumps: 0, laneChanges: 0, tierUps: 0, tierDowns: 0, footfalls: 0, minSpeed: Infinity };
 
-  private grid: PropGrid;
-  private scratch: Prop[] = [];
   private events: SimEvent[] = [];
+  private near: Prop[] = [];
 
   constructor(opts: SimOptions) {
     this.seed = opts.seed;
     this.rng = new Rng(opts.seed ^ 0x51ed);
-    this.layout = generateLayout(opts.seed);
-    this.props = this.layout.props;
-    this.peds = this.layout.peds;
-    this.grid = new PropGrid(this.props);
-    const s = this.layout.spawn;
+    this.track = new Track(opts.seed);
+    const lane = Math.floor(TUNING.lanes.start / 2);
+    const d = this.track.laneCenter(lane);
+    const speed = TUNING.giant.startSpeed;
     this.giant = {
-      x: s.x,
-      z: s.z,
-      heading: s.heading,
-      travel: s.heading,
-      speed: TUNING.giant.startSpeed,
-      angVel: 0,
+      s: 0,
+      d,
+      lane,
+      prevLane: lane,
+      move: null,
+      moveT: 1,
+      moveDur: 0,
+      moveFromD: d,
+      moveToD: d,
+      moveFromLane: lane,
+      bumpDir: 0,
+      laneQueue: 0,
+      laneBufferDir: 0,
+      laneBufferFrames: 0,
+      speed,
       tier: 0,
       tierTimer: 0,
       stumble: 0,
@@ -109,9 +97,9 @@ export class Sim {
       shoulderT: 0,
       shoulderCd: 0,
       shoulderBuffer: 0,
-      gaitPhase: 0,
-      turnLog: [],
-      yankLatched: false,
+      stepPos: 0,
+      stepLen: stepLengthAt(speed),
+      odometer: 0,
     };
   }
 
@@ -119,14 +107,22 @@ export class Sim {
     return TUNING.tiers[this.giant.tier];
   }
 
-  /** Advance one fixed 60 Hz tick. Returns events produced this tick. */
+  /** A lateral move (lane change, knock-back or wall bump) is in progress. */
+  get laneBusy(): boolean {
+    return this.giant.move !== null;
+  }
+
   step(input: SimInput): SimEvent[] {
     this.events = [];
     const dt = this.dt;
-    this.stepGiant(input, dt);
-    this.collideGiant();
-    this.stepPeds(dt);
-    this.stepRespawn(dt);
+    this.stepShoulder(input, dt);
+    this.stepLanes(input);
+    this.stepSpeed(input, dt);
+    this.advance(dt);
+    this.stepLateral(dt);
+    this.collide();
+    this.track.ensure(this.giant.s + TUNING.track.aheadDistance);
+    if ((this.tick & 63) === 0) this.track.prune(this.giant.s);
     const g = this.giant;
     this.stats.timeAtTier[g.tier] += dt;
     this.stats.minSpeed = Math.min(this.stats.minSpeed, g.speed);
@@ -137,35 +133,34 @@ export class Sim {
 
   private emit(e: SimEvent) {
     this.events.push(e);
+    const st = this.stats;
     switch (e.type) {
-      case 'smash': this.stats.smashes++; break;
-      case 'knock': this.stats.knocks++; break;
-      case 'bounce': this.stats.bounces++; break;
-      case 'scrape': this.stats.scrapes++; break;
-      case 'tierUp': this.stats.tierUps++; break;
-      case 'tierDown': this.stats.tierDowns++; break;
-      case 'shove': this.stats.shoves++; break;
+      case 'smash':
+        st.smashes++;
+        if (e.across) st.smashesAcross++;
+        break;
+      case 'bounce': st.bounces++; break;
+      case 'wallBump': st.wallBumps++; break;
+      case 'laneChange': st.laneChanges++; break;
+      case 'tierUp': st.tierUps++; break;
+      case 'tierDown': st.tierDowns++; break;
+      case 'footfall': st.footfalls++; break;
     }
   }
 
-  private setTier(tier: number, reason?: 'impact' | 'turn' | 'brake') {
+  private setTier(tier: number, reason?: TierDropReason) {
     const g = this.giant;
     const next = clamp(tier, 0, TUNING.tiers.length - 1);
     if (next === g.tier) return;
     const up = next > g.tier;
     g.tier = next;
     g.tierTimer = 0;
-    g.turnLog.length = 0;
     if (up) this.emit({ type: 'tierUp', tier: next });
     else this.emit({ type: 'tierDown', tier: next, reason: reason ?? 'impact' });
   }
 
-  private stepGiant(input: SimInput, dt: number) {
+  private stepShoulder(input: SimInput, dt: number) {
     const g = this.giant;
-    const T = this.tierTuning;
-    const D = TUNING.tierDrop;
-
-    // --- Shoulder Check (buffered) -------------------------------------
     if (input.shoulder) g.shoulderBuffer = TUNING.shoulderCheck.bufferFrames;
     g.shoulderCd = Math.max(0, g.shoulderCd - dt);
     g.shoulderT = Math.max(0, g.shoulderT - dt);
@@ -175,302 +170,244 @@ export class Sim {
         g.shoulderT = TUNING.shoulderCheck.duration;
         g.shoulderCd = TUNING.shoulderCheck.cooldown;
         g.speed += TUNING.shoulderCheck.burstSpeed;
-        const fx = Math.cos(g.heading);
-        const fz = Math.sin(g.heading);
-        this.emit({ type: 'shoulder', x: g.x, z: g.z, dirX: fx, dirZ: fz });
-        this.shovePedsInRadius(g.x + fx * 2, g.z + fz * 2, TUNING.shoulderCheck.shoveRadius);
+        this.emit({ type: 'shoulder', s: g.s, d: g.d });
       } else {
         g.shoulderBuffer--;
       }
     }
+  }
 
-    // --- Steering --------------------------------------------------------
-    let maxTurn = T.turnRateDeg * DEG;
-    if (input.brake) maxTurn *= TUNING.brake.turnMul;
-    if (g.stumble > 0) maxTurn *= D.stumbleTurnMul;
-    let desired = 0;
-    if (input.aim !== null) {
-      // Critically-ish damped approach to an absolute heading (stick, mouse, touch).
-      const k = 0.4 / T.turnLag;
-      desired = clamp(angleDiff(g.heading, input.aim) * k, -maxTurn, maxTurn);
-    } else {
-      desired = clamp(input.turn, -1, 1) * maxTurn;
-    }
-    g.angVel += (desired - g.angVel) * approach(dt, T.turnLag);
-    g.angVel = clamp(g.angVel, -maxTurn, maxTurn);
-    const dHeading = g.angVel * dt;
-    g.heading = wrap(g.heading + dHeading);
+  // --- Lanes ---------------------------------------------------------------
 
-    // Sharp turn: more than 110° of net steering within 0.5s drops a tier (§9).
-    g.turnLog.push(dHeading);
-    const windowTicks = Math.round(D.sharpTurnWindow / dt);
-    if (g.turnLog.length > windowTicks) g.turnLog.shift();
-    let net = 0;
-    for (const d of g.turnLog) net += d;
-    if (Math.abs(net) > D.sharpTurnDeg * DEG && g.tier > 0) this.setTier(g.tier - 1, 'turn');
-    // With §9 turn rates the net-heading rule is nearly unreachable, so a steering
-    // demand more than 110° off the facing (stick/mouse/touch yank) also counts
-    // as a sharp turn. See DECISIONS.md.
-    if (input.aim !== null) {
-      const off = Math.abs(angleDiff(g.heading, input.aim));
-      if (off > D.sharpTurnDeg * DEG && !g.yankLatched) {
-        g.yankLatched = true;
-        if (g.tier > 0) this.setTier(g.tier - 1, 'turn');
-      } else if (off < D.yankReleaseDeg * DEG) {
-        g.yankLatched = false;
+  private stepLanes(input: SimInput) {
+    const g = this.giant;
+    const dir = Math.sign(input.lane);
+    if (dir !== 0) {
+      if (g.move !== null) {
+        g.laneQueue = dir; // one queued input max: the newest wins
+      } else if (g.stumble > 0) {
+        g.laneBufferDir = dir;
+        g.laneBufferFrames = TUNING.lanes.bufferFrames;
+      } else {
+        this.startLaneChange(dir, false);
       }
-    } else {
-      g.yankLatched = false;
+    } else if (g.laneBufferFrames > 0) {
+      if (g.move === null && g.stumble <= 0) {
+        const d = g.laneBufferDir;
+        g.laneBufferFrames = 0;
+        this.startLaneChange(d, false);
+      } else {
+        g.laneBufferFrames--;
+      }
     }
 
-    // Drift: travel direction chases the facing at the tier's grip.
-    const slip = angleDiff(g.travel, g.heading);
-    g.travel = wrap(g.travel + slip * (1 - Math.exp(-T.grip * dt)));
+    // A merge closing the giant's lane: the wall bounces it into the next lane, no stumble.
+    if (g.move === null && !this.track.laneUsable(g.lane, g.s + 3)) {
+      const target = Math.max(0, Math.min(g.lane - 1, this.track.lanesAt(g.s + 3) - 1));
+      this.beginMove('change', target, this.tierTuning.laneChangeTime);
+      this.emit({ type: 'wallBump', dir: 1, forced: true });
+    }
+  }
 
-    // --- Speed ----------------------------------------------------------
-    g.braking = input.brake;
-    const tier = this.tierTuning; // may have changed above
+  private startLaneChange(dir: number, _queued: boolean) {
+    const g = this.giant;
+    const target = g.lane + dir;
+    if (!this.track.laneUsable(target, g.s) || !this.track.laneUsable(target, g.s + 4)) {
+      // Into the wall: bump out and back, no stumble, no tier loss.
+      g.move = 'wallBump';
+      g.moveT = 0;
+      g.moveDur = this.tierTuning.laneChangeTime;
+      g.moveFromD = g.d;
+      g.moveToD = this.track.laneCenter(g.lane);
+      g.moveFromLane = g.lane;
+      g.bumpDir = dir;
+      this.emit({ type: 'wallBump', dir, forced: false });
+      return;
+    }
+    g.prevLane = g.lane;
+    this.beginMove('change', target, this.tierTuning.laneChangeTime);
+    this.emit({ type: 'laneChange', from: g.prevLane, to: target, dur: g.moveDur });
+  }
+
+  private beginMove(kind: 'change' | 'knock', toLane: number, dur: number) {
+    const g = this.giant;
+    g.move = kind;
+    g.moveT = 0;
+    g.moveDur = dur;
+    g.moveFromD = g.d;
+    g.moveFromLane = g.lane;
+    g.moveToD = this.track.laneCenter(toLane);
+    g.lane = toLane;
+    g.bumpDir = 0;
+  }
+
+  private stepLateral(dt: number) {
+    const g = this.giant;
+    if (g.move === null) {
+      // Settle exactly on the lane centre (merges don't move lane centres).
+      g.d = this.track.laneCenter(g.lane);
+      return;
+    }
+    g.moveT = Math.min(1, g.moveT + dt / g.moveDur);
+    const e = smoothstep(g.moveT);
+    if (g.move === 'wallBump') {
+      g.d = g.moveToD + g.bumpDir * TUNING.lanes.wallBumpDepth * Math.sin(Math.PI * g.moveT);
+    } else {
+      g.d = g.moveFromD + (g.moveToD - g.moveFromD) * e;
+    }
+    if (g.moveT >= 1) {
+      g.move = null;
+      g.d = g.moveToD;
+      if (g.laneQueue !== 0) {
+        const q = g.laneQueue;
+        g.laneQueue = 0;
+        if (g.stumble <= 0) this.startLaneChange(q, true);
+        else {
+          g.laneBufferDir = q;
+          g.laneBufferFrames = TUNING.lanes.bufferFrames;
+        }
+      }
+    }
+  }
+
+  // --- Speed and gait ----------------------------------------------------------
+
+  private stepSpeed(input: SimInput, dt: number) {
+    const g = this.giant;
+    const tier = this.tierTuning;
     const top = tier.topSpeed + (g.shoulderT > 0 ? TUNING.shoulderCheck.burstSpeed : 0);
+    g.braking = input.brake;
     if (input.brake) {
       g.speed -= TUNING.brake.decel * dt;
       g.brakeHeld += dt;
       g.tierTimer = 0;
-      if (g.brakeHeld > D.brakeHold) {
+      if (g.brakeHeld > TUNING.tierDrop.brakeHold) {
         g.brakeHeld = 0;
         if (g.tier > 0) this.setTier(g.tier - 1, 'brake');
       }
     } else {
       g.brakeHeld = 0;
       if (g.stumble > 0) {
-        // No acceleration while stumbling; it's a wobble, not a stop.
+        // No acceleration while stumbling: a wobble, not a stop.
       } else if (g.speed < top) {
         g.speed = Math.min(top, g.speed + tier.accel * dt);
       } else if (g.speed > top) {
         g.speed = Math.max(top, g.speed - TUNING.giant.overspeedDecel * dt);
       }
     }
-    // Scrubbing sideways costs a little speed: drifting is never free.
-    g.speed -= Math.abs(Math.sin(angleDiff(g.travel, g.heading))) * 5 * dt;
     g.speed = Math.max(TUNING.giant.speedFloor, g.speed); // LOCKED Law 1
-
     g.stumble = Math.max(0, g.stumble - dt);
 
-    // --- Tier up --------------------------------------------------------
-    if (!input.brake && g.stumble <= 0 && g.speed >= tier.topSpeed * TUNING.giant.topSpeedEpsilon) {
+    const t = this.tierTuning;
+    if (!input.brake && g.stumble <= 0 && g.speed >= t.topSpeed * TUNING.giant.topSpeedEpsilon) {
       g.tierTimer += dt;
-      if (g.tierTimer >= tier.tierUpAfter) this.setTier(g.tier + 1);
-    }
-
-    // --- Integrate ------------------------------------------------------
-    const dist = g.speed * dt;
-    g.x += Math.cos(g.travel) * dist;
-    g.z += Math.sin(g.travel) * dist;
-
-    const prevHalf = Math.floor(g.gaitPhase * 2);
-    g.gaitPhase += dist / this.tierTuning.strideLength;
-    const nowHalf = Math.floor(g.gaitPhase * 2);
-    if (nowHalf !== prevHalf) {
-      this.emit({ type: 'footfall', tier: g.tier, foot: (nowHalf & 1) as 0 | 1, x: g.x, z: g.z, speed: g.speed });
+      if (g.tierTimer >= t.tierUpAfter) this.setTier(g.tier + 1);
     }
   }
 
-  /** Index of the heaviest class the giant smashes right now. */
+  private advance(dt: number) {
+    const g = this.giant;
+    const ds = g.speed * dt;
+    g.s += ds;
+    g.odometer += ds;
+    // Phase locked to distance: each step covers stepLen metres.
+    g.stepLen = stepLengthAt(g.speed);
+    const rate = ds / g.stepLen; // steps this tick
+    const before = g.stepPos;
+    g.stepPos += rate;
+    const crossed = Math.floor(g.stepPos) - Math.floor(before);
+    for (let k = 1; k <= crossed; k++) {
+      const step = Math.floor(before) + k;
+      // Exact sub-tick time of the plant, for cadence measurement.
+      const frac = (step - before) / rate;
+      this.emit({
+        type: 'footfall',
+        tier: g.tier,
+        foot: (step & 1) as 0 | 1,
+        step,
+        t: this.time + frac * dt,
+        s: g.s,
+        d: g.d,
+        speed: g.speed,
+        stepLen: g.stepLen,
+      });
+    }
+  }
+
+  // --- Collisions ------------------------------------------------------------------
+
+  /** Heaviest class the giant smashes right now (Shoulder Check lifts one class, never Immovable). */
   smashRank(): number {
     const g = this.giant;
     const base = this.tierTuning.smashes ? CLASS_RANK[this.tierTuning.smashes] : -1;
-    const bonus = g.shoulderT > 0 ? 1 : 0;
-    return Math.min(base + bonus, CLASS_RANK.heavy);
+    return Math.min(base + (g.shoulderT > 0 ? 1 : 0), CLASS_RANK.heavy);
   }
 
-  private collideGiant() {
+  /** Is `lane` free of things the giant can't smash over [s0, s1]? */
+  laneClear(lane: number, s0: number, s1: number): boolean {
+    if (!this.track.laneUsable(lane, s0) || !this.track.laneUsable(lane, s1)) return false;
+    const c = this.track.laneCenter(lane);
+    const r = TUNING.giant.radius;
+    const rank = this.smashRank();
+    for (const p of this.track.propsBetween(s0, s1)) {
+      if (CLASS_RANK[p.cls] <= rank) continue;
+      if (Math.abs(p.d - c) < p.hw + r) return false;
+    }
+    return true;
+  }
+
+  private collide() {
     const g = this.giant;
     const r = TUNING.giant.radius;
-    const near = this.grid.query(g.x, g.z, r + 0.5, this.scratch);
-    const smashRank = this.smashRank();
+    const rank = this.smashRank();
+    const near = this.track.propsBetween(g.s - r - 4, g.s + r + 4, this.near);
     for (const p of near) {
-      if (!p.alive) continue;
-      // Closest point on AABB.
-      const cx = clamp(g.x, p.x - p.hw, p.x + p.hw);
-      const cz = clamp(g.z, p.z - p.hd, p.z + p.hd);
-      let nx = g.x - cx;
-      let nz = g.z - cz;
-      let d = Math.hypot(nx, nz);
-      if (d >= r) continue;
-      let pen: number;
-      if (d < 1e-6) {
-        // Centre inside the box: push out along the shallowest axis.
-        const px = p.hw - Math.abs(g.x - p.x);
-        const pz = p.hd - Math.abs(g.z - p.z);
-        if (px < pz) {
-          nx = Math.sign(g.x - p.x) || 1;
-          nz = 0;
-          pen = px + r;
-        } else {
-          nx = 0;
-          nz = Math.sign(g.z - p.z) || 1;
-          pen = pz + r;
-        }
-        d = 1;
-      } else {
-        nx /= d;
-        nz /= d;
-        pen = r - d;
-      }
+      const cs = clamp(g.s, p.s - p.hl, p.s + p.hl);
+      const cd = clamp(g.d, p.d - p.hw, p.d + p.hw);
+      const ds = g.s - cs;
+      const dd = g.d - cd;
+      if (ds * ds + dd * dd >= r * r) continue;
 
-      const rank = CLASS_RANK[p.cls];
-      const dirX = Math.cos(g.travel);
-      const dirZ = Math.sin(g.travel);
-      if (rank <= smashRank) {
+      if (CLASS_RANK[p.cls] <= rank) {
+        // Smash, forward or across: the same class rule either way (v0.3 smash-across).
         p.alive = false;
-        p.deadT = 0;
         g.speed = Math.max(TUNING.giant.speedFloor, g.speed * (1 - TUNING.collision.smashSpeedLoss[p.cls]));
-        const e = { propId: p.id, cls: p.cls, mat: p.mat, x: p.x, z: p.z, dirX, dirZ, speed: g.speed };
-        this.emit(p.cls === 'light' ? { type: 'knock', ...e } : { type: 'smash', ...e });
+        const across = g.move === 'change' && Math.abs(g.d - p.d) > 0.4;
+        this.emit({ type: 'smash', propId: p.id, cls: p.cls, mat: p.mat, s: p.s, d: p.d, across, speed: g.speed });
         continue;
       }
 
-      // Can't smash it: push out, then bounce or scrape.
-      g.x += nx * pen;
-      g.z += nz * pen;
-      const into = -(dirX * nx + dirZ * nz); // 1 = head-on, 0 = parallel
-      if (into <= 0) continue;
-      if (into < 0.3) {
-        // Grazing contact: slide along the surface. Not an "impact" (DECISIONS.md).
-        const tx = dirX + nx * into;
-        const tz = dirZ + nz * into;
-        g.travel = Math.atan2(tz, tx);
-        g.speed = Math.max(TUNING.giant.speedFloor, g.speed * (1 - 0.9 * into));
-        this.emit({ type: 'scrape', x: cx, z: cz });
-        continue;
-      }
-      // Heavy, embarrassing bounce (§10): reflect, lose speed, drop a tier, stumble.
-      const rx = dirX + 2 * into * nx;
-      const rz = dirZ + 2 * into * nz;
-      const bounced = Math.atan2(rz, rx);
-      g.travel = bounced;
-      // Facing swings most of the way toward the rebound; the stumble sells the rest.
-      g.heading = wrap(g.heading + angleDiff(g.heading, bounced) * 0.7);
-      g.angVel = 0;
+      // Can't smash it. Clear the overlap along the road (never through it).
+      if (g.s < p.s) g.s = Math.min(g.s, p.s - p.hl - Math.sqrt(Math.max(0, r * r - dd * dd)) - 0.01);
+      if (g.stumble > 0 || g.move === 'knock') continue; // already reeling: no double penalty
+
+      // −1 tier, 0.3s stumble, knocked back to the previous lane (v0.3).
       g.speed = Math.max(TUNING.giant.speedFloor, g.speed * TUNING.collision.bounceSpeedKeep);
-      const fresh = g.stumble <= 0;
       g.stumble = TUNING.tierDrop.stumbleTime;
       g.tierTimer = 0;
-      if (fresh) {
-        this.emit({ type: 'bounce', cls: p.cls, x: cx, z: cz, nx, nz, speed: g.speed });
-        if (g.tier > 0) this.setTier(g.tier - 1, 'impact');
-      }
+      g.laneQueue = 0;
+      const toLane = this.knockLane(p);
+      if (g.tier > 0) this.setTier(g.tier - 1, 'impact');
+      this.beginMove('knock', toLane, TUNING.lanes.knockbackTime);
+      this.emit({ type: 'bounce', propId: p.id, cls: p.cls, s: p.s, d: p.d, toLane, speed: g.speed });
     }
   }
 
-  private shovePedsInRadius(x: number, z: number, r: number) {
-    for (const p of this.peds) {
-      const dx = p.x - x;
-      const dz = p.z - z;
-      const d = Math.hypot(dx, dz);
-      if (d > r || p.state === 'tumble') continue;
-      const k = TUNING.pedestrian.shoveSpeed / Math.max(d, 0.5);
-      p.vx = dx * k * 0.6;
-      p.vz = dz * k * 0.6;
-      p.state = 'tumble';
-      p.t = TUNING.pedestrian.tumbleTime;
-      p.spin = this.rng.range(-12, 12);
-      this.emit({ type: 'shove', pedId: p.id, x: p.x, z: p.z });
-    }
-  }
-
-  private stepPeds(dt: number) {
+  /** Where an unsmashable hit sends the giant: the previous lane, else the nearest clear one. */
+  private knockLane(p: Prop): number {
     const g = this.giant;
-    const P = TUNING.pedestrian;
-    const gr = TUNING.giant.radius + P.radius;
-    const fx = Math.cos(g.travel);
-    const fz = Math.sin(g.travel);
-    for (const p of this.peds) {
-      const dx = p.x - g.x;
-      const dz = p.z - g.z;
-      const d = Math.hypot(dx, dz);
-
-      if (p.state === 'tumble') {
-        p.t -= dt;
-        const f = Math.exp(-3.5 * dt);
-        p.vx *= f;
-        p.vz *= f;
-        if (p.t <= 0) {
-          p.state = 'walk';
-          p.t = this.rng.range(1, 3);
-        }
-      } else if (d < gr) {
-        // Shoved aside comically: sideways relative to the giant's path.
-        const side = fx * dz - fz * dx >= 0 ? 1 : -1;
-        const sx = -fz * side;
-        const sz = fx * side;
-        const s = P.shoveSpeed + g.speed * 0.4;
-        p.vx = (sx * 0.8 + fx * 0.5) * s;
-        p.vz = (sz * 0.8 + fz * 0.5) * s;
-        p.state = 'tumble';
-        p.t = P.tumbleTime;
-        p.spin = this.rng.range(-14, 14);
-        this.emit({ type: 'shove', pedId: p.id, x: p.x, z: p.z });
-      } else if (d < P.fleeRadius && dx * fx + dz * fz > -2) {
-        // Dive clear: perpendicular to the giant's line.
-        const side = fx * dz - fz * dx >= 0 ? 1 : -1;
-        const tx = -fz * side;
-        const tz = fx * side;
-        p.state = 'flee';
-        p.vx = tx * P.fleeSpeed;
-        p.vz = tz * P.fleeSpeed;
-        p.heading = Math.atan2(tz, tx);
-        p.t = 0.8;
-      } else {
-        p.t -= dt;
-        if (p.state === 'flee' && p.t <= 0) p.state = 'walk';
-        if (p.state === 'walk') {
-          if (p.t <= 0) {
-            p.heading = wrap(p.heading + this.rng.range(-1.2, 1.2));
-            p.t = this.rng.range(1.5, 4);
-          }
-          p.vx = Math.cos(p.heading) * P.walkSpeed;
-          p.vz = Math.sin(p.heading) * P.walkSpeed;
-        }
-      }
-
-      p.x += p.vx * dt;
-      p.z += p.vz * dt;
-
-      // Keep peds out of solid things and inside the arena.
-      const near = this.grid.query(p.x, p.z, P.radius + 0.2, this.scratch);
-      for (const q of near) {
-        if (!q.alive || q.cls === 'light') continue;
-        const cx = clamp(p.x, q.x - q.hw, q.x + q.hw);
-        const cz = clamp(p.z, q.z - q.hd, q.z + q.hd);
-        const ex = p.x - cx;
-        const ez = p.z - cz;
-        const e = Math.hypot(ex, ez);
-        if (e >= P.radius) continue;
-        if (e < 1e-6) {
-          const px = q.hw - Math.abs(p.x - q.x);
-          const pz = q.hd - Math.abs(p.z - q.z);
-          if (px < pz) p.x += (Math.sign(p.x - q.x) || 1) * (px + P.radius);
-          else p.z += (Math.sign(p.z - q.z) || 1) * (pz + P.radius);
-        } else {
-          p.x += (ex / e) * (P.radius - e);
-          p.z += (ez / e) * (P.radius - e);
-        }
-        if (p.state === 'walk') p.heading = wrap(p.heading + Math.PI * 0.6);
-      }
+    const s0 = g.s - 2;
+    const s1 = Math.max(p.s + p.hl, g.s) + 4;
+    const candidates: number[] = [];
+    if (g.move === 'change') candidates.push(g.moveFromLane);
+    candidates.push(g.prevLane);
+    const here = g.lane;
+    for (let k = 1; k <= TUNING.lanes.max; k++) candidates.push(here - k, here + k);
+    for (const lane of candidates) {
+      if (lane === here && g.move !== 'change') continue;
+      if (this.laneClear(lane, s0, s1)) return lane;
     }
-  }
-
-  private stepRespawn(dt: number) {
-    const g = this.giant;
-    const B = TUNING.block;
-    for (const p of this.props) {
-      if (p.alive) continue;
-      p.deadT += dt;
-      if (p.deadT < B.respawnAfter) continue;
-      if (Math.hypot(p.x - g.x, p.z - g.z) < B.respawnMinDistance) continue;
-      p.alive = true;
-      p.deadT = 0;
-      this.emit({ type: 'respawn', propId: p.id });
-    }
+    // Nowhere clear (rows always leave a lane, so rare): fall back to the previous lane.
+    return this.track.laneUsable(g.prevLane, g.s) ? g.prevLane : here;
   }
 }

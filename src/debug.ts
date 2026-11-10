@@ -1,5 +1,5 @@
 /**
- * §32 URL flags. Phase 0 uses seed, timescale, bot, step and the accessibility
+ * §32 URL flags. Phase 0b uses seed, timescale, bot, step, angle and the accessibility
  * overrides; seg/heat/nodecay/god are parsed now so links keep working, and do
  * nothing until the systems they control exist (Phase 2).
  */
@@ -18,6 +18,8 @@ export interface Flags {
   nodecay: boolean;
   god: boolean;
   tune: boolean;
+  /** Start on a camera angle (0 Chase High, 1 Wide Side, 2 Long Lens). Dev/screenshots. */
+  angle: number | null;
 }
 
 function bool(q: URLSearchParams, k: string): boolean | null {
@@ -51,5 +53,6 @@ export function readFlags(search: string): Flags {
     nodecay: bool(q, 'nodecay') ?? false,
     god: bool(q, 'god') ?? false,
     tune: bool(q, 'tune') ?? false,
+    angle: num(q, 'angle'),
   };
 }

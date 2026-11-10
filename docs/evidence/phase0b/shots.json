@@ -1,0 +1,80 @@
+[
+  {
+    "name": "tier-1-jog",
+    "note": "Chase High (retaken at run start)",
+    "t": 0.8,
+    "tier": "Jog",
+    "speed": 6.0,
+    "lane": "3/4",
+    "angle": "Chase High",
+    "screenUp": 0.0,
+    "yaw": 0.0,
+    "giantY": 0.77,
+    "aheadS": 5.2
+  },
+  {
+    "name": "tier-2-stride",
+    "note": "Chase High",
+    "t": 4.9,
+    "tier": "Stride",
+    "speed": 10,
+    "lane": "3/4",
+    "angle": "Chase High",
+    "screenUp": 0,
+    "yaw": 0,
+    "giantY": 0.839,
+    "aheadS": 3.65
+  },
+  {
+    "name": "tier-3-rampage",
+    "note": "Chase High",
+    "t": 9.4,
+    "tier": "Rampage",
+    "speed": 15,
+    "lane": "2/4",
+    "angle": "Chase High",
+    "screenUp": 2.8,
+    "yaw": 0,
+    "giantY": 0.838,
+    "aheadS": 2.84
+  },
+  {
+    "name": "angle-1-chase-high",
+    "note": "Rampage",
+    "t": 11.8,
+    "tier": "Rampage",
+    "speed": 15,
+    "lane": "2/4",
+    "angle": "Chase High",
+    "screenUp": 0,
+    "yaw": 0,
+    "giantY": 0.841,
+    "aheadS": 2.85
+  },
+  {
+    "name": "angle-2-wide-side",
+    "note": "Rampage",
+    "t": 14.3,
+    "tier": "Rampage",
+    "speed": 15,
+    "lane": "4/4",
+    "angle": "Wide Side",
+    "screenUp": 28.7,
+    "yaw": -25.3,
+    "giantY": 0.847,
+    "aheadS": 3.22
+  },
+  {
+    "name": "angle-3-long-lens",
+    "note": "Rampage",
+    "t": 16.6,
+    "tier": "Rampage",
+    "speed": 15,
+    "lane": "4/4",
+    "angle": "Long Lens",
+    "screenUp": 22.1,
+    "yaw": -15,
+    "giantY": 0.842,
+    "aheadS": 3.29
+  }
+]

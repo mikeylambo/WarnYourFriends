@@ -20,7 +20,8 @@ interface Knob {
 }
 
 const tier = (i: number) => () => TUNING.tiers[i] as unknown as Num;
-const cam = () => TUNING.camera as unknown as Num;
+const angle = (i: number) => () => TUNING.camera.angles[i] as unknown as Num;
+const sect = (k: keyof typeof TUNING) => () => TUNING[k] as unknown as Num;
 
 const KNOBS: Knob[] = [];
 TUNING.tiers.forEach((t, i) => {
@@ -28,27 +29,42 @@ TUNING.tiers.forEach((t, i) => {
   KNOBS.push(
     { label: `${t.name} top speed`, obj: tier(i), key: 'topSpeed', min: 3, max: 25, step: 0.5, path: p },
     { label: `${t.name} accel`, obj: tier(i), key: 'accel', min: 1, max: 20, step: 0.5, path: p },
-    { label: `${t.name} turn °/s`, obj: tier(i), key: 'turnRateDeg', min: 30, max: 360, step: 5, path: p },
-    { label: `${t.name} grip`, obj: tier(i), key: 'grip', min: 1, max: 30, step: 0.5, path: p },
-    { label: `${t.name} turn lag s`, obj: tier(i), key: 'turnLag', min: 0, max: 0.4, step: 0.01, path: p },
-    { label: `${t.name} cam distance`, obj: tier(i), key: 'cameraDistance', min: 15, max: 120, step: 1, path: p },
+    { label: `${t.name} lane change s`, obj: tier(i), key: 'laneChangeTime', min: 0.08, max: 0.8, step: 0.01, path: p },
+    { label: `${t.name} cadence /s`, obj: tier(i), key: 'cadence', min: 1.6, max: 2.6, step: 0.05, path: p },
+    { label: `${t.name} lean °`, obj: tier(i), key: 'leanDeg', min: 0, max: 45, step: 1, path: p },
+    { label: `${t.name} hip height`, obj: tier(i), key: 'hipHeight', min: 1.1, max: 1.7, step: 0.02, path: p },
+    { label: `${t.name} body drop`, obj: tier(i), key: 'bodyDrop', min: 0, max: 0.5, step: 0.01, path: p },
+    { label: `${t.name} cam distance ×`, obj: tier(i), key: 'cameraDistanceScale', min: 0.6, max: 1.6, step: 0.05, path: p },
   );
   if (Number.isFinite(t.tierUpAfter)) KNOBS.push({ label: `${t.name} tier-up s`, obj: tier(i), key: 'tierUpAfter', min: 0.5, max: 8, step: 0.25, path: p });
 });
+TUNING.camera.angles.forEach((a, i) => {
+  const p = `camera.angles[${i}]`;
+  KNOBS.push(
+    { label: `${a.name} yaw °`, obj: angle(i), key: 'yawDeg', min: 0, max: 60, step: 1, path: p },
+    { label: `${a.name} pitch °`, obj: angle(i), key: 'pitchDeg', min: 20, max: 85, step: 1, path: p },
+    { label: `${a.name} distance m`, obj: angle(i), key: 'distance', min: 15, max: 120, step: 1, path: p },
+    { label: `${a.name} FOV`, obj: angle(i), key: 'fov', min: 12, max: 70, step: 1, path: p },
+  );
+});
 KNOBS.push(
-  { label: 'Cam pitch °', obj: cam, key: 'pitchDeg', min: 20, max: 89, step: 1, path: 'camera' },
-  { label: 'Cam FOV', obj: cam, key: 'fov', min: 15, max: 70, step: 1, path: 'camera' },
-  { label: 'Cam side angle °', obj: cam, key: 'sideAngleDeg', min: 0, max: 60, step: 1, path: 'camera' },
-  { label: 'Cam side swap after s', obj: cam, key: 'sideSwitchAfter', min: 0.5, max: 6, step: 0.25, path: 'camera' },
-  { label: 'Cam side swing s', obj: cam, key: 'sideSwitchTime', min: 0.5, max: 6, step: 0.25, path: 'camera' },
-  { label: 'Cam look-ahead s', obj: cam, key: 'lookAheadTime', min: 0, max: 3, step: 0.1, path: 'camera' },
-  { label: 'Cam giant max screen Y', obj: cam, key: 'giantMaxScreenY', min: 0.5, max: 0.98, step: 0.01, path: 'camera' },
-  { label: 'Cam distance ease s', obj: cam, key: 'distanceEase', min: 0.1, max: 2, step: 0.1, path: 'camera' },
-  { label: 'Cam position lag s', obj: cam, key: 'positionLag', min: 0, max: 1, step: 0.05, path: 'camera' },
-  { label: 'Cam look lag s', obj: cam, key: 'lookLag', min: 0, max: 1, step: 0.05, path: 'camera' },
-  { label: 'Bounce speed kept', obj: () => TUNING.collision as unknown as Num, key: 'bounceSpeedKeep', min: 0.2, max: 1, step: 0.05, path: 'collision' },
-  { label: 'Brake decel', obj: () => TUNING.brake as unknown as Num, key: 'decel', min: 4, max: 30, step: 1, path: 'brake' },
+  { label: 'Cam look-ahead s', obj: sect('camera'), key: 'lookAheadTime', min: 0, max: 3, step: 0.1, path: 'camera' },
+  { label: 'Cam cut hold min s', obj: sect('camera'), key: 'cutMinInterval', min: 7, max: 30, step: 0.5, path: 'camera' },
+  { label: 'Cam position lag s', obj: sect('camera'), key: 'positionLag', min: 0, max: 1, step: 0.05, path: 'camera' },
+  { label: 'Cam look lag s', obj: sect('camera'), key: 'lookLag', min: 0, max: 1, step: 0.05, path: 'camera' },
+  { label: 'Stance max m', obj: sect('gait'), key: 'stanceMaxDistance', min: 0.8, max: 3, step: 0.05, path: 'gait' },
+  { label: 'Foot spread m', obj: sect('gait'), key: 'footSpread', min: 0.1, max: 0.7, step: 0.02, path: 'gait' },
+  { label: 'Contact hold frames', obj: sect('gait'), key: 'contactHoldFrames', min: 0, max: 4, step: 1, path: 'gait' },
+  { label: 'Footfall pulse px', obj: sect('footfall'), key: 'pulsePx', min: 0, max: 8, step: 0.5, path: 'footfall' },
+  { label: 'Prop row gap min m', obj: () => TUNING.props.rowGap as unknown as Num, key: '0', min: 8, max: 60, step: 1, path: 'props.rowGap' },
+  { label: 'Prop row gap max m', obj: () => TUNING.props.rowGap as unknown as Num, key: '1', min: 10, max: 90, step: 1, path: 'props.rowGap' },
+  { label: 'Prop row chance', obj: sect('props'), key: 'rowChance', min: 0, max: 1, step: 0.05, path: 'props' },
+  { label: 'Prop Medium weight', obj: sect('props'), key: 'mediumWeight', min: 0, max: 1, step: 0.05, path: 'props' },
+  { label: 'Prop Heavy weight', obj: sect('props'), key: 'heavyWeight', min: 0, max: 1, step: 0.05, path: 'props' },
+  { label: 'Bounce speed kept', obj: sect('collision'), key: 'bounceSpeedKeep', min: 0.2, max: 1, step: 0.05, path: 'collision' },
+  { label: 'Brake decel', obj: sect('brake'), key: 'decel', min: 4, max: 30, step: 1, path: 'brake' },
 );
+// Note: prop density changes apply to road generated after the change (R restarts the run).
 
 const STORE = 'wyf.tune.v1';
 const defaults = new Map<Knob, number>(KNOBS.map((k) => [k, k.obj()[k.key]]));
@@ -83,7 +99,7 @@ function persist() {
   }
 }
 
-export function mountTuningPanel(onCameraChange: () => void): { toggle(): void } {
+export function mountTuningPanel(): { toggle(): void } {
   const el = document.createElement('div');
   el.id = 'tune';
   el.hidden = true;
@@ -115,7 +131,6 @@ export function mountTuningPanel(onCameraChange: () => void): { toggle(): void }
       out.textContent = input.value;
       out.classList.toggle('dirty', Number(input.value) !== defaults.get(k));
       persist();
-      if (k.path === 'camera' || k.key === 'cameraDistance') onCameraChange();
     });
     // Keep keyboard input for the game, not the slider.
     input.addEventListener('keydown', (e) => e.preventDefault());

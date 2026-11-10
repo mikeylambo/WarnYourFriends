@@ -95,10 +95,13 @@ try {
   // 1–2. Desktop: click the real start button.
   {
     const { ctx, page, problems } = await bootAndStart(browser, 'desktop click', { viewport: { width: 1280, height: 720 } }, (p) => p.click('#start'));
-    await page.keyboard.down('KeyA');
-    await page.waitForTimeout(500);
-    await page.keyboard.up('KeyA');
+    // v0.3: A changes lane left; D changes lane right.
+    const lane0 = await page.evaluate(() => window.__GAME.state().lane);
+    await page.keyboard.press('KeyA');
+    await page.waitForTimeout(600);
     const s = await page.evaluate(() => window.__GAME.state());
+    if (s.lane !== lane0 - 1) fail(`A did not change lane (${lane0} → ${s.lane})`);
+    else ok(`A changes lane ${lane0 + 1} → ${s.lane + 1}`);
     if (s.speed < 2) fail(`speed below floor (${s.speed})`);
     await page.keyboard.press('Escape');
     await page.waitForTimeout(100);
@@ -130,21 +133,24 @@ try {
     const problems = watch(page);
     await page.goto(`${URL}?seed=3&bot=1&timescale=3&debug=1`);
     await page.waitForFunction(() => window.__GAME && window.__GAME.started, null, { timeout: 15000 });
-    // Sample the camera through the run: it must never sit inside a building, and
-    // a building may only hide the giant briefly while the camera climbs.
-    const cam = { samples: 0, inside: 0, blocked: 0, minAhead: Infinity, maxGiantY: 0 };
-    while ((await page.evaluate(() => window.__GAME.state().time)) < 30) {
-      const c = await page.evaluate(() => ({ ...window.__GAME.camera(), speed: window.__GAME.state().speed }));
-      cam.samples++;
-      if (c.insideBuilding) cam.inside++;
-      if (c.losBlocked) cam.blocked++;
-      if (c.speed >= 5.9) cam.minAhead = Math.min(cam.minAhead, c.aheadSeconds);
-      cam.maxGiantY = Math.max(cam.maxGiantY, c.giantScreenY);
-      await page.waitForTimeout(100);
+    await page.waitForFunction(() => window.__GAME.state().time > 30, null, { timeout: 60000 });
+    // Camera and run cycle, measured inside the running build (v0.3).
+    const c = await page.evaluate(() => window.__GAME.camera());
+    const gt = await page.evaluate(() => window.__GAME.gait());
+    console.log(`  camera: |screen-up| max ${c.maxScreenUp.toFixed(2)}°, giant lowest ${c.maxGiantY.toFixed(3)}, road ahead min ${c.minAhead.toFixed(2)}s, cuts ${c.cuts} (during lane change ${c.cutsDuringLane}, min gap ${c.cuts > 1 ? c.minCutGap.toFixed(2) + 's' : 'n/a'})`);
+    console.log(`  run cycle: cadence ${gt.cadence.map((k) => (k.n ? `${k.min.toFixed(2)}–${k.max.toFixed(2)}` : '—')).join(' / ')} steps/s; worst slide ${gt.worstSlide.map((w) => (w * 100).toFixed(2)).join(' / ')} cm; plants ${gt.plants.join('/')}`);
+    if (c.maxScreenUp > 35) fail(`screen-up law broken: ${c.maxScreenUp.toFixed(2)}°`);
+    if (c.maxGiantY > 0.855) fail(`giant below 85% of the screen (${c.maxGiantY.toFixed(3)})`);
+    if (c.minAhead < 2) fail(`under 2s of road ahead (${c.minAhead.toFixed(2)}s)`);
+    if (c.cutsDuringLane > 0) fail(`${c.cutsDuringLane} cuts during a lane change`);
+    if (c.cuts < 1) fail('no camera cut happened in 30s');
+    if (c.cuts > 1 && c.minCutGap < 7) fail(`cuts ${c.minCutGap.toFixed(2)}s apart`);
+    for (let t = 0; t < 3; t++) {
+      const k = gt.cadence[t];
+      if (k.n && (k.min < 2.0 - 1e-6 || k.max > 2.3 + 1e-6)) fail(`cadence out of band at tier ${t}: ${k.min}–${k.max}`);
+      if (gt.worstSlide[t] >= 0.05) fail(`foot slide ${gt.worstSlide[t]}m at tier ${t}`);
     }
-    console.log(`  camera: ${cam.samples} samples, inside building ${cam.inside}, giant hidden ${cam.blocked}, min road ahead ${cam.minAhead.toFixed(2)}s, lowest giant y ${cam.maxGiantY.toFixed(2)}`);
-    if (cam.inside > 0) fail('camera went inside a building');
-    if (cam.blocked > cam.samples * 0.05) fail(`a building hid the giant in ${cam.blocked}/${cam.samples} samples`);
+    if (gt.plants[2] < 10) fail('too few Rampage plants measured');
     const s = await page.evaluate(() => window.__GAME.state());
     await page.screenshot({ path: 'test-results/e2e-bot.png' });
     console.log(`  bot: t=${s.time.toFixed(1)}s tier=${s.tier} speed=${s.speed.toFixed(1)} smashes=${s.stats.smashes} rampage=${s.stats.timeAtTier[2].toFixed(1)}s`);

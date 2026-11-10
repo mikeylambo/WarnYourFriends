@@ -1,5 +1,7 @@
 # Warn Your Friends — Build Handoff v0.2
 
+> **v0.3 pivot (2026-11-10):** Warn Your Friends is now a 2–4 lane runner. [GDD-v0.3-lane-runner.md](GDD-v0.3-lane-runner.md) supersedes the sections marked below; everything else here stands.
+>
 > Transcribed from `Build_Handoff_v0.2.pdf` (Mike, 2026-11-08). The PDF is the original; this file is the working copy the build reads. Section numbers match the PDF.
 
 **Status:** Preproduction · **Platform:** Web (KBM, gamepad, touch) · **Stack:** Web Shell + Three.js · **Universe:** Standalone · **Base repo:** Shell-generated
@@ -104,6 +106,8 @@ Not a GTA sandbox. No story or cutscenes; the giant is never explained. No inven
 
 ## 7. Player Verbs
 
+> **Superseded in part by [GDD v0.3 Lane Runner](GDD-v0.3-lane-runner.md)** (replaced: lane verbs).
+
 | Verb | Input | Function | Commitment |
 |---|---|---|---|
 | Steer | Stick / A-D / thumb drag | Turn the always-running giant | Low |
@@ -112,6 +116,8 @@ Not a GTA sandbox. No story or cutscenes; the giant is never explained. No inven
 | Ability | LB / E / second button | Equipped upgrade ability | Varies |
 
 ## 8. Controls
+
+> **Superseded in part by [GDD v0.3 Lane Runner](GDD-v0.3-lane-runner.md)** (replaced: lane controls; camera-relative and mouse steering removed).
 
 | Action | Gamepad | Keyboard/mouse | Touch |
 |---|---|---|---|
@@ -124,6 +130,8 @@ Not a GTA sandbox. No story or cutscenes; the giant is never explained. No inven
 **Input philosophy:** 5f buffer on Shoulder Check and Ability. 10f menu guard after any screen transition. Pause freezes sim and broadcast audio. Controller disconnect auto-pauses.
 
 ## 9. Movement Spec (60 Hz fixed tick, metres)
+
+> **Superseded in part by [GDD v0.3 Lane Runner](GDD-v0.3-lane-runner.md)** (amended: lanes and lane-change times; sharp-turn rule removed; tiers, speeds, floor, brake and mass classes kept).
 
 Giant is 3.6m tall; pedestrians 1.8m. The giant always runs; speed never drops below 2 m/s (Law 1).
 
@@ -149,6 +157,8 @@ Giant is 3.6m tall; pedestrians 1.8m. The giant always runs; speed never drops b
 Pedestrians always dive clear or are shoved aside comically; nobody is ever shown hurt.
 
 ## 10. Game Feel Bible
+
+> **Superseded in part by [GDD v0.3 Lane Runner](GDD-v0.3-lane-runner.md)** (amended: The Run, now stride-led run cycle with locked feet).
 
 - **The Run:** the brand. Heavy forward lean, arms trailing, ground-shaking footfalls on the beat of the cycle; stride length and shake grow per tier.
 - **Tier-up:** brief camera pull-out, footfall pitch drops, chyron flickers, coat/cape flares. Must feel like a gear change.
@@ -223,6 +233,8 @@ Rises when Ratings cross 30 / 50 / 70 / 90, and +1 every 45s regardless. Never f
 
 ## 13. The Giant
 
+> **Superseded in part by [GDD v0.3 Lane Runner](GDD-v0.3-lane-runner.md)** (amended: cape is knee length).
+
 **Content unit:** one giant. Outfits change palette and cape only; never the silhouette or hitbox.
 
 - **Archetype:** an armored warlord, out of time in a modern city. Never explained.
@@ -238,6 +250,8 @@ Rises when Ratings cross 30 / 50 / 70 / 90, and +1 every 45s regardless. Never f
 - **Rules:** 10 Hz decision tick. Pursuers predict 1.0s ahead at Heat 1, 2.0s at Heat 5. Max 2 units in Box-in at once. All attacks use the tell windups in §11.
 
 ## 15. Camera
+
+> **Superseded in part by [GDD v0.3 Lane Runner](GDD-v0.3-lane-runner.md)** (amended: broadcast angle cuts and the LOCKED screen-up law).
 
 > **Revised 2026-11-10** (Mike): the near-top-down rig is replaced by an oblique news-chopper shot. Original v0.2 text: *"Top-down, 70° pitch, perspective FOV 40. Height: Jog 28m, Stride 34m, Rampage 42m, eased over 0.6s. Lags the giant 0.25s and leads 3m toward heading."*
 
@@ -261,6 +275,8 @@ An oblique news-chopper camera, like a real broadcast shot: high, angled, offset
 | Busted | Slow-mo 0.3×, freeze-frame |
 
 ## 16. District (v1: Downtown)
+
+> **Superseded in part by [GDD v0.3 Lane Runner](GDD-v0.3-lane-runner.md)** (replaced for Phase 0b: procedural highway).
 
 One district, 5 procedural layouts per run from hand-built 60×60m blocks (target 20 block types).
 
@@ -457,6 +473,8 @@ None beyond the leaderboard.
 - **Out of scope:** more districts, multiplayer, story, mid-run saves, permanent power.
 
 ## 40. Build Order
+
+> **Superseded in part by [GDD v0.3 Lane Runner](GDD-v0.3-lane-runner.md)** (amended: Phase 0b lane-runner thesis proof).
 
 1. **Phase 0, Thesis proof:** greybox giant, three tiers, camera, one block of breakable props. No ratings, no cops. *Exit:* Mike plays 5 minutes in an empty block and wants to keep going.
 2. **Phase 1, Foundation:** Shell-generated repo, tuning file, procedural block assembler, input on all three devices. *Exit:* a 6×6 Downtown layout generates from a seed.

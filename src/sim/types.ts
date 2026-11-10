@@ -2,69 +2,56 @@ import type { MassClass } from '../tuning';
 
 export type Material = 'wood' | 'glass' | 'metal' | 'fruit' | 'concrete' | 'paper';
 
-export type PropKind =
-  | 'bin'
-  | 'mailbox'
-  | 'newsbox'
-  | 'cart'
-  | 'planter'
-  | 'stall'
-  | 'fence'
-  | 'bench'
-  | 'bikerack'
-  | 'car'
-  | 'van'
-  | 'barricade'
-  | 'pillar'
-  | 'building'
-  | 'wall';
+export type PropKind = 'sawhorse' | 'cart' | 'fence' | 'scooter' | 'car' | 'van' | 'barricade';
 
+/** A prop in a lane, in track space: `s` along the road, `d` across it from the left edge. */
 export interface Prop {
   id: number;
   kind: PropKind;
   cls: MassClass;
   mat: Material;
-  /** Centre on the XZ plane. */
-  x: number;
-  z: number;
-  /** Half extents (AABB on XZ). */
+  s: number;
+  d: number;
+  /** Half length along the road, half width across it. */
+  hl: number;
   hw: number;
-  hd: number;
   /** Visual height. */
   h: number;
-  /** Cosmetic colour variant index. */
   variant: number;
   alive: boolean;
-  deadT: number;
+  /** Segment index it belongs to (for streaming). */
+  segment: number;
 }
 
-export type PedState = 'walk' | 'flee' | 'tumble';
-
-export interface Ped {
-  id: number;
-  x: number;
-  z: number;
-  vx: number;
-  vz: number;
-  heading: number;
-  state: PedState;
-  t: number;
-  /** Cosmetic: tumble spin and colour. */
-  spin: number;
-  variant: number;
-}
+export type LaneMove = 'change' | 'knock' | 'wallBump' | null;
 
 export interface GiantState {
-  x: number;
-  z: number;
-  /** Facing angle (radians). Forward = (cos, sin) on XZ; screen-up is -Z. */
-  heading: number;
-  /** Direction of travel. Lags heading by tier grip: this is the drift. */
-  travel: number;
+  /** Distance along the track (m). */
+  s: number;
+  /** Lateral offset from the road's left edge (m). */
+  d: number;
+  /** Lane the giant is in, or heading into during a move. */
+  lane: number;
+  /** Lane before the most recent lane change ("previous lane" for knock-backs). */
+  prevLane: number;
+  move: LaneMove;
+  /** Lateral move progress 0..1 (1 = idle). */
+  moveT: number;
+  moveDur: number;
+  moveFromD: number;
+  moveToD: number;
+  /** Lane the current move started in. */
+  moveFromLane: number;
+  /** Wall bump direction (−1 left, +1 right). */
+  bumpDir: number;
+  /** One queued lane input (−1, +1) or 0. */
+  laneQueue: number;
+  /** Buffered lane input that couldn't be taken yet, and frames left. */
+  laneBufferDir: number;
+  laneBufferFrames: number;
+
   speed: number;
-  angVel: number;
   tier: number;
-  /** Seconds held at top speed toward the next tier-up. */
   tierTimer: number;
   stumble: number;
   brakeHeld: number;
@@ -72,36 +59,34 @@ export interface GiantState {
   shoulderT: number;
   shoulderCd: number;
   shoulderBuffer: number;
-  /** Run-cycle phase in cycles; a footfall every 0.5. */
-  gaitPhase: number;
-  /** Per-tick steering heading deltas over the sharp-turn window. */
-  turnLog: number[];
-  /** Set after an aim-yank tier drop; clears when aim returns near the facing. */
-  yankLatched: boolean;
+
+  /** Steps taken (integer part) plus progress through the current step: phase locked to distance. */
+  stepPos: number;
+  /** Current step length (m) = speed ÷ cadence. */
+  stepLen: number;
+  /** Total distance run (m). */
+  odometer: number;
 }
 
 export interface SimInput {
-  /** Relative turn, -1 (left) .. 1 (right). Used by keyboard A/D. */
-  turn: number;
-  /** Absolute target heading (radians) from stick / mouse / touch, or null. */
-  aim: number | null;
+  /** Lane input edge: −1 left, +1 right, 0 none. */
+  lane: number;
   brake: boolean;
   /** True on the frame the button was pressed. */
   shoulder: boolean;
 }
 
-export const NO_INPUT: SimInput = { turn: 0, aim: null, brake: false, shoulder: false };
+export const NO_INPUT: SimInput = { lane: 0, brake: false, shoulder: false };
 
-export type TierDropReason = 'impact' | 'turn' | 'brake';
+export type TierDropReason = 'impact' | 'brake';
 
 export type SimEvent =
-  | { type: 'smash'; propId: number; cls: MassClass; mat: Material; x: number; z: number; dirX: number; dirZ: number; speed: number }
-  | { type: 'knock'; propId: number; cls: MassClass; mat: Material; x: number; z: number; dirX: number; dirZ: number; speed: number }
-  | { type: 'bounce'; cls: MassClass; x: number; z: number; nx: number; nz: number; speed: number }
-  | { type: 'scrape'; x: number; z: number }
+  | { type: 'smash'; propId: number; cls: MassClass; mat: Material; s: number; d: number; across: boolean; speed: number }
+  | { type: 'bounce'; propId: number; cls: MassClass; s: number; d: number; toLane: number; speed: number }
+  | { type: 'laneChange'; from: number; to: number; dur: number }
+  | { type: 'wallBump'; dir: number; forced: boolean }
   | { type: 'tierUp'; tier: number }
   | { type: 'tierDown'; tier: number; reason: TierDropReason }
-  | { type: 'footfall'; tier: number; foot: 0 | 1; x: number; z: number; speed: number }
-  | { type: 'shoulder'; x: number; z: number; dirX: number; dirZ: number }
-  | { type: 'shove'; pedId: number; x: number; z: number }
-  | { type: 'respawn'; propId: number };
+  /** `t` is the exact sim time of the plant (sub-tick), for cadence measurement. */
+  | { type: 'footfall'; tier: number; foot: 0 | 1; step: number; t: number; s: number; d: number; speed: number; stepLen: number }
+  | { type: 'shoulder'; s: number; d: number };

@@ -4,9 +4,9 @@
 
 A top-down chase roguelite: a giant fugitive barrels through a city on live TV, scoring ratings for spectacle. Design: [`docs/GDD.md`](docs/GDD.md). Rules for building: [`CLAUDE.md`](CLAUDE.md). Build-time calls: [`DECISIONS.md`](DECISIONS.md).
 
-## Status: Phase 0, thesis proof
+## Status: Phase 0b, lane-runner thesis proof
 
-Greybox giant, three momentum tiers, chopper camera, a seeded test block of breakable props and pedestrians. No ratings, no cops. **Waiting on Mike's feel check before Phase 1.**
+The v0.3 pivot ([`docs/GDD-v0.3-lane-runner.md`](docs/GDD-v0.3-lane-runner.md)): the giant auto-runs down a procedural highway (straights, curves, merges, 2–4 lanes), you pick lanes and smash across them. Run cycle with long strides, flat cadence and planted feet; broadcast camera cutting between Chase High, Wide Side and Long Lens. No ratings, no cops. **Waiting on Mike's feel check.** Live: https://warn-your-friends.vercel.app
 
 ## Run it
 
@@ -15,34 +15,27 @@ npm install
 npm run dev
 ```
 
-Open the printed URL. Any key, click or tap starts the run.
-
-| | Keyboard / mouse | Gamepad | Touch |
+| | Keyboard | Gamepad | Touch |
 |---|---|---|---|
-| Steer | A/D rotate, or point the mouse at the ground | Left stick (camera-relative) | Drag on left half (camera-relative) |
-| Brake | Space | LT | Hold left thumb still |
-| Shoulder Check | Shift / left click | RB | Red button |
+| Lane left / right | A / D, ← / → | Stick flick or d-pad | Swipe left / right |
+| Brake | S / Space | LT | Swipe down and hold |
+| Shoulder Check | Shift / W / click | RB | Red button |
 | Pause | Esc | Start | II |
 
-Dev keys: **T** tuning panel · **`** (backtick) debug overlay · **R** new layout.
+Dev keys: **T** tuning panel · **`** debug overlay · **C** next camera angle · **R** new road.
 
-URL flags: `?seed=N` fixed layout · `?timescale=0.5` · `?bot` autopilot · `?tune` open the tuning panel · `?reducedmotion` · `?reduceflashes` · `?step` (headless step mode via `window.__GAME.step(n)`).
+URL flags: `?seed=N` · `?angle=0|1|2` (start on Chase High / Wide Side / Long Lens) · `?timescale=0.5` · `?bot` autopilot · `?tune` · `?reducedmotion` · `?reduceflashes` · `?step` (headless, `window.__GAME.step(n)`).
 
-## Deploy (Vercel)
+## Feel check (Phase 0b exit)
 
-`vercel.json` pins the build (Vite, `npm run build`, output `dist/`). Import the repo once at vercel.com/new; after that every push to a branch gets its own preview URL, and pushes to the production branch update the main URL.
+> Mike plays 5 minutes and wants to keep going. (v0.3 §40)
 
-## Feel check (Phase 0 exit)
-
-> Mike plays 5 minutes in an empty block and wants to keep going. (§40)
-
-Things to try:
-
-1. Get to Rampage on a long avenue and listen to the footfalls drop in pitch at each tier.
-2. Take a corner at Rampage: carry the drift, or brake (Space) and lose a tier.
-3. Plow through a parked car at Rampage, then try the same car at Stride (bounce) and with a Shoulder Check (smash).
-4. Run through the central plaza at Stride; stalls and benches break, people dive clear.
-5. Open the tuning panel (T), change a number, feel it immediately. **Copy** gives you the changed values to send back.
+1. Watch the feet at each tier: few, huge steps, planted, a hang between them at Rampage.
+2. At Stride, change lanes into a sawhorse or cart: it's smashed across. At Rampage, do it into a car.
+3. At Jog, change lanes into a car: −1 tier, stumble, knocked back to your lane.
+4. Ride a merge: the closing lane pushes you over.
+5. Wait for the cuts (every 7–12 s, never mid-lane-change); press **C** to flip angles yourself.
+6. **T** opens the tuning panel; **Copy** exports changed numbers.
 
 ## Gates
 

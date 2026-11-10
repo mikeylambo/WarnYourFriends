@@ -1,79 +1,65 @@
 import { TUNING } from '../tuning';
-import { angleDiff, wrap } from './math';
-import type { Sim } from './sim';
+import { CLASS_RANK, type Sim } from './sim';
 import type { SimInput } from './types';
 
 /**
- * Balance-harness bot (§33): steers toward the nearest smashable target,
- * avoiding things it can't smash. Deterministic: uses only sim state.
+ * Balance-harness bot (§33), lane-runner version: keeps the lane while it's
+ * clear, dodges what it can't smash, and at Stride+ steers into lanes with
+ * smashable props (smash-across is the fun). Deterministic: sim state only.
  */
 export class Bot {
-  private target = -1;
-  private retarget = 0;
   private shoulderCooldown = 0;
+  private decideCooldown = 0;
 
   constructor(private sim: Sim) {}
 
   input(): SimInput {
     const sim = this.sim;
     const g = sim.giant;
-    const rank = sim.smashRank();
-    const ranks = { light: 0, medium: 1, heavy: 2, immovable: 3 } as const;
-
-    this.retarget -= sim.dt;
-    const cur = sim.props[this.target];
-    if (this.retarget <= 0 || !cur || !cur.alive) {
-      this.retarget = 0.75;
-      let best = -1;
-      let bestScore = Infinity;
-      for (const p of sim.props) {
-        if (!p.alive || ranks[p.cls] > Math.max(rank, 1) || ranks[p.cls] === 0) continue;
-        const dx = p.x - g.x;
-        const dz = p.z - g.z;
-        const d = Math.hypot(dx, dz);
-        if (d < 4 || d > 70) continue;
-        const ang = Math.abs(angleDiff(g.heading, Math.atan2(dz, dx)));
-        const score = d * (1 + ang * 1.5);
-        if (score < bestScore) {
-          bestScore = score;
-          best = p.id;
-        }
-      }
-      this.target = best;
-    }
-
-    let aim: number = g.heading;
-    const t = sim.props[this.target];
-    if (t && t.alive) aim = Math.atan2(t.z - g.z, t.x - g.x);
-    else aim = Math.atan2(-g.z, -g.x); // head back toward the middle
-
-    // Feelers: steer away from unsmashable obstacles ahead.
-    const look = 4 + g.speed * 0.6;
-    for (const side of [-0.45, 0, 0.45]) {
-      const a = g.heading + side;
-      const px = g.x + Math.cos(a) * look;
-      const pz = g.z + Math.sin(a) * look;
-      for (const p of sim.props) {
-        if (!p.alive || ranks[p.cls] <= rank) continue;
-        if (Math.abs(p.x - px) < p.hw + TUNING.giant.radius && Math.abs(p.z - pz) < p.hd + TUNING.giant.radius) {
-          aim = wrap(g.heading - Math.sign(side || 1) * 1.2);
-          break;
-        }
-      }
-    }
-
-    // Never ask for more than ~95° off the facing: a yank past 110° costs a tier,
-    // and a sensible player turns through corners rather than reversing.
-    const off = angleDiff(g.heading, aim);
-    const lim = (95 * Math.PI) / 180;
-    if (Math.abs(off) > lim) aim = wrap(g.heading + Math.sign(off) * lim);
-
+    const track = sim.track;
     this.shoulderCooldown -= sim.dt;
+    this.decideCooldown -= sim.dt;
+    if (sim.laneBusy || this.decideCooldown > 0) return { lane: 0, brake: false, shoulder: false };
+
+    const look = g.speed * 1.3 + 10;
+    const s0 = g.s;
+    const s1 = g.s + look;
+    const lanes = track.lanesAt(g.s + 4);
+    const rank = sim.smashRank();
+
+    const score = (lane: number): number => {
+      if (!track.laneUsable(lane, g.s) || !track.laneUsable(lane, g.s + 6)) return -Infinity;
+      if (!sim.laneClear(lane, s0, s1)) return -100;
+      let sc = 0;
+      // Prefer lanes with things to smash once we can.
+      const c = track.laneCenter(lane);
+      for (const p of track.propsBetween(s0, s1)) {
+        if (Math.abs(p.d - c) < p.hw + TUNING.giant.radius && CLASS_RANK[p.cls] <= rank) sc += 2;
+      }
+      return sc - Math.abs(lane - g.lane) * 0.5;
+    };
+
+    const here = score(g.lane);
+    let best = g.lane;
+    let bestScore = here;
+    for (const lane of [g.lane - 1, g.lane + 1]) {
+      if (lane < 0 || lane >= lanes) continue;
+      const sc = score(lane);
+      if (sc > bestScore + 0.75) {
+        best = lane;
+        bestScore = sc;
+      }
+    }
+
     let shoulder = false;
-    if (t && t.alive && ranks[t.cls] > rank && this.shoulderCooldown <= 0 && Math.hypot(t.x - g.x, t.z - g.z) < 5) {
+    if (here <= -100 && bestScore <= -100 && this.shoulderCooldown <= 0) {
       shoulder = true;
       this.shoulderCooldown = 3;
     }
-    return { turn: 0, aim, brake: false, shoulder };
+    if (best !== g.lane) {
+      this.decideCooldown = 0.15;
+      return { lane: Math.sign(best - g.lane), brake: false, shoulder };
+    }
+    return { lane: 0, brake: false, shoulder };
   }
 }

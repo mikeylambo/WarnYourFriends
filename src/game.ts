@@ -3,11 +3,11 @@ import { TUNING } from './tuning';
 import { Sim } from './sim/sim';
 import { Bot } from './sim/bot';
 import { NO_INPUT, type SimEvent, type SimInput } from './sim/types';
-import { angleDiff } from './sim/math';
-import { WorldView } from './render/world';
+import { HighwayView } from './render/highway';
 import { GiantView } from './render/giant';
-import { CameraRig } from './render/camera';
+import { CameraRig, Director, type CameraTarget } from './render/camera';
 import { PALETTE } from './render/palette';
+import { Gait } from './anim/gait';
 import { Audio } from './audio';
 import { Input } from './input';
 import { readFlags } from './debug';
@@ -32,8 +32,7 @@ const tierMeter = tierbar.querySelector('.meter i') as HTMLElement;
 const titleEl = $('title');
 const pausedEl = $('paused');
 const touchUi = $('touch-ui');
-const stickEl = $('stick');
-const stickKnob = $('stick-knob');
+const camTag = $('camtag');
 
 // --- Renderer ---------------------------------------------------------------
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
@@ -41,7 +40,7 @@ renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(PALETTE.sky);
-scene.fog = new THREE.Fog(PALETTE.sky, 90, 220);
+scene.fog = new THREE.Fog(PALETTE.sky, 160, 420);
 scene.add(new THREE.HemisphereLight(0xfff7e8, 0xb8b0a0, 1.5));
 const sun = new THREE.DirectionalLight(0xffffff, 1.7);
 sun.position.set(-40, 100, -25);
@@ -49,61 +48,78 @@ scene.add(sun);
 
 const rig = new CameraRig();
 rig.reducedMotion = settings.reducedMotion;
-const tunePanel = mountTuningPanel(() => {
-  rig.camera.fov = TUNING.camera.fov;
-  rig.camera.updateProjectionMatrix();
-});
+const tunePanel = mountTuningPanel();
 if (flags.tune) tunePanel.toggle();
 
 // --- Game state -------------------------------------------------------------
 let sim: Sim;
-let world: WorldView;
+let highway: HighwayView;
 let giant: GiantView;
+let gait: Gait;
+let director: Director;
 let bot: Bot | null = null;
 const audio = new Audio();
 const input = new Input(canvas, $('btn-shoulder'), $('btn-pause'));
-input.aimFromScreenDir = (sx, sy) => rig.screenDirToHeading(sx, sy);
-input.aimFromCursor = (cx, cy) => {
-  const p = rig.screenToGround(cx, cy);
-  if (!p) return null;
-  return Math.atan2(p.z - sim.giant.z, p.x - sim.giant.x);
-};
 
-const prev = { x: 0, z: 0, heading: 0, travel: 0 };
+const prev = { s: 0, d: 0, stepPos: 0 };
 let started = false;
 let paused = false;
 let hitstop = 0;
 let flashFrames = 0;
 let menuGuard = 0;
 let acc = 0;
-let lastScrape = 0;
-let lastShove = 0;
+let camTagT = 0;
 const recentEvents: SimEvent[] = [];
 const perf = { fps: 0, frames: 0, t: 0, simMs: 0 };
+/** Browser-side measurements, exposed for E2E. */
+const measure = {
+  cadence: [0, 1, 2].map(() => ({ min: Infinity, max: 0, n: 0 })),
+  lastFoot: -1,
+  cuts: 0,
+  cutsDuringLane: 0,
+  lastCutAt: -Infinity,
+  minCutGap: Infinity,
+  maxScreenUp: 0,
+  maxGiantY: 0,
+  minAhead: Infinity,
+  frames: 0,
+};
+
+const pos = { x: 0, z: 0 };
+function targetAt(s: number, d: number): CameraTarget {
+  sim.track.posAt(s, d, pos);
+  return { x: pos.x, z: pos.z, travel: sim.track.headingAt(s), speed: sim.giant.speed, tier: sim.giant.tier };
+}
 
 function newRun(seed: number) {
-  if (world) scene.remove(world.group);
+  if (highway) scene.remove(highway.group);
   if (giant) for (const o of giant.objects) scene.remove(o);
   sim = new Sim({ seed });
-  world = new WorldView(sim);
+  highway = new HighwayView(sim);
   giant = new GiantView();
-  scene.add(world.group, ...giant.objects);
-  giant.reset(sim.giant);
-  rig.setOccluders(
-    sim.props
-      .filter((p) => p.kind === 'building' || p.kind === 'wall')
-      // Buildings carry a parapet and roof units; include them in the line-of-sight box.
-      .map((p) => ({ minX: p.x - p.hw, maxX: p.x + p.hw, minZ: p.z - p.hd, maxZ: p.z + p.hd, top: p.h + (p.kind === 'building' ? 1.6 : 0) })),
-  );
-  rig.snap(sim.giant.x, sim.giant.z, sim.giant.travel, sim.giant.speed, sim.giant.tier);
+  gait = new Gait();
+  director = new Director(seed);
+  scene.add(highway.group, ...giant.objects);
+  giant.reset();
+  const g = sim.giant;
+  prev.s = g.s;
+  prev.d = g.d;
+  prev.stepPos = g.stepPos;
+  rig.snap(targetAt(g.s, g.d));
+  if (flags.angle !== null) setAngle(flags.angle, 1);
   bot = flags.bot ? new Bot(sim) : null;
-  prev.x = sim.giant.x;
-  prev.z = sim.giant.z;
-  prev.heading = sim.giant.heading;
-  prev.travel = sim.giant.travel;
   acc = 0;
   hitstop = 0;
 }
+
+function setAngle(index: number, side: number) {
+  const n = TUNING.camera.angles.length;
+  const i = ((index % n) + n) % n;
+  director.force(i, side);
+  rig.cut(i, side, targetAt(sim.giant.s, sim.giant.d));
+  showCamTag();
+}
+
 newRun(flags.seed);
 
 // --- Presentation of sim events ---------------------------------------------
@@ -122,32 +138,42 @@ function flash(frames: number) {
   flashFrames = Math.max(flashFrames, frames);
 }
 
+/** v0.3 cut graphic: a subtle "CAM n · NAME" tag. */
+function showCamTag() {
+  const i = director.current;
+  camTag.textContent = `CAM ${i + 1} · ${TUNING.camera.angles[i].name.toUpperCase()}`;
+  camTag.classList.remove('show');
+  void camTag.offsetWidth;
+  camTag.classList.add('show');
+  camTagT = 1.6;
+}
+
 function present(e: SimEvent) {
   recentEvents.push(e);
   if (recentEvents.length > 64) recentEvents.shift();
   const I = TUNING.impact;
+  const g = sim.giant;
+  const h = sim.track.headingAt(g.s);
   switch (e.type) {
     case 'footfall': {
-      audio.footfall(e.tier);
-      rig.jolt(TUNING.camera.footfallShakePx[e.tier], 0.08);
-      if (e.tier === 2) {
-        world.ring(e.x, e.z, 2.6, 0xcfc6b4, 0.5);
-        haptic(30, 0.15); // §27 light pulse per footfall at Rampage only
+      // Visuals and audio fire from the gait plant (exactly where the foot lands); here we only measure.
+      if (measure.lastFoot >= 0) {
+        const c = 1 / (e.t - measure.lastFoot);
+        const m = measure.cadence[e.tier];
+        m.min = Math.min(m.min, c);
+        m.max = Math.max(m.max, c);
+        m.n++;
       }
-      break;
-    }
-    case 'knock': {
-      const p = sim.props[e.propId];
-      world.smashDebris(p, e.dirX, e.dirZ, e.speed);
-      world.writeProp(p);
-      audio.knock();
+      measure.lastFoot = e.t;
       break;
     }
     case 'smash': {
-      const p = sim.props[e.propId];
       const k = e.cls === 'heavy' ? I.heavy : I.medium;
-      world.smashDebris(p, e.dirX, e.dirZ, e.speed);
-      world.writeProp(p);
+      // Debris flies along the run, and sideways on a smash-across.
+      const lat = e.across ? Math.sign(e.d - g.d || 1) * 0.9 : 0;
+      const dirX = Math.cos(h) - Math.sin(h) * lat;
+      const dirZ = Math.sin(h) + Math.cos(h) * lat;
+      highway.smash(e.propId, dirX, dirZ, e.speed);
       audio.smash(e.cls);
       hitstop = Math.max(hitstop, k.hitstop);
       rig.jolt(k.shake, e.cls === 'heavy' ? TUNING.camera.joltTime : 0.08);
@@ -162,16 +188,20 @@ function present(e: SimEvent) {
       hitstop = Math.max(hitstop, k.hitstop);
       rig.jolt(k.shake, 0.15);
       haptic(k.haptic, k.hapticStrength);
-      world.spawnDebris(e.x, e.z, e.nx, e.nz, 3, 6, [0xd9d2c4, 0xbdb6aa], [0.1, 0.3]);
+      sim.track.posAt(e.s, e.d, pos);
+      highway.spawnDebris(pos.x, pos.z, -Math.cos(h), -Math.sin(h), 3, 6, [0xd9d2c4, 0xbdb6aa], [0.1, 0.3]);
       break;
     }
-    case 'scrape': {
-      if (sim.time - lastScrape > 0.2) {
-        audio.scrape();
-        lastScrape = sim.time;
-      }
+    case 'wallBump': {
+      const k = I.wall;
+      audio.scrape();
+      rig.jolt(k.shake, 0.1);
+      haptic(k.haptic, k.hapticStrength);
       break;
     }
+    case 'laneChange':
+      audio.capeWhip(0.5 + g.tier * 0.25);
+      break;
     case 'tierUp': {
       rig.tierUpPulse();
       audio.tierUp(e.tier);
@@ -184,35 +214,38 @@ function present(e: SimEvent) {
     case 'tierDown':
       audio.tierDown();
       break;
-    case 'shoulder':
+    case 'shoulder': {
       giant.onShoulder();
       audio.shoulder();
-      world.ring(e.x + e.dirX * 2, e.z + e.dirZ * 2, TUNING.shoulderCheck.shoveRadius, 0xffffff, 0.35, 0.8);
+      sim.track.posAt(e.s + 2, e.d, pos);
+      highway.ring(pos.x, pos.z, 6, 0xffffff, 0.35, 0.8);
       rig.jolt(2, 0.1);
       haptic(80, 0.5);
       break;
-    case 'shove':
-      if (sim.time - lastShove > 0.08) {
-        audio.shove();
-        lastShove = sim.time;
-      }
-      break;
-    case 'respawn':
-      world.writeProp(sim.props[e.propId]);
-      break;
+    }
   }
 }
 
 function stepSim(inp: SimInput) {
   const g = sim.giant;
-  prev.x = g.x;
-  prev.z = g.z;
-  prev.heading = g.heading;
-  prev.travel = g.travel;
+  prev.s = g.s;
+  prev.d = g.d;
+  prev.stepPos = g.stepPos;
   const t0 = performance.now();
   const events = sim.step(inp);
   perf.simMs = performance.now() - t0;
   for (const e of events) present(e);
+  // The director cuts in sim time, only when no lane change is in progress.
+  const cut = director.update(sim.dt, sim.laneBusy);
+  if (cut) {
+    measure.cuts++;
+    if (sim.laneBusy) measure.cutsDuringLane++;
+    measure.minCutGap = Math.min(measure.minCutGap, sim.time - measure.lastCutAt);
+    measure.lastCutAt = sim.time;
+    rig.cut(cut.index, cut.side, targetAt(g.s, g.d));
+    flash(TUNING.camera.cutFlashFrames);
+    showCamTag();
+  }
 }
 
 // --- Pause, focus, start ------------------------------------------------------
@@ -228,9 +261,8 @@ function start() {
   if (started) return;
   started = true;
   titleEl.hidden = true;
-  // Audio must never block the run from starting.
   try {
-    audio.unlock();
+    audio.unlock(); // audio must never block the run from starting
   } catch (e) {
     console.warn('Audio unavailable:', e);
   }
@@ -284,6 +316,7 @@ window.addEventListener('keydown', (e) => {
     e.preventDefault();
   }
   if (e.code === 'KeyT') tunePanel.toggle();
+  if (e.code === 'KeyC' && started && !paused) setAngle(director.current + 1, director.side); // dev: next angle
   if (e.code === 'KeyR' && started && !paused) newRun(flags.seedFixed ? flags.seed : (Math.random() * 1e9) | 0);
 });
 
@@ -301,7 +334,6 @@ resize();
 
 // --- Loop -----------------------------------------------------------------------
 const SIM_DT = 1 / TUNING.sim.hz;
-const proj = new THREE.Vector3();
 let last = performance.now();
 
 function frame(now: number) {
@@ -323,42 +355,62 @@ function frame(now: number) {
         frozen = true;
         continue;
       }
-      let inp = bot ? bot.input() : input.sample(SIM_DT);
+      let inp = bot ? bot.input() : input.sample();
       if (menuGuard > 0) {
         menuGuard--;
-        inp = { ...inp, shoulder: false };
+        inp = { ...inp, shoulder: false, lane: 0 };
       }
       stepSim(inp);
       steps++;
     }
     if (steps >= 8) acc = 0;
   } else if (!started) {
-    input.sample(SIM_DT); // drain edges while on the title
+    input.sample(); // drain edges while on the title
   }
+  highway.sync();
 
   const g = sim.giant;
   const alpha = flags.stepMode ? 1 : Math.min(1, acc / SIM_DT);
-  const x = prev.x + (g.x - prev.x) * alpha;
-  const z = prev.z + (g.z - prev.z) * alpha;
-  const heading = prev.heading + angleDiff(prev.heading, g.heading) * alpha;
-  const travel = prev.travel + angleDiff(prev.travel, g.travel) * alpha;
+  const s = prev.s + (g.s - prev.s) * alpha;
+  const d = prev.d + (g.d - prev.d) * alpha;
+  const stepPos = prev.stepPos + (g.stepPos - prev.stepPos) * alpha;
+  const t = targetAt(s, d);
+  const lateralVel = (g.d - prev.d) / SIM_DT;
+  const heading = t.travel + Math.atan2(lateralVel, Math.max(4, g.speed)) * 0.5;
 
   const animDt = paused || frozen ? 0 : realDt * flags.timescale;
-  if (Math.abs(g.angVel) > 1.2 && animDt > 0) audio.capeWhip(Math.min(1, Math.abs(g.angVel) / 2.5));
   audio.setRotor(g.tier / 2);
-  giant.update(animDt, x, z, heading, g);
-  world.update(animDt, alpha);
-  rig.setTier(g.tier);
-  rig.update(paused ? 0 : realDt, x, z, travel, g.speed, g.angVel);
 
-  // Mouse-direction steering needs the giant on screen.
-  proj.set(x, 1.6, z).project(rig.camera);
-  input.giantScreen.x = (proj.x * 0.5 + 0.5) * window.innerWidth;
-  input.giantScreen.y = (-proj.y * 0.5 + 0.5) * window.innerHeight;
+  if (animDt > 0) {
+    const gf = gait.update({ x: t.x, z: t.z, fx: Math.cos(t.travel), fz: Math.sin(t.travel), speed: g.speed, stepPos, stepLen: g.stepLen, tier: g.tier, dt: animDt });
+    if (gf.plantedNow === 0 || gf.plantedNow === 1) {
+      // v0.3 footfall: dust ring, 2px camera pulse, bass thump; Rampage adds a crack decal.
+      const f = gf.legs[gf.plantedNow as 0 | 1].foot;
+      highway.ring(f.x, f.z, 1.6 + g.tier * 0.7, PALETTE.dust, 0.5, 0.55);
+      rig.jolt(TUNING.footfall.pulsePx, TUNING.footfall.pulseTime);
+      audio.footfall(g.tier);
+      if (g.tier === 2) {
+        highway.crack(f.x, f.z, t.travel);
+        haptic(30, 0.15); // §27 light pulse per footfall at Rampage only
+      }
+    }
+    giant.update(animDt, { x: t.x, z: t.z, heading, travel: t.travel, lateralVel, speed: g.speed, tier: g.tier, braking: g.braking, stumble: g.stumble, stepPos }, gf);
+  }
+  highway.update(animDt, t.x, t.z);
+  rig.update(paused ? 0 : realDt, t);
 
-  // Flash.
+  const info = rig.info;
+  if (started && !paused) {
+    measure.frames++;
+    measure.maxScreenUp = Math.max(measure.maxScreenUp, Math.abs(info.screenUpDeg));
+    measure.maxGiantY = Math.max(measure.maxGiantY, info.giantScreenY);
+    if (g.speed > 5.5) measure.minAhead = Math.min(measure.minAhead, info.aheadSeconds);
+  }
+
   flashEl.style.opacity = flashFrames > 0 ? '0.85' : '0';
   if (flashFrames > 0) flashFrames--;
+  camTagT = Math.max(0, camTagT - realDt);
+  if (camTagT === 0) camTag.classList.remove('show');
 
   renderer.render(scene, rig.camera);
   updateHud(realDt);
@@ -373,19 +425,6 @@ function updateHud(dt: number) {
   const fill = Number.isFinite(T.tierUpAfter) ? Math.min(1, g.tierTimer / T.tierUpAfter) : 1;
   tierMeter.style.width = `${(fill * 100).toFixed(1)}%`;
 
-  const t = input.touchStick;
-  if (t && input.device === 'touch') {
-    stickEl.style.display = 'block';
-    stickEl.style.left = `${t.sx}px`;
-    stickEl.style.top = `${t.sy}px`;
-    const dx = Math.max(-40, Math.min(40, t.x - t.sx));
-    const dy = Math.max(-40, Math.min(40, t.y - t.sy));
-    stickKnob.style.transform = `translate(${dx}px, ${dy}px)`;
-    stickEl.classList.toggle('braking', g.braking);
-  } else {
-    stickEl.style.display = 'none';
-  }
-
   perf.frames++;
   perf.t += dt;
   if (perf.t >= 0.5) {
@@ -394,15 +433,17 @@ function updateHud(dt: number) {
     perf.t = 0;
   }
   if (settings.debug) {
-    const drift = (angleDiff(g.travel, g.heading) * 180) / Math.PI;
+    const info = rig.info;
+    const worst = [0, 0, 0];
+    for (const r of gait.records) worst[r.tier] = Math.max(worst[r.tier], r.slide);
     debugEl.textContent =
       `seed ${sim.seed}  t ${sim.time.toFixed(1)}s  ${perf.fps.toFixed(0)} fps  sim ${perf.simMs.toFixed(2)}ms\n` +
-      `tier ${T.name}  speed ${g.speed.toFixed(2)} m/s  top ${T.topSpeed}\n` +
-      `tier-up ${Number.isFinite(T.tierUpAfter) ? `${g.tierTimer.toFixed(2)}/${T.tierUpAfter}s` : '—'}  drift ${drift.toFixed(0)}°\n` +
-      `brake ${g.braking ? 'ON' : '-'}  stumble ${g.stumble.toFixed(2)}  shoulder cd ${g.shoulderCd.toFixed(1)}\n` +
-      `smash ${sim.stats.smashes}  knock ${sim.stats.knocks}  bounce ${sim.stats.bounces}  shove ${sim.stats.shoves}\n` +
-      `input ${input.device}${bot ? ' (BOT)' : ''}  timescale ${flags.timescale}\n` +
-      `cam ahead ${rig.info.aheadSeconds.toFixed(1)}s (${rig.info.aheadMetres.toFixed(0)}m)  giant y ${rig.info.giantScreenY.toFixed(2)}  side ${rig.info.side.toFixed(2)}  climb ${rig.info.raise.toFixed(1)}m`;
+      `tier ${T.name}  speed ${g.speed.toFixed(2)} m/s  step ${g.stepLen.toFixed(2)}m  cadence ${(g.speed / g.stepLen).toFixed(2)}/s\n` +
+      `lane ${g.lane + 1}/${sim.track.lanesAt(g.s)}  ${g.move ?? '-'}  queue ${g.laneQueue || '-'}  stumble ${g.stumble.toFixed(2)}  brake ${g.braking ? 'ON' : '-'}\n` +
+      `tier-up ${Number.isFinite(T.tierUpAfter) ? `${g.tierTimer.toFixed(2)}/${T.tierUpAfter}s` : '—'}  shoulder cd ${g.shoulderCd.toFixed(1)}\n` +
+      `smash ${sim.stats.smashes} (across ${sim.stats.smashesAcross})  bounce ${sim.stats.bounces}  wall ${sim.stats.wallBumps}\n` +
+      `cam ${info.angle}  up ${info.screenUpDeg.toFixed(1)}°  yaw ${info.yawDeg.toFixed(1)}°  ahead ${info.aheadSeconds.toFixed(1)}s  giant y ${info.giantScreenY.toFixed(2)}  cuts ${measure.cuts}\n` +
+      `slide max ${worst.map((w) => (w * 100).toFixed(1)).join('/')}cm  input ${input.device}${bot ? ' (BOT)' : ''}  timescale ${flags.timescale}`;
   }
 }
 
@@ -432,16 +473,27 @@ window.__GAME = {
   setBot(on: boolean) {
     bot = on ? new Bot(sim) : null;
   },
+  /** Dev/screenshots only: cut to an angle now, ignoring the director's rules. */
+  setAngle,
   /** Step mode: advance N ticks with a fixed input (or the bot). */
   step(n: number, inp?: SimInput) {
     for (let i = 0; i < n; i++) stepSim(inp ?? (bot ? bot.input() : NO_INPUT));
   },
   camera() {
-    return { ...rig.info };
+    return { ...rig.info, cuts: measure.cuts, cutsDuringLane: measure.cutsDuringLane, minCutGap: measure.minCutGap, maxScreenUp: measure.maxScreenUp, maxGiantY: measure.maxGiantY, minAhead: measure.minAhead };
+  },
+  gait() {
+    const worst = [0, 0, 0];
+    const plants = [0, 0, 0];
+    for (const r of gait.records) {
+      worst[r.tier] = Math.max(worst[r.tier], r.slide);
+      plants[r.tier]++;
+    }
+    return { worstSlide: worst, plants, cadence: measure.cadence.map((c) => ({ ...c })) };
   },
   state() {
     const g = sim.giant;
-    return { time: sim.time, tick: sim.tick, x: g.x, z: g.z, speed: g.speed, tier: g.tier, heading: g.heading, stats: sim.stats, fps: perf.fps };
+    return { time: sim.time, tick: sim.tick, s: g.s, d: g.d, lane: g.lane, lanes: sim.track.lanesAt(g.s), laneBusy: sim.laneBusy, speed: g.speed, tier: g.tier, stats: sim.stats, fps: perf.fps };
   },
   events: recentEvents,
 };

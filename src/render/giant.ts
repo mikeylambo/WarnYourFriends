@@ -1,41 +1,62 @@
 import * as THREE from 'three';
 import { TUNING } from '../tuning';
-import { angleDiff } from '../sim/math';
-import type { GiantState } from '../sim/types';
+import type { GaitFrame, Vec3 } from '../anim/gait';
 import { PALETTE } from './palette';
-import { blobTexture, toon } from './world';
+import { blobTexture, toon } from './toon';
 
 /**
- * Greybox giant (Phase 0). Placeholder that swaps without touching logic (§23):
- * everything here reads GiantState and animates; nothing writes back to the sim.
+ * Greybox giant (Phase 0b). A placeholder that swaps without touching logic
+ * (§23): it reads the sim pose and the gait frame and draws; nothing writes back.
  *
  * Identity per §13 (provisional): armored warlord, violet-and-bone, horned
- * pauldrons, braided white topknot, tattered floor-length cape, wrapped forearms.
- * Model faces +X; the root is yawed to the giant's heading.
+ * pauldrons, braided white topknot, wrapped forearms, and (v0.3) a KNEE-LENGTH
+ * cape so it never hides the run.
+ *
+ * v0.3 run: legs are drawn from the gait's IK (hip → knee → planted foot), so a
+ * planted foot never slides. Low, forward-driving posture, arms trailing, head
+ * steady. The torso model faces +X; the root is yawed to the heading.
  */
 
-const CAPE_SEGS = 7;
-const CAPE_LEN = 3.1;
+const CAPE_SEGS = 6;
+/** Knee length: from the shoulders (~3.0m) to about the knee (~1.0m). */
+const CAPE_LEN = 1.9;
+
+export interface GiantPose {
+  x: number;
+  z: number;
+  /** Body facing (radians, world): road heading plus a little lean into a lane change. */
+  heading: number;
+  /** Direction of travel along the road (radians). */
+  travel: number;
+  /** Lateral velocity across the road (m/s, + = right). */
+  lateralVel: number;
+  speed: number;
+  tier: number;
+  braking: boolean;
+  stumble: number;
+  stepPos: number;
+}
 
 function box(w: number, h: number, d: number, color: number): THREE.Mesh {
   return new THREE.Mesh(new THREE.BoxGeometry(w, h, d), toon(color));
 }
 
+const UP = new THREE.Vector3(0, 1, 0);
+
 export class GiantView {
   readonly root = new THREE.Group();
-  private yaw = new THREE.Group();
   private hips = new THREE.Group();
   private torso = new THREE.Group();
   private head = new THREE.Group();
-  private legL = new THREE.Group();
-  private legR = new THREE.Group();
   private armL = new THREE.Group();
   private armR = new THREE.Group();
   private braid: THREE.Mesh[] = [];
   private shadow: THREE.Mesh;
+  private legs = new THREE.Group();
+  private legParts: { thigh: THREE.Mesh; shin: THREE.Mesh; knee: THREE.Mesh; boot: THREE.Mesh }[] = [];
 
   private cape: THREE.Mesh;
-  private capePts: { p: THREE.Vector3 }[] = [];
+  private capePts: THREE.Vector3[] = [];
   private capeHistory: THREE.Vector3[] = [];
   private capeGeo: THREE.BufferGeometry;
 
@@ -45,30 +66,15 @@ export class GiantView {
   private tierFlare = 0;
   private stumbleWobble = 0;
   private time = 0;
+  private tmp = new THREE.Vector3();
 
   constructor() {
-    const S = TUNING.giant.height / 3.6;
-    this.root.add(this.yaw);
-    this.yaw.add(this.hips);
-    this.hips.position.y = 1.65 * S;
+    this.root.add(this.hips);
 
-    // Legs: pivot at the hip, thigh+shin as one block, heavy boot.
-    for (const [leg, z] of [[this.legL, 0.3], [this.legR, -0.3]] as const) {
-      leg.position.set(0, 0, z);
-      const limb = box(0.42, 1.45, 0.42, PALETTE.giantBody);
-      limb.position.y = -0.72;
-      const boot = box(0.7, 0.32, 0.5, PALETTE.giantArmor);
-      boot.position.set(0.12, -1.5, 0);
-      const knee = box(0.46, 0.22, 0.46, PALETTE.giantBone);
-      knee.position.set(0.05, -0.72, 0);
-      leg.add(limb, boot, knee);
-      this.hips.add(leg);
-    }
-
-    const pelvis = box(0.6, 0.4, 0.95, PALETTE.giantArmor);
+    const pelvis = box(0.62, 0.42, 0.95, PALETTE.giantArmor);
     this.hips.add(pelvis);
 
-    // Torso pivots at the hips so lean reads as a body lean, not a slide.
+    // Torso pivots at the hips so the lean reads as a body lean, not a slide.
     this.hips.add(this.torso);
     const chest = box(0.95, 1.25, 1.35, PALETTE.giantBody);
     chest.position.y = 0.72;
@@ -90,7 +96,7 @@ export class GiantView {
       this.torso.add(pauldron, horn);
     }
 
-    // Arms.
+    // Arms (trail behind the body).
     for (const [arm, z] of [[this.armL, 0.86], [this.armR, -0.86]] as const) {
       arm.position.set(0, 1.25, z);
       const upper = box(0.34, 0.85, 0.34, PALETTE.giantBody);
@@ -120,13 +126,26 @@ export class GiantView {
     for (let i = 0; i < 4; i++) {
       const b = box(0.16, 0.16, 0.16, PALETTE.giantHair);
       this.braid.push(b);
-      this.root.add(b);
     }
 
-    // Cape: a world-space verlet ribbon anchored behind the shoulders.
+    // Legs: world-space segments driven by the gait IK. Unit geometry along +Y.
+    const seg = (w: number, color: number) => {
+      const g = new THREE.BoxGeometry(w, 1, w);
+      g.translate(0, 0.5, 0);
+      return new THREE.Mesh(g, toon(color));
+    };
+    for (let i = 0; i < 2; i++) {
+      const thigh = seg(0.44, PALETTE.giantBody);
+      const shin = seg(0.38, PALETTE.giantBody);
+      const knee = box(0.46, 0.24, 0.46, PALETTE.giantBone);
+      const boot = box(0.72, 0.32, 0.5, PALETTE.giantArmor);
+      this.legs.add(thigh, shin, knee, boot);
+      this.legParts.push({ thigh, shin, knee, boot });
+    }
+
+    // Cape: knee length, follows the anchor's path.
     this.capeGeo = new THREE.BufferGeometry();
-    const verts = new Float32Array((CAPE_SEGS + 1) * 2 * 3);
-    this.capeGeo.setAttribute('position', new THREE.BufferAttribute(verts, 3));
+    this.capeGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array((CAPE_SEGS + 1) * 2 * 3), 3));
     const idx: number[] = [];
     for (let i = 0; i < CAPE_SEGS; i++) {
       const a = i * 2;
@@ -135,26 +154,19 @@ export class GiantView {
     this.capeGeo.setIndex(idx);
     this.cape = new THREE.Mesh(this.capeGeo, toon(PALETTE.giantCape, { side: THREE.DoubleSide }));
     this.cape.frustumCulled = false;
-    for (let i = 0; i <= CAPE_SEGS; i++) {
-      this.capePts.push({ p: new THREE.Vector3() });
-    }
+    for (let i = 0; i <= CAPE_SEGS; i++) this.capePts.push(new THREE.Vector3());
 
-    // Shadow blob.
     const sg = new THREE.PlaneGeometry(1, 1);
     sg.rotateX(-Math.PI / 2);
     this.shadow = new THREE.Mesh(sg, new THREE.MeshBasicMaterial({ map: blobTexture(), transparent: true, depthWrite: false }));
-    this.shadow.scale.set(3.4, 1, 3.4);
+    this.shadow.scale.set(3.2, 1, 3.2);
   }
 
-  /** Objects to add to the scene (cape and braid live in world space). */
   get objects(): THREE.Object3D[] {
-    return [this.root, this.cape, this.shadow];
+    return [this.root, this.legs, this.cape, this.shadow, ...this.braid];
   }
 
-  reset(g: GiantState) {
-    this.root.position.set(g.x, 0, g.z);
-    this.yaw.rotation.y = -g.heading;
-    this.root.updateMatrixWorld(true);
+  reset() {
     this.capeHistory.length = 0;
   }
 
@@ -168,113 +180,118 @@ export class GiantView {
     this.stumbleWobble = 1;
   }
 
-  private capeAnchor(side: number): THREE.Vector3 {
-    // Behind the shoulders, in world space.
-    const v = new THREE.Vector3(-0.55, 1.35, side * 0.7);
-    return this.torso.localToWorld(v);
+  private placeSegment(mesh: THREE.Mesh, a: Vec3, b: Vec3) {
+    const dir = this.tmp.set(b.x - a.x, b.y - a.y, b.z - a.z);
+    const len = dir.length();
+    mesh.position.set(a.x, a.y, a.z);
+    mesh.quaternion.setFromUnitVectors(UP, dir.divideScalar(len || 1));
+    mesh.scale.set(1, len, 1);
   }
 
-  /**
-   * @param x, z, heading  interpolated pose for this frame
-   * @param g              latest sim state (tier, speed, gait, stumble, angVel)
-   */
-  update(dt: number, x: number, z: number, heading: number, g: GiantState) {
+  update(dt: number, p: GiantPose, gait: GaitFrame) {
     this.time += dt;
-    const T = TUNING.tiers[g.tier];
+    const T = TUNING.tiers[p.tier];
     const k = (tau: number) => 1 - Math.exp(-dt / tau);
 
-    this.root.position.set(x, 0, z);
-    this.yaw.rotation.y = -heading;
-    this.shadow.position.set(x + 0.4, 0.18, z + 0.4);
+    this.root.position.set(p.x, 0, p.z);
+    this.root.rotation.y = -p.heading;
+    this.hips.position.y = gait.hipY;
+    this.shadow.position.set(p.x + 0.4, 0.07, p.z + 0.4);
 
-    // Lean: tier lean, plus extra lean while accelerating, plus shoulder windup/lunge.
+    // Low, forward-driving lean; more while braking upright; shoulder windup then lunge.
     this.shoulderAnim = Math.max(0, this.shoulderAnim - dt / 0.35);
     const sh = this.shoulderAnim;
-    const shoulderLean = sh > 0.85 ? (1 - sh) / 0.15 * 0.35 : sh * 0.35; // 3f windup, then the lunge
-    const targetLean = (T.leanDeg * Math.PI) / 180 + (g.braking ? -0.25 : 0) + shoulderLean;
+    const shoulderLean = sh > 0.85 ? ((1 - sh) / 0.15) * 0.35 : sh * 0.35;
+    const targetLean = (T.leanDeg * Math.PI) / 180 + (p.braking ? -0.3 : 0) + shoulderLean;
     this.lean += (targetLean - this.lean) * k(0.12);
-    // Bank into turns (roll about the forward axis); the drift angle adds to it.
-    const slip = angleDiff(g.travel, g.heading);
-    const targetBank = -g.angVel * 0.12 - slip * 0.4;
-    this.bank += (targetBank - this.bank) * k(0.1);
+    // Bank into a lane change (roll about the forward axis).
+    const targetBank = -p.lateralVel * 0.025;
+    this.bank += (targetBank - this.bank) * k(0.08);
 
-    // Gait.
-    const ph = g.gaitPhase * Math.PI * 2;
-    const swing = [0.55, 0.75, 0.95][g.tier];
-    const bobAmp = [0.12, 0.2, 0.3][g.tier];
-    const s = Math.sin(ph);
-    this.legL.rotation.z = s * swing;
-    this.legR.rotation.z = -s * swing;
-    // Arms trail at higher tiers (§10 "arms trailing").
-    const armTrail = [0.1, 0.45, 0.9][g.tier];
-    this.armL.rotation.z = -s * swing * 0.8 - armTrail;
-    this.armR.rotation.z = s * swing * 0.8 - armTrail;
-    this.armL.rotation.x = 0.15;
-    this.armR.rotation.x = -0.15;
-    if (sh > 0) {
-      // Shoulder Check: lead shoulder drives forward.
-      this.armL.rotation.z = 0.9 * sh;
-      this.armL.rotation.x = 0.6 * sh;
-    }
+    // Stumble wobble (v0.3: −1 tier, 0.3s stumble): heavy, embarrassing, never a stop.
+    this.stumbleWobble = Math.max(this.stumbleWobble - dt / 0.45, p.stumble > 0 ? 0.8 : 0);
+    const wob = Math.sin(this.time * 32) * this.stumbleWobble * 0.3;
 
-    // Lowest at each footfall (phase k/2), highest mid-stride.
-    this.hips.position.y = 1.6 + Math.abs(s) * bobAmp;
-    // Stumble wobble (§10): heavy, embarrassing, readable in 0.3s.
-    this.stumbleWobble = Math.max(0, this.stumbleWobble - dt / 0.45);
-    const wob = Math.sin(this.time * 32) * this.stumbleWobble * 0.35;
-    this.torso.rotation.set(this.bank + wob, wob * 0.6 + (sh > 0 ? -0.5 * sh : 0), -this.lean);
-    this.hips.rotation.set(this.bank * 0.4, 0, -this.lean * 0.25);
-    this.head.rotation.z = this.lean * 0.6; // keep eyes on the street
+    // Torso twist with the stride (opposite shoulder drives forward).
+    const ph = p.stepPos * Math.PI;
+    const twist = Math.sin(ph) * 0.12 * (0.5 + p.tier * 0.25);
+    this.torso.rotation.set(this.bank + wob, twist + (sh > 0 ? -0.5 * sh : 0), -this.lean);
+    this.hips.rotation.set(this.bank * 0.4, -twist * 0.5, -this.lean * 0.2);
+
+    // Head steady: counter the lean and most of the plant drop so the eyes stay level.
+    this.head.rotation.set(-this.bank * 0.8, -twist, this.lean * 0.85);
+    this.head.position.y = 1.6 + TUNING.tiers[p.tier].bodyDrop * gait.drop * 0.6;
+
+    // Arms trail behind (v0.3), with a small swing opposite the legs.
+    const trail = [0.35, 0.75, 1.15][p.tier];
+    const swing = Math.sin(ph) * (0.25 + p.tier * 0.1);
+    this.armL.rotation.set(0.18, 0, -trail - swing);
+    this.armR.rotation.set(-0.18, 0, -trail + swing);
+    if (sh > 0) this.armL.rotation.set(0.6 * sh, 0, 0.9 * sh);
 
     this.root.updateMatrixWorld(true);
 
-    // Braid: trails from the topknot.
+    // Legs from the gait IK (world space).
+    for (let i = 0; i < 2; i++) {
+      const L = gait.legs[i];
+      const P = this.legParts[i];
+      this.placeSegment(P.thigh, L.hip, L.knee);
+      this.placeSegment(P.shin, L.knee, L.foot);
+      P.knee.position.set(L.knee.x, L.knee.y, L.knee.z);
+      P.knee.rotation.set(0, -p.heading, 0);
+      P.boot.position.set(L.foot.x + Math.cos(p.heading) * 0.12, Math.max(0.16, L.foot.y + 0.06), L.foot.z + Math.sin(p.heading) * 0.12);
+      P.boot.rotation.set(0, -p.heading, L.planted ? 0 : 0.35);
+    }
+
+    // Braid trails from the topknot.
     const knotWorld = this.head.localToWorld(new THREE.Vector3(-0.15, 0.72, 0));
     let prev = knotWorld;
-    const back = new THREE.Vector3(-Math.cos(g.travel), 0, -Math.sin(g.travel));
+    const back = new THREE.Vector3(-Math.cos(p.travel), 0, -Math.sin(p.travel));
     this.braid.forEach((b, i) => {
-      const target = prev.clone().addScaledVector(back, 0.22 + g.speed * 0.012).add(new THREE.Vector3(0, -0.12 - (1 - g.speed / 15) * 0.12, 0));
+      const target = prev.clone().addScaledVector(back, 0.22 + p.speed * 0.012).add(new THREE.Vector3(0, -0.12 - (1 - p.speed / 15) * 0.12, 0));
       b.position.lerp(target, k(0.04 + i * 0.02));
       if (b.position.distanceToSquared(target) > 4) b.position.copy(target);
       prev = b.position;
     });
 
-    this.updateCape(dt, g);
+    this.updateCape(dt, p);
   }
 
-  private updateCape(dt: number, g: GiantState) {
+  private capeAnchor(side: number): THREE.Vector3 {
+    return this.torso.localToWorld(new THREE.Vector3(-0.55, 1.35, side * 0.7));
+  }
+
+  /** Kinematic knee-length cape: follows the anchor's recent path, flares with speed. */
+  private updateCape(dt: number, p: GiantPose) {
     this.tierFlare = Math.max(0, this.tierFlare - dt / 0.6);
     const left = this.capeAnchor(1);
     const right = this.capeAnchor(-1);
     const anchor = left.clone().add(right).multiplyScalar(0.5);
-
-    // Kinematic cape: points follow the anchor's own recent path, so the cape
-    // swings wide through drifts and corners. Droop flattens with speed (it
-    // flares at Rampage) and kicks out on tier-up (§10). Flutter is a visual
-    // offset only, so it can never pump energy into the cape.
     const hist = this.capeHistory;
     const lastH = hist[hist.length - 1];
     if (!lastH || lastH.distanceToSquared(anchor) > 0.0025) hist.push(anchor.clone());
-    if (hist.length > 80) hist.shift();
+    if (hist.length > 60) hist.shift();
+    // Teleports (new run, knock-back) break the path: start it again.
+    if (lastH && lastH.distanceToSquared(anchor) > 25) {
+      hist.length = 0;
+      hist.push(anchor.clone());
+    }
 
     const segLen = CAPE_LEN / CAPE_SEGS;
-    const speedK = Math.min(1, g.speed / 15);
-    const droop = (1 - speedK) * 1.25 + 0.3 - this.tierFlare * 0.25; // radians below horizontal
+    const speedK = Math.min(1, p.speed / 15);
+    const droop = (1 - speedK) * 1.1 + 0.45 - this.tierFlare * 0.3;
     const horiz = Math.cos(droop);
     const vert = Math.sin(droop);
-    const back = new THREE.Vector3(-Math.cos(g.travel), 0, -Math.sin(g.travel));
-
+    const back = new THREE.Vector3(-Math.cos(p.travel), 0, -Math.sin(p.travel));
     let walked = 0;
     let h = hist.length - 1;
     let from = anchor.clone();
     for (let i = 0; i <= CAPE_SEGS; i++) {
       const want = i * segLen * horiz;
-      // Walk back along the path history to the distance we need.
       while (walked < want && h > 0) {
         const step = from.distanceTo(hist[h - 1]);
         if (walked + step >= want) {
-          const t = (want - walked) / Math.max(step, 1e-6);
-          from = from.clone().lerp(hist[h - 1], t);
+          from = from.clone().lerp(hist[h - 1], (want - walked) / Math.max(step, 1e-6));
           walked = want;
           break;
         }
@@ -282,22 +299,18 @@ export class GiantView {
         from = hist[h - 1].clone();
         h--;
       }
-      const p = this.capePts[i].p;
-      p.copy(from);
-      if (walked < want) p.addScaledVector(back, want - walked); // not enough history yet
-      const flutter = i === 0 ? 0 : Math.sin(this.time * (5 + g.speed * 0.8) + i * 1.1) * 0.06 * i * (0.3 + speedK);
-      p.y = Math.max(0.1, anchor.y - i * segLen * vert + flutter);
+      const pt = this.capePts[i];
+      pt.copy(from);
+      if (walked < want) pt.addScaledVector(back, want - walked);
+      const flutter = i === 0 ? 0 : Math.sin(this.time * (5 + p.speed * 0.8) + i * 1.1) * 0.05 * i * (0.3 + speedK);
+      pt.y = Math.max(0.6, anchor.y - i * segLen * vert + flutter);
     }
-
-    // Ribbon, slightly wider at the hem so it reads from above.
     const pos = this.capeGeo.getAttribute('position') as THREE.BufferAttribute;
     const side = right.clone().sub(left).setY(0).normalize();
     for (let i = 0; i <= CAPE_SEGS; i++) {
-      const c = this.capePts[i].p;
-      const t = i / CAPE_SEGS;
-      const w = 0.72 + t * 0.28 * (0.5 + speedK);
-      // Tattered hem: alternate the last row's edges.
-      const tatter = i === CAPE_SEGS ? Math.sin(this.time * 11) * 0.12 : 0;
+      const c = this.capePts[i];
+      const w = 0.42 + (i / CAPE_SEGS) * 0.12; // narrow: the legs must read past it (v0.3)
+      const tatter = i === CAPE_SEGS ? Math.sin(this.time * 11) * 0.1 : 0;
       pos.setXYZ(i * 2, c.x - side.x * w, c.y + tatter, c.z - side.z * w);
       pos.setXYZ(i * 2 + 1, c.x + side.x * w, c.y - tatter, c.z + side.z * w);
     }
