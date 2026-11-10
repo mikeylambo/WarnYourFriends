@@ -25,3 +25,8 @@ Angle shots were forced with the dev hook `__GAME.setAngle()` so each angle coul
 ## In-browser numbers (E2E smoke, production build, 30 s bot run)
 
 Screen-up max 31.37°; giant lowest 0.849; road ahead min 2.54 s; 3 cuts (0 during a lane change, ≥7.33 s apart); cadence 2.00 / 2.01–2.10 / 2.13–2.30; slide 0.00 cm.
+
+## Live URL, played (https://warn-your-friends.vercel.app/, build `index-Cb3K0b63.js`)
+
+- `E2E_URL=… npm run e2e` passed against the live site: click/tap/key start, lane input, no failed requests or errors; camera max 31.72°, giant lowest 0.850, road ahead ≥ 2.52 s, 3 cuts (0 mid-lane-change); cadence in band; slide 0.00 cm.
+- `live-played.png`: 37 s driven by keyboard (A/D/arrows, S brake, Shift/W Shoulder Check), seed 11. 20 lane changes, 9 wall bumps, 6 smashes (1 across), a brake tier drop, a 4→3 merge, 4 cuts (0 during a lane change), screen-up max 32.41°, giant lowest 0.851, road ahead ≥ 2.7 s, cadence 2.00 / 2.01–2.19 / 2.10–2.30, slide 0.00 cm, no console errors.
