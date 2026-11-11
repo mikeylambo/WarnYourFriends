@@ -219,6 +219,13 @@ export const TUNING = {
       { name: 'Wide Side', yawDeg: 35, pitchDeg: 52, distance: 55, fov: 35, lookAheadTime: 0.5 },
       { name: 'Long Lens', yawDeg: 15, pitchDeg: 40, distance: 70, fov: 22, lookAheadTime: 0.7 },
     ] as CameraAngle[],
+    /**
+     * EXPERIMENT (Phase 0c): head-on camera, he runs down the screen at you. The
+     * road ahead is between him and the lens, so ≥2s of it needs a far camera; a
+     * low telephoto (lower pitch, narrower lens, further back) keeps him big
+     * anyway, like real long-lens chase footage. Not the LOCKED default.
+     */
+    headOn: { pitchAddDeg: -30, minPitchDeg: 15, distanceScale: 1.8, fovScale: 0.38 },
     /** LOCKED (v0.3): direction of travel points up the screen within this many degrees. */
     screenUpMaxDeg: 35,
     /** Yaw is clamped this far inside the law, for lag on curves and wobble. */

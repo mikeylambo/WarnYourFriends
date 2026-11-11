@@ -43,9 +43,9 @@ export interface CameraTarget {
 
 export interface CameraFrameInfo {
   angle: CameraAngle['name'];
-  /** Signed angle between the direction of travel on screen and screen-up (deg). */
+  /** Signed angle between travel on screen and the law direction: screen-up (or screen-down head-on), deg. */
   screenUpDeg: number;
-  /** Giant's screen height position, 0 top .. 1 bottom. */
+  /** Giant's screen position from the far edge: 0 top .. 1 bottom behind him; mirrored head-on. */
   giantScreenY: number;
   /** Road visible ahead of the giant along its travel, to the top edge of the frame (m, s). */
   aheadMetres: number;
@@ -95,6 +95,15 @@ export class CameraRig {
   private ray = new THREE.Raycaster();
   private ground = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
   private ndcTop = new THREE.Vector2(0, 1);
+  private ndcBottom = new THREE.Vector2(0, -1);
+  /**
+   * EXPERIMENT (Phase 0c, Mike): +1 = behind the giant (travel points up the
+   * screen, the LOCKED law); −1 = head-on (the camera flies ahead of him and he
+   * runs down the screen at you). Every rule is mirrored, not dropped: travel
+   * points DOWN within ±35°, the giant never sits above 15% of the frame, and
+   * ≥2s of road ahead stays visible (now below him).
+   */
+  facing: 1 | -1 = 1;
 
   constructor() {
     this.camera = new THREE.PerspectiveCamera(TUNING.camera.angles[0].fov, this.w / this.h, 1, 1200);
@@ -161,7 +170,7 @@ export class CameraRig {
       this.camera.position.copy(d.pos);
       this.camera.lookAt(d.look);
       this.camera.updateMatrixWorld();
-      return this.giantY(t) <= C.giantMaxScreenY - 0.01;
+      return this.frameY(t) <= C.giantMaxScreenY - 0.01;
     };
     if (fits(full)) return full;
     for (let i = 0; i < 16; i++) {
@@ -184,36 +193,47 @@ export class CameraRig {
   private yaw(): number {
     const C = TUNING.camera;
     const a = this.angle;
-    const lim = maxYawForScreenUp(C.screenUpMaxDeg - C.screenUpMarginDeg, a.pitchDeg);
-    return Math.max(-lim, Math.min(lim, a.yawDeg)) * this.side;
+    const lim = maxYawForScreenUp(C.screenUpMaxDeg - C.screenUpMarginDeg, this.pitch());
+    return Math.max(-lim, Math.min(lim, a.yawDeg)) * this.side + (this.facing < 0 ? 180 : 0);
   }
 
   /** Look-ahead time for the current angle (cut-aways frame less ahead, more of the chase behind). */
   private leadTime(): number {
+    // Head-on, the escort is already in shot (behind him = above him), so every angle leads fully.
+    if (this.facing < 0) return TUNING.camera.lookAheadTime;
     return this.angle.lookAheadTime ?? TUNING.camera.lookAheadTime;
   }
 
   private distance(): number {
-    return this.angle.distance * this.tierScale + this.pullOut;
+    const ho = this.facing < 0 ? TUNING.camera.headOn.distanceScale : 1;
+    return this.angle.distance * ho * this.tierScale + this.pullOut;
+  }
+
+  private pitch(): number {
+    const H = TUNING.camera.headOn;
+    return this.facing < 0 ? Math.max(H.minPitchDeg, this.angle.pitchDeg + H.pitchAddDeg) : this.angle.pitchDeg;
   }
 
   private desired(t: CameraTarget) {
-    const a = this.angle;
     const dist = this.distance();
     const lookAhead = Math.max(0, Math.min(t.speed * this.leadTime(), this.leadCap));
     const fx = Math.cos(t.travel);
     const fz = Math.sin(t.travel);
     const look = new THREE.Vector3(t.x + fx * lookAhead, 0, t.z + fz * lookAhead);
     const yaw = t.travel + this.yaw() * DEG;
-    const p = a.pitchDeg * DEG;
+    const p = this.pitch() * DEG;
     const back = dist * Math.cos(p);
     const pos = new THREE.Vector3(look.x - Math.cos(yaw) * back, dist * Math.sin(p), look.z - Math.sin(yaw) * back);
     return { pos, look, lookAhead };
   }
 
+  private fov(): number {
+    return this.angle.fov * (this.facing < 0 ? TUNING.camera.headOn.fovScale : 1);
+  }
+
   private applyLens() {
-    if (this.camera.fov !== this.angle.fov) {
-      this.camera.fov = this.angle.fov;
+    if (this.camera.fov !== this.fov()) {
+      this.camera.fov = this.fov();
       this.camera.updateProjectionMatrix();
     }
   }
@@ -260,6 +280,22 @@ export class CameraRig {
     const dx = (b.x - a.x) * this.w;
     const dy = (b.y - a.y) * this.h; // NDC y is up
     return Math.atan2(dx, dy) / DEG;
+  }
+
+  /**
+   * Giant's screen position measured from the edge the action comes from: 0 = the
+   * far edge, 1 = the near edge (bottom when behind, top when head-on).
+   */
+  private frameY(t: CameraTarget): number {
+    const y = this.giantY(t);
+    return this.facing > 0 ? y : 1 - y;
+  }
+
+  /** Signed angle between travel on screen and the law direction (screen-up, or screen-down head-on). */
+  lawDeg(t: CameraTarget): number {
+    const a = this.measureScreenUp(t);
+    if (this.facing > 0) return a;
+    return a - 180 * Math.sign(a || 1);
   }
 
   private giantY(t: CameraTarget): number {
@@ -316,7 +352,7 @@ export class CameraRig {
     // Hard rules, after lag and wobble. Framing first, then the LOCKED screen-up law
     // last so nothing can undo it; one more framing pass in case the orbit moved the giant.
     const enforceFraming = () => {
-      if (this.giantY(t) > C.giantMaxScreenY) {
+      if (this.frameY(t) > C.giantMaxScreenY) {
         const fx = Math.cos(t.travel);
         const fz = Math.sin(t.travel);
         // Current look-ahead along travel, then bisect toward the giant.
@@ -329,7 +365,7 @@ export class CameraRig {
         for (let i = 0; i < 18; i++) {
           const mid = (lo + hi) / 2;
           this.orient(t, lookAt(mid));
-          if (this.giantY(t) > C.giantMaxScreenY - 0.002) hi = mid;
+          if (this.frameY(t) > C.giantMaxScreenY - 0.002) hi = mid;
           else lo = mid;
         }
         const fixed = lookAt(lo);
@@ -340,7 +376,7 @@ export class CameraRig {
     const enforceScreenUp = () => {
       const limit = C.screenUpMaxDeg - 0.5;
       for (let i = 0; i < 12; i++) {
-        const ang = this.measureScreenUp(t);
+        const ang = this.lawDeg(t);
         if (Math.abs(ang) <= limit) break;
         const rot = -Math.sign(ang) * Math.min(6, Math.abs(ang) - limit + 0.5) * DEG;
         // Orbit position about the vertical axis through the look point.
@@ -354,7 +390,7 @@ export class CameraRig {
         this.pos.x = this.look.x + nx;
         this.pos.z = this.look.z + nz;
         this.orient(t, this.look);
-        if (Math.abs(this.measureScreenUp(t)) > Math.abs(ang)) {
+        if (Math.abs(this.lawDeg(t)) > Math.abs(ang)) {
           this.pos.x = this.look.x + (ox * c + oz * s);
           this.pos.z = this.look.z + (-ox * s + oz * c);
           this.orient(t, this.look);
@@ -363,10 +399,10 @@ export class CameraRig {
     };
     // Framing before the hard clamp: the look-ahead feedback learns from this, so the
     // steady-state shot satisfies the limit by itself and the clamp only catches transients.
-    const yBeforeClamp = this.giantY(t);
+    const yBeforeClamp = this.frameY(t);
     enforceFraming();
     enforceScreenUp();
-    if (this.giantY(t) > C.giantMaxScreenY + 0.001) {
+    if (this.frameY(t) > C.giantMaxScreenY + 0.001) {
       enforceFraming();
       enforceScreenUp();
     }
@@ -403,9 +439,10 @@ export class CameraRig {
     const cam = this.camera;
     const info = this.info;
     info.angle = this.angle.name;
-    info.screenUpDeg = this.measureScreenUp(t);
-    info.giantScreenY = this.giantY(t);
-    this.ray.setFromCamera(this.ndcTop, cam);
+    info.screenUpDeg = this.lawDeg(t);
+    info.giantScreenY = this.frameY(t);
+    // Road ahead runs to the top edge behind him, to the bottom edge head-on.
+    this.ray.setFromCamera(this.facing > 0 ? this.ndcTop : this.ndcBottom, cam);
     const hit = this.ray.ray.intersectPlane(this.ground, this.tmpB);
     const ahead = hit ? (hit.x - t.x) * Math.cos(t.travel) + (hit.z - t.z) * Math.sin(t.travel) : Infinity;
     info.aheadMetres = ahead;

@@ -51,7 +51,7 @@ export class CruiserView {
       part(0, 0.62, 0, L, 0.72, W, toon(0x15151b));
       part(0.1, 0.66, 0, L * 0.42, 0.5, W * 1.01, toon(0xf1f1ee)); // white doors
       part(-0.25, 1.28, 0, L * 0.5, 0.55, W * 0.86, toon(0x1d2633));
-      part(-0.25, 1.58, 0, L * 0.48, 0.06, W * 0.88, toon(0x15151b));
+      part(-0.25, 1.58, 0, L * 0.48, 0.06, W * 0.88, toon(0xf1f1ee)); // white roof: reads from the chopper, and keeps the giant off a black backdrop head-on
       const barRed = new THREE.MeshBasicMaterial({ color: 0xff2030 });
       const barBlue = new THREE.MeshBasicMaterial({ color: 0x2a5cff });
       part(-0.2, 1.7, -0.42, 0.34, 0.16, 0.74, barRed);

@@ -28,9 +28,9 @@ npm run dev
 | Shoulder Check | Shift / W / click | RB | Red button |
 | Pause | Esc | Start | II |
 
-Dev keys: **T** tuning panel · **`** debug overlay · **C** next camera angle · **R** new road.
+Dev keys: **H** head-on camera (experiment) · **T** tuning panel · **`** debug overlay · **C** next camera angle · **R** new road.
 
-URL flags: `?seed=N` · `?angle=0|1|2` (hold Chase High / Wide Side / Long Lens) · `?time=night|dusk|day` · `?cuts=0` · `?timescale=0.5` · `?bot` autopilot · `?tune` · `?reducedmotion` · `?reduceflashes` · `?step` (headless, `window.__GAME.step(n)`).
+URL flags: `?seed=N` · `?angle=0|1|2` (hold Chase High / Wide Side / Long Lens) · `?time=night|dusk|day` · `?cuts=0` · `?headon=1` · `?timescale=0.5` · `?bot` autopilot · `?tune` · `?reducedmotion` · `?reduceflashes` · `?step` (headless, `window.__GAME.step(n)`).
 
 ## Feel check (Phase 0c exit)
 

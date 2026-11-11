@@ -256,6 +256,65 @@ if (p99 > 2) fail(`sim step p99 ${p99.toFixed(2)}ms exceeds the 2ms budget`);
 if (agg.reachedRampage < seeds * 0.5) fail(`bot reached Rampage in only ${agg.reachedRampage}/${seeds} seeds`);
 if (agg.merges < seeds) fail(`a run had no merge`);
 
+// EXPERIMENT: head-on camera (he runs down the screen at you). Same seeds, same director;
+// every camera rule mirrored: travel within ±35° of screen-DOWN, giant never above 15% of
+// the frame, ≥2s of road ahead (now between him and the lens).
+{
+  const ho = { frames: 0, maxLaw: 0, maxFrameY: 0, minAhead: Infinity, under2: 0, joins: 0, joinsOnCamera: 0 };
+  for (let seed = 1; seed <= seeds; seed++) {
+    const sim = new Sim({ seed });
+    const bot = new Bot(sim);
+    const rig = new CameraRig();
+    rig.resize(1280, 720);
+    rig.facing = -1;
+    const director = new Director(seed);
+    const pos = { x: 0, z: 0 };
+    const target = () => {
+      const g = sim.giant;
+      sim.track.posAt(g.s, g.d, pos);
+      return { x: pos.x, z: pos.z, travel: sim.track.headingAt(g.s), speed: g.speed, tier: g.tier };
+    };
+    rig.snap(target());
+    for (let i = 0; i < ticks; i++) {
+      const braking = i % 720 > 560 && i % 720 < 650;
+      const events = sim.step({ ...bot.input(), brake: braking });
+      for (const e of events) {
+        const trig = cutTriggerFor(e);
+        if (trig) director.trigger(trig);
+      }
+      const tg = target();
+      const cutTo = director.update(sim.dt, sim.laneBusy);
+      if (cutTo) rig.cut(cutTo.index, cutTo.side, tg);
+      rig.update(sim.dt, tg);
+      const info = rig.info;
+      // LOCKED: cruisers never join on camera. Head-on looks back past him, so this matters more here.
+      for (const e of events) {
+        if (e.type !== 'escortJoin') continue;
+        const c = sim.escort.cruisers[e.id];
+        sim.track.posAt(c.s, c.d, pos);
+        for (const [ox, oy, oz] of [[0, 0, 0], [3, 0, 3], [-3, 0, -3], [3, 2, -3], [-3, 2, 3], [0, 3, 0]]) {
+          ndc.set(pos.x + ox, oy, pos.z + oz).project(rig.camera);
+          if (ndc.z > -1 && ndc.z < 1 && Math.abs(ndc.x) <= 1 && Math.abs(ndc.y) <= 1) {
+            ho.joinsOnCamera++;
+            fail(`head-on seed ${seed}: cruiser ${e.id} joined on camera (${info.angle})`);
+            break;
+          }
+        }
+        ho.joins++;
+      }
+      ho.frames++;
+      ho.maxLaw = Math.max(ho.maxLaw, Math.abs(info.screenUpDeg));
+      ho.maxFrameY = Math.max(ho.maxFrameY, info.giantScreenY);
+      ho.minAhead = Math.min(ho.minAhead, info.aheadSeconds);
+      if (info.aheadSeconds < TUNING.camera.minRoadAheadSeconds) ho.under2++;
+      if (Math.abs(info.screenUpDeg) > TUNING.camera.screenUpMaxDeg) fail(`head-on seed ${seed}: travel ${info.screenUpDeg.toFixed(1)}° off screen-down (${info.angle}) at tick ${i}`);
+      if (info.giantScreenY > TUNING.camera.giantMaxScreenY + 0.005) fail(`head-on seed ${seed}: giant at ${info.giantScreenY.toFixed(3)} from the near edge (${info.angle}) at tick ${i}`);
+    }
+  }
+  console.log(`  head-on (experiment): ${ho.frames} frames; |travel vs screen-down| max ${ho.maxLaw.toFixed(2)}°; giant nearest the top ${(1 - ho.maxFrameY).toFixed(3)}; road ahead min ${ho.minAhead.toFixed(2)}s (${ho.under2} frames under 2s); escort joins ${ho.joins}, on camera ${ho.joinsOnCamera}`);
+  if (ho.under2 > 0) fail(`head-on: road ahead under 2s in ${ho.under2} frames (min ${ho.minAhead.toFixed(2)}s)`);
+}
+
 if (failures.length) {
   console.error(`soak FAILED (${failures.length}${failures.length >= 40 ? '+' : ''}):\n  ` + failures.slice(0, 25).join('\n  '));
   process.exit(1);

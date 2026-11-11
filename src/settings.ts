@@ -7,10 +7,12 @@ export interface Settings {
   cameraCuts: boolean;
   /** Phase 0c LIVE TIME: lighting follows the local clock. Off = always night. */
   liveTime: boolean;
+  /** EXPERIMENT: head-on camera (he runs down the screen at you). Off = the LOCKED behind shot. */
+  headOn: boolean;
 }
 
 const KEY = 'wyf.settings.v1';
-const DEFAULTS: Settings = { reducedMotion: false, reduceFlashes: false, debug: true, cameraCuts: true, liveTime: false };
+const DEFAULTS: Settings = { reducedMotion: false, reduceFlashes: false, debug: true, cameraCuts: true, liveTime: false, headOn: false };
 
 export function loadSettings(): Settings {
   try {
@@ -23,6 +25,7 @@ export function loadSettings(): Settings {
       debug: typeof parsed.debug === 'boolean' ? parsed.debug : DEFAULTS.debug,
       cameraCuts: typeof parsed.cameraCuts === 'boolean' ? parsed.cameraCuts : DEFAULTS.cameraCuts,
       liveTime: typeof parsed.liveTime === 'boolean' ? parsed.liveTime : DEFAULTS.liveTime,
+      headOn: typeof parsed.headOn === 'boolean' ? parsed.headOn : DEFAULTS.headOn,
     };
   } catch {
     console.warn('Settings were unreadable and have been reset to defaults.');

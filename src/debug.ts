@@ -24,6 +24,8 @@ export interface Flags {
   cuts: boolean | null;
   /** Phase 0c: force a look (?time=night|dusk|day), overriding LIVE TIME. */
   time: 'night' | 'dusk' | 'day' | null;
+  /** EXPERIMENT: head-on camera (?headon=1 / ?headon=0). */
+  headOn: boolean | null;
 }
 
 function bool(q: URLSearchParams, k: string): boolean | null {
@@ -59,6 +61,7 @@ export function readFlags(search: string): Flags {
     tune: bool(q, 'tune') ?? false,
     angle: num(q, 'angle'),
     cuts: bool(q, 'cuts'),
+    headOn: bool(q, 'headon'),
     time: ((v) => (v === 'night' || v === 'dusk' || v === 'day' ? v : null))(q.get('time')),
   };
 }

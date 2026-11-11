@@ -23,3 +23,14 @@ In every shot the giant is dark on a lighter surround (the §23 value rule). The
 ## In-browser (E2E smoke, production build, 30s bot run at 3×)
 
 Cuts 5.9s Rampage → 12.3s home → 26.3s Heavy (≥15s apart, none mid-lane-change). 3 cruisers trailing at 8.8 / 13.8 / 22.2m. Headlines: *Giant Spotted Northbound · BREAKING Giant At Large. Warn Your Friends. · BREAKING Giant Reaches Full Rampage Near Mile 0.0 · Police Join Pursuit In Lane 3 · … · Unstoppable Giant Punts Sedan In Lane 4*. All 9 angle/look silhouettes pass.
+
+## Experiment: head-on camera (he runs down the screen at you)
+
+`headon-night-*.png`, toggle with **H** or the pause menu. Night silhouette test sampled 10× per angle, 1.2s apart, Rampage, seeds 5 and 11:
+
+| | Chase High | Wide Side | Long Lens |
+|---|---|---|---|
+| Behind (default) | 20/20 pass · median 6.9–7.3:1 · 136px | 20/20 · 5.9–6.4:1 · 72–80px | 19/20 · 5.6–5.8:1 · 109px |
+| Head-on | 14/20 · 4.7–5.1:1 · 117–120px | 10/20 · 3.0–3.5:1 · 92–94px | 4/10 · 2.8:1 · 112px |
+
+Head-on fails when debris from a smash sprays toward the lens over him, and when the convoy stacks directly behind him on screen. The behind shot keeps both behind him.

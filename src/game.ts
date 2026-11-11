@@ -27,6 +27,7 @@ if (flags.reducedMotion !== null) settings.reducedMotion = flags.reducedMotion;
 if (flags.reduceFlashes !== null) settings.reduceFlashes = flags.reduceFlashes;
 if (flags.debug !== null) settings.debug = flags.debug;
 if (flags.cuts !== null) settings.cameraCuts = flags.cuts;
+if (flags.headOn !== null) settings.headOn = flags.headOn;
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const canvas = $<HTMLCanvasElement>('view');
@@ -68,6 +69,7 @@ setInterval(applyLook, 30_000);
 
 const rig = new CameraRig();
 rig.reducedMotion = settings.reducedMotion;
+rig.facing = settings.headOn ? -1 : 1;
 const tunePanel = mountTuningPanel();
 if (flags.tune) tunePanel.toggle();
 
@@ -154,6 +156,15 @@ function newRun(seed: number) {
   hitstop = 0;
 }
 
+/** EXPERIMENT: switch between the behind shot and head-on, as a hard cut on the current angle. */
+function setHeadOn(on: boolean) {
+  settings.headOn = on;
+  saveSettings(settings);
+  rig.facing = on ? -1 : 1;
+  rig.cut(director.current, director.side, targetAt(sim.giant.s, sim.giant.d));
+  showCamTag();
+}
+
 function setAngle(index: number, side: number, pin = true) {
   const n = TUNING.camera.angles.length;
   const i = ((index % n) + n) % n;
@@ -183,7 +194,7 @@ function flash(frames: number) {
 /** v0.3 cut graphic: a subtle "CAM n · NAME" tag. */
 function showCamTag() {
   const i = director.current;
-  camTag.textContent = `CAM ${i + 1} · ${TUNING.camera.angles[i].name.toUpperCase()}`;
+  camTag.textContent = `CAM ${i + 1} · ${TUNING.camera.angles[i].name.toUpperCase()}${rig.facing < 0 ? ' · HEAD-ON' : ''}`;
   camTag.classList.remove('show');
   void camTag.offsetWidth;
   camTag.classList.add('show');
@@ -366,6 +377,9 @@ const optReduced = $<HTMLInputElement>('opt-reduced');
 const optFlashes = $<HTMLInputElement>('opt-flashes');
 const optDebug = $<HTMLInputElement>('opt-debug');
 const optCuts = $<HTMLInputElement>('opt-cuts');
+const optHeadOn = $<HTMLInputElement>('opt-headon');
+optHeadOn.checked = settings.headOn;
+optHeadOn.addEventListener('change', () => setHeadOn(optHeadOn.checked));
 const optLive = $<HTMLInputElement>('opt-livetime');
 optCuts.checked = settings.cameraCuts;
 optLive.checked = settings.liveTime;
@@ -405,6 +419,11 @@ window.addEventListener('keydown', (e) => {
     e.preventDefault();
   }
   if (e.code === 'KeyT') tunePanel.toggle();
+  if (e.code === 'KeyH' && started) {
+    // EXPERIMENT: flip between the behind shot and head-on mid-run (A/B the feel).
+    optHeadOn.checked = !settings.headOn;
+    setHeadOn(optHeadOn.checked);
+  }
   if (e.code === 'KeyC' && started && !paused) setAngle(director.current + 1, director.side); // dev: next angle (held until C comes back to Chase High)
   if (e.code === 'KeyR' && started && !paused) newRun(flags.seedFixed ? flags.seed : (Math.random() * 1e9) | 0);
 });
@@ -446,6 +465,8 @@ function frame(now: number) {
         continue;
       }
       let inp = bot ? bot.input() : input.sample();
+      // Head-on: his left is screen-right, so mirror lane input to keep it screen-relative.
+      if (!bot && rig.facing < 0 && inp.lane) inp = { ...inp, lane: -inp.lane };
       if (menuGuard > 0) {
         menuGuard--;
         inp = { ...inp, shoulder: false, lane: 0 };
@@ -490,7 +511,7 @@ function frame(now: number) {
   highway.update(animDt, t.x, t.z, s, d);
   cruisers.update(animDt);
   rig.update(paused ? 0 : realDt, t);
-  lighting.update(animDt, { giantX: t.x, giantZ: t.z, travel: t.travel, speed: g.speed, camera: rig.camera, lamps: highway.lamps, sirens: cruisers.sirens });
+  lighting.update(animDt, { giantX: t.x, giantZ: t.z, travel: t.travel, speed: g.speed, camera: rig.camera, lamps: highway.lamps, sirens: cruisers.sirens, facing: rig.facing });
   audio.setSirens(sim.escort.cruisers.map((c) => (c.active ? Math.max(0.25, Math.min(1, 1 - (g.s - c.s - 8) / 60)) : 0)));
 
   const info = rig.info;
@@ -595,6 +616,8 @@ window.__GAME = {
   cutLog: () => cutLog.slice(),
   triggerLog: () => triggerLog.slice(),
   director: () => ({ enabled: director.enabled, current: director.current, pinned: director.pinned, awayCuts: director.awayCuts }),
+  setHeadOn,
+  facing: () => rig.facing,
   setCuts(on: boolean) {
     settings.cameraCuts = director.enabled = on;
   },

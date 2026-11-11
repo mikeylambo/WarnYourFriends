@@ -131,7 +131,7 @@ export class Lighting {
     for (const m of this.shadowMats) m.opacity = L.shadow;
   }
 
-  update(dt: number, o: { giantX: number; giantZ: number; travel: number; speed: number; camera: THREE.Camera; lamps: LampPos[]; sirens: SirenSource[] }) {
+  update(dt: number, o: { giantX: number; giantZ: number; travel: number; speed: number; camera: THREE.Camera; lamps: LampPos[]; sirens: SirenSource[]; facing?: number }) {
     const L = this.look;
     const T = TUNING.look;
     this.time += dt;
@@ -170,8 +170,11 @@ export class Lighting {
     const sideZ = fx;
     this.spot.position.set(cam.x + sideX * 16 - fx * 4, cam.y + 14, cam.z + sideZ * 16 - fz * 4);
     const w = T.spotWander;
-    const aimX = o.giantX + fx * (0.6 + o.speed * 0.08) + Math.sin(this.time * 0.7) * w;
-    const aimZ = o.giantZ + fz * (0.6 + o.speed * 0.08) + Math.sin(this.time * 0.53 + 1.7) * w;
+    // Centre the pool just past him as the camera sees it (ahead when behind him, behind him head-on),
+    // so on screen he is always a dark shape on the lit pool.
+    const lead = (o.facing ?? 1) > 0 ? 0.6 + o.speed * 0.08 : -(1.5 + o.speed * 0.15);
+    const aimX = o.giantX + fx * lead + Math.sin(this.time * 0.7) * w;
+    const aimZ = o.giantZ + fz * lead + Math.sin(this.time * 0.53 + 1.7) * w;
     const k = 1 - Math.exp(-dt / T.spotLag);
     if (this.spotAim.lengthSq() === 0) this.spotAim.set(aimX, 0, aimZ);
     else this.spotAim.lerp(this.tmp.set(aimX, 0, aimZ), dt > 0 ? k : 1);

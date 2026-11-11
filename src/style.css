@@ -31,8 +31,7 @@ html, body {
 
 /* Phase 0 tier readout: greybox stand-in until the broadcast HUD (§21). */
 #tierbar {
-  position: absolute; left: 50%; top: calc(12px + env(safe-area-inset-top));
-  transform: translateX(-50%);
+  position: absolute; right: 58px; top: calc(56px + env(safe-area-inset-top));
   display: flex; align-items: center; gap: 10px;
   background: rgba(20, 8, 36, 0.8); padding: 6px 12px; border-radius: 3px;
   font: 700 14px/1 ui-sans-serif, system-ui, sans-serif; letter-spacing: 0.12em;

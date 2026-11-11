@@ -223,6 +223,34 @@ try {
     if (problems.length) fail(`bot run problems:\n    ${problems.join('\n    ')}`);
     await ctx.close();
   }
+  // 6. EXPERIMENT head-on camera: lane input stays screen-relative (A = screen-left = his right),
+  //    and the mirrored camera rules hold in the running build.
+  {
+    const ctx = await browser.newContext({ viewport: { width: 1280, height: 720 } });
+    const page = await ctx.newPage();
+    const problems = watch(page);
+    await page.goto(`${URL}?seed=5&headon=1`);
+    await page.waitForFunction(() => document.documentElement.dataset.boot === 'ok', null, { timeout: 15000 });
+    await page.click('#start');
+    await page.waitForFunction(() => window.__GAME.state().time > 0.5, null, { timeout: 5000 });
+    const lane0 = await page.evaluate(() => window.__GAME.state().lane);
+    await page.keyboard.press('KeyA');
+    await page.waitForFunction((l) => window.__GAME.state().lane !== l, lane0, { timeout: 2000 }).catch(() => {});
+    const lane1 = await page.evaluate(() => window.__GAME.state().lane);
+    if (lane1 !== lane0 + 1) fail(`head-on: A should move him screen-left (his right, lane ${lane0 + 1} → ${lane0 + 2}), got lane ${lane1 + 1}`);
+    else ok(`head-on: A moves him screen-left (lane ${lane0 + 1} → ${lane1 + 1}, his right)`);
+    await page.evaluate(() => window.__GAME.setBot(true));
+    await page.waitForFunction(() => window.__GAME.state().time > 20, null, { timeout: 60000 });
+    const c = await page.evaluate(() => ({ ...window.__GAME.camera(), facing: window.__GAME.facing() }));
+    if (c.facing !== -1) fail('head-on flag did not set the camera');
+    if (c.maxScreenUp > 35) fail(`head-on: travel ${c.maxScreenUp.toFixed(2)}° off screen-down`);
+    if (c.maxGiantY > 0.855) fail(`head-on: giant above 15% of the frame (${c.maxGiantY.toFixed(3)})`);
+    if (c.minAhead < 2) fail(`head-on: under 2s of road ahead (${c.minAhead.toFixed(2)}s)`);
+    if (!(c.maxScreenUp > 35) && !(c.maxGiantY > 0.855) && !(c.minAhead < 2)) ok(`head-on: travel ≤${c.maxScreenUp.toFixed(1)}° off screen-down, giant ≥${(1 - c.maxGiantY).toFixed(2)} from the top, road ahead ≥${c.minAhead.toFixed(2)}s`);
+    if (problems.length) fail(`head-on problems:\n    ${problems.join('\n    ')}`);
+    await ctx.close();
+  }
+
   // 5b. Camera cuts: Off holds Chase High for the whole run; the pause menu has both new settings.
   {
     const ctx = await browser.newContext({ viewport: { width: 1280, height: 720 } });

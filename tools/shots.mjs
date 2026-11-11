@@ -22,7 +22,7 @@ const page = await browser.newPage({ viewport: { width: 1280, height: 720 }, dev
 const errors = [];
 page.on('pageerror', (e) => errors.push(e.message));
 const seed = Number(process.env.SEED ?? 5);
-await page.goto(`${URL}?seed=${seed}&bot=1&debug=${process.env.DEBUG ?? 0}&reducedmotion=1&cuts=0&at=${process.env.AT ?? 34}`);
+await page.goto(`${URL}?seed=${seed}&bot=1&debug=${process.env.DEBUG ?? 0}&reducedmotion=1&cuts=0&at=${process.env.AT ?? 34}${process.env.HEADON ? '&headon=1' : ''}`);
 await page.waitForFunction(() => window.__GAME?.started);
 await page.waitForFunction(() => window.__GAME.state().tier === 2 && window.__GAME.state().time > Number(new URLSearchParams(location.search).get('at') ?? 34), null, { timeout: 90000 });
 const shots = [];
@@ -35,13 +35,13 @@ for (const look of (process.env.LOOKS ?? 'night,dusk,day').split(',')) {
     await page.waitForTimeout(700);
     const sil = await page.evaluate(() => window.__GAME.silhouette());
     const st = await page.evaluate(() => ({ ...window.__GAME.state(), cam: window.__GAME.camera(), chyron: window.__GAME.chyron() }));
-    const file = `${look}-${a + 1}-${names[a]}.png`;
+    const file = `${process.env.HEADON ? 'headon-' : ''}${look}-${a + 1}-${names[a]}.png`;
     await page.screenshot({ path: `${OUT}/${file}` });
     shots.push({ file, look, angle: st.cam.angle, tier: st.tier, speed: +st.speed.toFixed(2), screenUp: +st.cam.screenUpDeg.toFixed(2), giantY: +st.cam.giantScreenY.toFixed(3), silhouette: Object.fromEntries(Object.entries(sil).map(([k, v]) => [k, typeof v === 'number' ? +v.toFixed(3) : v])), chyron: st.chyron });
     console.log(file, JSON.stringify(shots.at(-1).silhouette), st.chyron.kicker, '|', st.chyron.text);
   }
 }
-writeFileSync(`${OUT}/shots.json`, JSON.stringify(shots, null, 2));
+writeFileSync(`${OUT}/${process.env.HEADON ? 'headon-' : ''}shots.json`, JSON.stringify(shots, null, 2));
 if (errors.length) console.log('PAGE ERRORS', errors);
 await browser.close();
 server?.kill();
