@@ -105,3 +105,12 @@ How the build resolved the spec where it conflicts with itself. Details and date
 4. **Phase 0b scope:** §40 asks for Chase High plus one cut angle; the build request asked for all three. All three are built.
 5. **No tells exist in Phase 0b**, so "no tell is active" is trivially true; the director already has the hook.
 6. **Highway starts at 4 lanes** (§7–9 "Highway 4"); the merge takes it to 3 (or back up), within 2–4. Merges are telegraphed with signs and painted arrows ahead.
+
+## Build notes (Phase 0c, fantasy slice)
+
+Mike's 0c brief, as built. Details in [DECISIONS.md](../DECISIONS.md).
+
+1. **Cuts are event-driven** (amends §15 "Cuts"): Chase High is home; cut away only on reaching Rampage, a Heavy smash, or a lane-count merge; home after 6–10s; ≥15s between cut-aways; never the same trigger twice in a row; never during a lane change. Camera cuts: On/Off setting.
+2. **Night is the default look** (amends v0.2 §23): sodium pools, car lights, chopper spotlight, siren washes; the giant has a rim light and an ink outline and is silhouetted against lit road. LIVE TIME follows the local clock.
+3. **The world reacts:** minimal broadcast HUD (LIVE, station bug, chyron from real events with the §21 grammar), traffic that brakes/swerves/honks and bounces under Rampage footfalls, 2–3 trailing cruisers that never catch up, rotor/siren/news-bed audio.
+4. Cut-away angles frame less road ahead (Wide Side 0.5s, Long Lens 0.7s) so the escort is in shot; the ≥2s-of-road-ahead and 85% framing rules still hold.

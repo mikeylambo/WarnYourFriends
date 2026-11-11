@@ -5,8 +5,13 @@ import { Bot } from './sim/bot';
 import { NO_INPUT, type SimEvent, type SimInput } from './sim/types';
 import { HighwayView } from './render/highway';
 import { GiantView } from './render/giant';
-import { CameraRig, Director, type CameraTarget } from './render/camera';
-import { PALETTE } from './render/palette';
+import { CameraRig, Director, cutTriggerFor, type CameraTarget, type CutDecision } from './render/camera';
+import { PALETTE, type TimeOfDay } from './render/palette';
+import { Lighting, timeOfDayAt } from './render/lighting';
+import { CruiserView } from './render/cruisers';
+import { measureSilhouette } from './render/silhouette';
+import { Newsroom, type Headline } from './broadcast/headlines';
+import type { PropKind } from './sim/types';
 import { Gait } from './anim/gait';
 import { Audio } from './audio';
 import { Input } from './input';
@@ -21,6 +26,7 @@ const settings = loadSettings();
 if (flags.reducedMotion !== null) settings.reducedMotion = flags.reducedMotion;
 if (flags.reduceFlashes !== null) settings.reduceFlashes = flags.reduceFlashes;
 if (flags.debug !== null) settings.debug = flags.debug;
+if (flags.cuts !== null) settings.cameraCuts = flags.cuts;
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const canvas = $<HTMLCanvasElement>('view');
@@ -33,18 +39,32 @@ const titleEl = $('title');
 const pausedEl = $('paused');
 const touchUi = $('touch-ui');
 const camTag = $('camtag');
+const clockEl = $('clock');
+const chyKicker = document.querySelector('#chyron .kicker') as HTMLElement;
+const chyText = document.querySelector('#chyron .text') as HTMLElement;
+const breakingEl = $('breaking');
 
 // --- Renderer ---------------------------------------------------------------
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(PALETTE.sky);
-scene.fog = new THREE.Fog(PALETTE.sky, 160, 420);
-scene.add(new THREE.HemisphereLight(0xfff7e8, 0xb8b0a0, 1.5));
-const sun = new THREE.DirectionalLight(0xffffff, 1.7);
-sun.position.set(-40, 100, -25);
-scene.add(sun);
+// Phase 0c: night by default; LIVE TIME follows the local clock; ?time= forces a look.
+const lighting = new Lighting(scene);
+lighting.reduceFlashes = settings.reduceFlashes;
+let forcedLook: TimeOfDay | null = flags.time;
+function currentLook(): TimeOfDay {
+  if (forcedLook) return forcedLook;
+  if (!settings.liveTime) return 'night';
+  const now = new Date();
+  return timeOfDayAt(now.getHours() + now.getMinutes() / 60);
+}
+function applyLook() {
+  const m = currentLook();
+  if (m !== lighting.mode) lighting.setMode(m);
+}
+applyLook();
+setInterval(applyLook, 30_000);
 
 const rig = new CameraRig();
 rig.reducedMotion = settings.reducedMotion;
@@ -57,6 +77,13 @@ let highway: HighwayView;
 let giant: GiantView;
 let gait: Gait;
 let director: Director;
+let cruisers: CruiserView;
+let news: Newsroom;
+/** Prop kinds by id, recorded when a smash/bounce happens (the prop may be pruned before the headline). */
+const propKinds = new Map<number, PropKind>();
+/** Every cut this run, for E2E: sim time, reason, angle. */
+const cutLog: { t: number; reason: CutDecision['reason']; index: number; laneBusy: boolean }[] = [];
+const triggerLog: { t: number; kind: string }[] = [];
 let bot: Bot | null = null;
 const audio = new Audio();
 const input = new Input(canvas, $('btn-shoulder'), $('btn-pause'));
@@ -94,12 +121,23 @@ function targetAt(s: number, d: number): CameraTarget {
 function newRun(seed: number) {
   if (highway) scene.remove(highway.group);
   if (giant) for (const o of giant.objects) scene.remove(o);
+  if (cruisers) scene.remove(cruisers.group);
   sim = new Sim({ seed });
   highway = new HighwayView(sim);
+  highway.onHonk = (v) => audio.honk(v);
   giant = new GiantView();
   gait = new Gait();
   director = new Director(seed);
-  scene.add(highway.group, ...giant.objects);
+  director.enabled = settings.cameraCuts;
+  cruisers = new CruiserView(sim);
+  cruisers.reduceFlashes = settings.reduceFlashes;
+  news = new Newsroom(seed);
+  propKinds.clear();
+  cutLog.length = 0;
+  triggerLog.length = 0;
+  chyKicker.textContent = 'SPOTTED';
+  chyText.innerHTML = '<span>&nbsp;</span>';
+  scene.add(highway.group, cruisers.group, ...giant.objects);
   giant.reset();
   const g = sim.giant;
   prev.s = g.s;
@@ -107,15 +145,19 @@ function newRun(seed: number) {
   prev.stepPos = g.stepPos;
   rig.snap(targetAt(g.s, g.d));
   if (flags.angle !== null) setAngle(flags.angle, 1);
+  // Compile every shader now (cruisers included, before they join) so the run never hitches on first sight.
+  cruisers.showAll(true);
+  renderer.compile(scene, rig.camera);
+  cruisers.showAll(false);
   bot = flags.bot ? new Bot(sim) : null;
   acc = 0;
   hitstop = 0;
 }
 
-function setAngle(index: number, side: number) {
+function setAngle(index: number, side: number, pin = true) {
   const n = TUNING.camera.angles.length;
   const i = ((index % n) + n) % n;
-  director.force(i, side);
+  director.force(i, side, pin);
   rig.cut(i, side, targetAt(sim.giant.s, sim.giant.d));
   showCamTag();
 }
@@ -148,9 +190,36 @@ function showCamTag() {
   camTagT = 1.6;
 }
 
+/** §21 chyron: show a headline; tier changes break in with the BREAKING wipe and stinger. */
+function showHeadline(h: Headline) {
+  chyKicker.textContent = h.kicker;
+  chyKicker.classList.toggle('breaking', h.breaking);
+  const span = document.createElement('span');
+  span.textContent = h.text;
+  span.className = 'in';
+  chyText.replaceChildren(span);
+  if (h.breaking) {
+    audio.breaking();
+    breakingEl.classList.toggle('soft', settings.reduceFlashes);
+    breakingEl.classList.remove('go');
+    void breakingEl.offsetWidth;
+    breakingEl.classList.add('go');
+  }
+}
+
 function present(e: SimEvent) {
   recentEvents.push(e);
   if (recentEvents.length > 64) recentEvents.shift();
+  if (e.type === 'smash' || e.type === 'bounce') {
+    const p = sim.track.props.find((q) => q.id === e.propId);
+    if (p) propKinds.set(p.id, p.kind);
+  }
+  news.observe(e, sim.time);
+  const trig = cutTriggerFor(e);
+  if (trig) {
+    triggerLog.push({ t: sim.time, kind: trig });
+    director.trigger(trig);
+  }
   const I = TUNING.impact;
   const g = sim.giant;
   const h = sim.track.headingAt(g.s);
@@ -235,17 +304,22 @@ function stepSim(inp: SimInput) {
   const events = sim.step(inp);
   perf.simMs = performance.now() - t0;
   for (const e of events) present(e);
-  // The director cuts in sim time, only when no lane change is in progress.
+  // Phase 0c director: event-driven cut-aways, home after 6–10s, never during a lane change.
   const cut = director.update(sim.dt, sim.laneBusy);
   if (cut) {
     measure.cuts++;
     if (sim.laneBusy) measure.cutsDuringLane++;
-    measure.minCutGap = Math.min(measure.minCutGap, sim.time - measure.lastCutAt);
-    measure.lastCutAt = sim.time;
+    if (cut.reason !== 'home') {
+      measure.minCutGap = Math.min(measure.minCutGap, sim.time - measure.lastCutAt);
+      measure.lastCutAt = sim.time;
+    }
+    cutLog.push({ t: sim.time, reason: cut.reason, index: cut.index, laneBusy: sim.laneBusy });
     rig.cut(cut.index, cut.side, targetAt(g.s, g.d));
     flash(TUNING.camera.cutFlashFrames);
     showCamTag();
   }
+  const h = news.update({ time: sim.time, tier: g.tier, lane: g.lane, lanes: sim.track.lanesAt(g.s), heading: sim.track.headingAt(g.s), s: g.s }, (id) => propKinds.get(id));
+  if (h) showHeadline(h);
 }
 
 // --- Pause, focus, start ------------------------------------------------------
@@ -261,6 +335,7 @@ function start() {
   if (started) return;
   started = true;
   titleEl.hidden = true;
+  document.documentElement.classList.add('playing');
   try {
     audio.unlock(); // audio must never block the run from starting
   } catch (e) {
@@ -290,6 +365,20 @@ $('resume').addEventListener('click', () => setPaused(false));
 const optReduced = $<HTMLInputElement>('opt-reduced');
 const optFlashes = $<HTMLInputElement>('opt-flashes');
 const optDebug = $<HTMLInputElement>('opt-debug');
+const optCuts = $<HTMLInputElement>('opt-cuts');
+const optLive = $<HTMLInputElement>('opt-livetime');
+optCuts.checked = settings.cameraCuts;
+optLive.checked = settings.liveTime;
+optCuts.addEventListener('change', () => {
+  settings.cameraCuts = director.enabled = optCuts.checked;
+  saveSettings(settings);
+});
+optLive.addEventListener('change', () => {
+  settings.liveTime = optLive.checked;
+  forcedLook = null;
+  applyLook();
+  saveSettings(settings);
+});
 optReduced.checked = settings.reducedMotion;
 optFlashes.checked = settings.reduceFlashes;
 optDebug.checked = settings.debug;
@@ -299,7 +388,7 @@ optReduced.addEventListener('change', () => {
   saveSettings(settings);
 });
 optFlashes.addEventListener('change', () => {
-  settings.reduceFlashes = optFlashes.checked;
+  settings.reduceFlashes = lighting.reduceFlashes = cruisers.reduceFlashes = optFlashes.checked;
   saveSettings(settings);
 });
 optDebug.addEventListener('change', () => {
@@ -316,7 +405,7 @@ window.addEventListener('keydown', (e) => {
     e.preventDefault();
   }
   if (e.code === 'KeyT') tunePanel.toggle();
-  if (e.code === 'KeyC' && started && !paused) setAngle(director.current + 1, director.side); // dev: next angle
+  if (e.code === 'KeyC' && started && !paused) setAngle(director.current + 1, director.side); // dev: next angle (held until C comes back to Chase High)
   if (e.code === 'KeyR' && started && !paused) newRun(flags.seedFixed ? flags.seed : (Math.random() * 1e9) | 0);
 });
 
@@ -343,6 +432,7 @@ function frame(now: number) {
 
   if (input.consumePause()) setPaused(!paused);
   touchUi.hidden = input.device !== 'touch';
+  document.documentElement.classList.toggle('touch', input.device === 'touch');
 
   let frozen = false;
   if (started && !paused && !flags.stepMode) {
@@ -391,13 +481,17 @@ function frame(now: number) {
       audio.footfall(g.tier);
       if (g.tier === 2) {
         highway.crack(f.x, f.z, t.travel);
+        highway.stomp(f.x, f.z); // nearby cars bounce on their suspension
         haptic(30, 0.15); // §27 light pulse per footfall at Rampage only
       }
     }
     giant.update(animDt, { x: t.x, z: t.z, heading, travel: t.travel, lateralVel, speed: g.speed, tier: g.tier, braking: g.braking, stumble: g.stumble, stepPos }, gf);
   }
-  highway.update(animDt, t.x, t.z);
+  highway.update(animDt, t.x, t.z, s, d);
+  cruisers.update(animDt);
   rig.update(paused ? 0 : realDt, t);
+  lighting.update(animDt, { giantX: t.x, giantZ: t.z, travel: t.travel, speed: g.speed, camera: rig.camera, lamps: highway.lamps, sirens: cruisers.sirens });
+  audio.setSirens(sim.escort.cruisers.map((c) => (c.active ? Math.max(0.25, Math.min(1, 1 - (g.s - c.s - 8) / 60)) : 0)));
 
   const info = rig.info;
   if (started && !paused) {
@@ -416,8 +510,16 @@ function frame(now: number) {
   updateHud(realDt);
 }
 
+/** Render one frame now and measure the giant's silhouette (E2E / evidence). */
+function silhouette() {
+  renderer.render(scene, rig.camera);
+  return measureSilhouette(renderer, scene, rig.camera, giant.bodyObjects);
+}
+
 function updateHud(dt: number) {
   const g = sim.giant;
+  const secs = Math.floor(sim.time);
+  clockEl.textContent = `${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')}`;
   const T = TUNING.tiers[g.tier];
   tierName.textContent = T.name.toUpperCase();
   tierbar.classList.toggle('t1', g.tier === 1);
@@ -442,7 +544,8 @@ function updateHud(dt: number) {
       `lane ${g.lane + 1}/${sim.track.lanesAt(g.s)}  ${g.move ?? '-'}  queue ${g.laneQueue || '-'}  stumble ${g.stumble.toFixed(2)}  brake ${g.braking ? 'ON' : '-'}\n` +
       `tier-up ${Number.isFinite(T.tierUpAfter) ? `${g.tierTimer.toFixed(2)}/${T.tierUpAfter}s` : '—'}  shoulder cd ${g.shoulderCd.toFixed(1)}\n` +
       `smash ${sim.stats.smashes} (across ${sim.stats.smashesAcross})  bounce ${sim.stats.bounces}  wall ${sim.stats.wallBumps}\n` +
-      `cam ${info.angle}  up ${info.screenUpDeg.toFixed(1)}°  yaw ${info.yawDeg.toFixed(1)}°  ahead ${info.aheadSeconds.toFixed(1)}s  giant y ${info.giantScreenY.toFixed(2)}  cuts ${measure.cuts}\n` +
+      `cam ${info.angle}  up ${info.screenUpDeg.toFixed(1)}°  yaw ${info.yawDeg.toFixed(1)}°  ahead ${info.aheadSeconds.toFixed(1)}s  giant y ${info.giantScreenY.toFixed(2)}  cuts ${measure.cuts}${director.enabled ? '' : ' (OFF)'}${cutLog.length ? `  last: ${cutLog[cutLog.length - 1].reason}` : ''}\n` +
+      `look ${lighting.mode}${settings.liveTime ? ' (LIVE TIME)' : ''}  cruisers ${sim.escort.cruisers.filter((c) => c.active).map((c) => (g.s - c.s).toFixed(0) + 'm').join(' ') || '-'}\n` +
       `slide max ${worst.map((w) => (w * 100).toFixed(1)).join('/')}cm  input ${input.device}${bot ? ' (BOT)' : ''}  timescale ${flags.timescale}`;
   }
 }
@@ -479,6 +582,23 @@ window.__GAME = {
   step(n: number, inp?: SimInput) {
     for (let i = 0; i < n; i++) stepSim(inp ?? (bot ? bot.input() : NO_INPUT));
   },
+  /** Phase 0c: force a look ('night' | 'dusk' | 'day'), or null to follow the setting. */
+  setLook(m: TimeOfDay | null) {
+    forcedLook = m;
+    if (m) lighting.setMode(m);
+    else applyLook();
+  },
+  look: () => lighting.mode,
+  silhouette,
+  headlines: () => news.history.map((h) => ({ t: h.t, kicker: h.kicker, text: h.text, breaking: h.breaking, sources: h.sources.map((e) => e.type) })),
+  chyron: () => ({ kicker: chyKicker.textContent, text: chyText.textContent }),
+  cutLog: () => cutLog.slice(),
+  triggerLog: () => triggerLog.slice(),
+  director: () => ({ enabled: director.enabled, current: director.current, pinned: director.pinned, awayCuts: director.awayCuts }),
+  setCuts(on: boolean) {
+    settings.cameraCuts = director.enabled = on;
+  },
+  escort: () => sim.escort.cruisers.map((c) => ({ active: c.active, gap: sim.giant.s - c.s, d: c.d })),
   camera() {
     return { ...rig.info, cuts: measure.cuts, cutsDuringLane: measure.cutsDuringLane, minCutGap: measure.minCutGap, maxScreenUp: measure.maxScreenUp, maxGiantY: measure.maxGiantY, minAhead: measure.minAhead };
   },

@@ -4,9 +4,15 @@
 
 A top-down chase roguelite: a giant fugitive barrels through a city on live TV, scoring ratings for spectacle. Design: [`docs/GDD.md`](docs/GDD.md). Rules for building: [`CLAUDE.md`](CLAUDE.md). Build-time calls: [`DECISIONS.md`](DECISIONS.md).
 
-## Status: Phase 0b, lane-runner thesis proof
+## Status: Phase 0c, fantasy slice
 
-The v0.3 pivot ([`docs/GDD-v0.3-lane-runner.md`](docs/GDD-v0.3-lane-runner.md)): the giant auto-runs down a procedural highway (straights, curves, merges, 2–4 lanes), you pick lanes and smash across them. Run cycle with long strides, flat cadence and planted feet; broadcast camera cutting between Chase High, Wide Side and Long Lens. No ratings, no cops. **Waiting on Mike's feel check.** Live: https://warn-your-friends.vercel.app
+Everything from 0b (the v0.3 lane runner: procedural highway, lane changes with smash-across, the heavy run cycle, broadcast angles), plus the fantasy around it:
+
+- **Night by default**: sodium streetlights pooling on the road, head/tail lights on traffic, the chopper's spotlight on the giant, red/blue siren washes. The giant gets a rim light and an ink outline so he reads as a silhouette against the lit road. **LIVE TIME** (pause menu) follows your local clock (day / dusk / night).
+- **Event-driven cuts**: Chase High is home. It cuts away only on reaching Rampage, a Heavy smash or a merge, returns after 6–10 s, ≥15 s between cut-aways, never mid-lane-change. **Camera cuts: On/Off** in the pause menu.
+- **The world reacts**: a LIVE badge, station bug and a chyron that writes headlines from what actually happened (§21 grammar). Cars ahead brake, swerve and honk; Rampage footfalls bounce them on their suspension. Three cruisers trail with lights and sirens and never catch up. Rotor, sirens and a low news-theme bed.
+
+No ratings, no pursuit AI. **Waiting on Mike's feel check.** Live: https://warn-your-friends.vercel.app
 
 ## Run it
 
@@ -24,17 +30,17 @@ npm run dev
 
 Dev keys: **T** tuning panel · **`** debug overlay · **C** next camera angle · **R** new road.
 
-URL flags: `?seed=N` · `?angle=0|1|2` (start on Chase High / Wide Side / Long Lens) · `?timescale=0.5` · `?bot` autopilot · `?tune` · `?reducedmotion` · `?reduceflashes` · `?step` (headless, `window.__GAME.step(n)`).
+URL flags: `?seed=N` · `?angle=0|1|2` (hold Chase High / Wide Side / Long Lens) · `?time=night|dusk|day` · `?cuts=0` · `?timescale=0.5` · `?bot` autopilot · `?tune` · `?reducedmotion` · `?reduceflashes` · `?step` (headless, `window.__GAME.step(n)`).
 
-## Feel check (Phase 0b exit)
+## Feel check (Phase 0c exit)
 
-> Mike plays 5 minutes and wants to keep going. (v0.3 §40)
+> Mike plays 5 minutes and wants to keep going.
 
-1. Watch the feet at each tier: few, huge steps, planted, a hang between them at Rampage.
-2. At Stride, change lanes into a sawhorse or cart: it's smashed across. At Rampage, do it into a car.
-3. At Jog, change lanes into a car: −1 tier, stumble, knocked back to your lane.
-4. Ride a merge: the closing lane pushes you over.
-5. Wait for the cuts (every 7–12 s, never mid-lane-change); press **C** to flip angles yourself.
+1. Watch the giant at night: is he the first thing your eye finds in every shot?
+2. Hit Rampage, smash a car, ride a merge: each should cut away once, then come home to Chase High.
+3. Read the chyron: every headline should be something you just did.
+4. Look for the cruisers' red/blue on the road behind you, the cars braking and swerving ahead, the chopper shadow.
+5. Pause: try Camera cuts Off and LIVE TIME On.
 6. **T** opens the tuning panel; **Copy** exports changed numbers.
 
 ## Gates

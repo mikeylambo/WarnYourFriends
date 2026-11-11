@@ -1,0 +1,201 @@
+{
+  "_doc": "Phase 0c headline word bank (GDD §21 grammar: [tier phrase] + [act] + [place]). Every headline must describe something that happened. Original, deadpan, never mean.",
+  "station": {
+    "call": "WYF",
+    "channel": "6",
+    "tagline": "NEWS"
+  },
+  "kicker": [
+    "SPOTTED",
+    "AT LARGE",
+    "RAMPAGE"
+  ],
+  "subject": [
+    [
+      "Giant",
+      "Large Man",
+      "Tall Figure"
+    ],
+    [
+      "Giant",
+      "Fugitive Giant",
+      "Enormous Man"
+    ],
+    [
+      "Rampaging Giant",
+      "Giant",
+      "Unstoppable Giant"
+    ]
+  ],
+  "nouns": {
+    "sawhorse": [
+      "Sawhorse",
+      "Sawhorses"
+    ],
+    "cart": [
+      "Fruit Cart",
+      "Fruit Carts"
+    ],
+    "fence": [
+      "Construction Fence",
+      "Construction Fences"
+    ],
+    "scooter": [
+      "Scooter",
+      "Scooters"
+    ],
+    "car": [
+      "Sedan",
+      "Sedans"
+    ],
+    "van": [
+      "Box Truck",
+      "Box Trucks"
+    ],
+    "barricade": [
+      "Jersey Barrier",
+      "Jersey Barriers"
+    ]
+  },
+  "verbs": {
+    "medium": [
+      "Tramples",
+      "Splinters",
+      "Boots",
+      "Scatters",
+      "Kicks Over",
+      "Snaps"
+    ],
+    "heavy": [
+      "Flattens",
+      "Totals",
+      "Crushes",
+      "Pancakes",
+      "Punts",
+      "Crumples"
+    ],
+    "across": [
+      "Sidesteps Into",
+      "Cuts Across",
+      "Lane-Changes Through"
+    ],
+    "bounce": [
+      "Bounces Off",
+      "Loses Argument With",
+      "Fails To Clear"
+    ],
+    "wall": [
+      "Grazes Barrier",
+      "Scuffs Median"
+    ],
+    "slow": [
+      "Slows",
+      "Eases Off",
+      "Catches Breath"
+    ]
+  },
+  "places": {
+    "road": [
+      "On Highway",
+      "On The Interstate"
+    ],
+    "bound": "{dir}bound",
+    "lane": "In Lane {n}",
+    "fast": "In The Fast Lane",
+    "slow": "In The Slow Lane",
+    "mile": "Near Mile {m}"
+  },
+  "lines": {
+    "spotted": "{subject} Spotted {place}",
+    "atLarge": "Giant At Large. Warn Your Friends.",
+    "stride": [
+      [
+        "Picks Up",
+        "{subject} Picks Up Pace {place}"
+      ],
+      [
+        "Finds",
+        "{subject} Finds Second Wind {place}"
+      ],
+      [
+        "Speeds Up",
+        "{subject} Speeds Up {place}"
+      ],
+      [
+        "Lengthens",
+        "{subject} Lengthens Stride {place}"
+      ]
+    ],
+    "rampage": [
+      [
+        "Reaches",
+        "Giant Reaches Full Rampage {place}"
+      ],
+      [
+        "Resumes",
+        "Rampage Resumes {place}"
+      ],
+      [
+        "Hits",
+        "Giant Hits Top Speed {place}"
+      ],
+      [
+        "Returns",
+        "Giant Returns To Rampage {place}"
+      ],
+      [
+        "Goes",
+        "Giant Goes Full Rampage {place}"
+      ]
+    ],
+    "slowed": "{subject} {verb} {place}",
+    "smashOne": "{subject} {verb} {noun} {place}",
+    "smashMany": "{subject} {verb} {count} {nouns} {place}",
+    "bounce": "{subject} {verb} {noun} {place}",
+    "wall": "{subject} {verb} {place}",
+    "narrows": [
+      [
+        "Narrows",
+        "Highway Narrows To {lanes} Lanes; Giant Unbothered"
+      ],
+      [
+        "Ends",
+        "Lane Ends; Giant Does Not"
+      ],
+      [
+        "Loses",
+        "Highway Loses A Lane, Giant Loses Nothing"
+      ]
+    ],
+    "widens": [
+      [
+        "Widens",
+        "Highway Widens To {lanes} Lanes, For Some Reason"
+      ],
+      [
+        "Gains",
+        "Highway Gains A Lane; Giant Uses All Of Them"
+      ],
+      [
+        "Opens",
+        "Extra Lane Opens Up"
+      ]
+    ],
+    "escort": [
+      [
+        "Join",
+        "Police Join Pursuit {place}"
+      ],
+      [
+        "Tags Along",
+        "Second Cruiser Tags Along"
+      ],
+      [
+        "Keeps",
+        "Third Cruiser Keeps A Respectful Distance"
+      ]
+    ],
+    "rampageFallback": "Giant: Full Rampage",
+    "mergeFallback": "{lanes} Lanes Ahead"
+  }
+}

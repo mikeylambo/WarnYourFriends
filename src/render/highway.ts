@@ -6,6 +6,31 @@ import type { Prop, PropKind } from '../sim/types';
 import { Rng } from '../sim/rng';
 import { KIND_COLORS, MATERIAL_DEBRIS, PALETTE } from './palette';
 import { crackTexture, toon } from './toon';
+import { GLOW } from './glow';
+import type { LampPos } from './lighting';
+
+const LENS = new THREE.MeshBasicMaterial({ color: 0xffc27a });
+const TAIL = new THREE.MeshBasicMaterial({ color: 0xd01818 });
+const HEAD = new THREE.MeshBasicMaterial({ color: 0xfff2d8 });
+
+/** Road paint is retroreflective: a little self-light so lanes read at night outside the pools. */
+const PAINT_GLOW = 0x303030;
+
+/** Per-car presentation state for Phase 0c traffic reactions (never written back to the sim). */
+interface CarFx {
+  prop: Prop;
+  group: THREE.Group;
+  body: THREE.Group;
+  tails: THREE.Sprite[];
+  hazards: THREE.Sprite[];
+  braking: boolean;
+  /** Swerve progress (s since it started), or −1 if it hasn't. */
+  swerveT: number;
+  swerveDir: number;
+  honked: boolean;
+  bounceY: number;
+  bounceV: number;
+}
 
 /**
  * Highway presentation: streams segment meshes (road, lane paint, walls, merge
@@ -68,6 +93,13 @@ export class HighwayView {
     return g;
   })();
   private pos = { x: 0, z: 0 };
+  private cars = new Map<number, CarFx>();
+  private lampList: LampPos[] = [];
+  private lampsDirty = true;
+  private fxTime = 0;
+  private honkCd = 0;
+  /** Called when a car honks (volume 0..1). */
+  onHonk: ((vol: number) => void) | null = null;
 
   constructor(private sim: Sim) {
     const groundGeo = new THREE.PlaneGeometry(3000, 3000);
@@ -113,6 +145,7 @@ export class HighwayView {
         const g = this.buildSegment(seg);
         this.segViews.set(seg.index, g);
         this.group.add(g);
+        this.lampsDirty = true;
       }
     }
     for (const [i, g] of this.segViews) {
@@ -120,6 +153,7 @@ export class HighwayView {
         this.group.remove(g);
         g.traverse((o) => (o as THREE.Mesh).geometry !== this.box && (o as THREE.Mesh).geometry?.dispose());
         this.segViews.delete(i);
+        this.lampsDirty = true;
       }
     }
     const liveProps = new Set<number>();
@@ -137,6 +171,7 @@ export class HighwayView {
       if (!liveProps.has(id)) {
         this.group.remove(g);
         this.propViews.delete(id);
+        this.cars.delete(id);
       }
     }
   }
@@ -174,8 +209,8 @@ export class HighwayView {
     const group = new THREE.Group();
     const W = TUNING.lanes.width;
     const wallH = TUNING.track.wallHeight;
-    const add = (geo: THREE.BufferGeometry, color: number, basic = false) => {
-      const m = new THREE.Mesh(geo, basic ? new THREE.MeshBasicMaterial({ color, side: THREE.DoubleSide }) : toon(color, { side: THREE.DoubleSide }));
+    const add = (geo: THREE.BufferGeometry, color: number, basic = false, paint = false) => {
+      const m = new THREE.Mesh(geo, basic ? new THREE.MeshBasicMaterial({ color, side: THREE.DoubleSide }) : toon(color, paint ? { side: THREE.DoubleSide, emissive: PAINT_GLOW } : { side: THREE.DoubleSide }));
       group.add(m);
       return m;
     };
@@ -183,8 +218,8 @@ export class HighwayView {
     add(this.sweep(seg, () => [[-8, 0], [-0.9, 0.01]]), PALETTE.verge);
     add(this.sweep(seg, (_i, _s, w) => [[w + 0.9, 0.01], [w + 8, 0]]), PALETTE.verge);
     add(this.sweep(seg, (_i, _s, w) => [[-0.9, 0.02], [w + 0.9, 0.02]]), PALETTE.road);
-    add(this.sweep(seg, () => [[0.15, 0.035], [0.35, 0.035]]), PALETTE.edgeLineLeft, true);
-    add(this.sweep(seg, (_i, _s, w) => [[w - 0.35, 0.035], [w - 0.15, 0.035]]), PALETTE.edgeLineRight, true);
+    add(this.sweep(seg, () => [[0.15, 0.035], [0.35, 0.035]]), PALETTE.edgeLineLeft, false, true);
+    add(this.sweep(seg, (_i, _s, w) => [[w - 0.35, 0.035], [w - 0.15, 0.035]]), PALETTE.edgeLineRight, false, true);
     // Concrete walls (barriers) on both edges.
     add(this.sweep(seg, () => [[-0.4, 0], [-0.4, wallH], [-0.9, wallH], [-0.9, 0]]), PALETTE.wall);
     add(this.sweep(seg, (_i, _s, w) => [[w + 0.4, 0], [w + 0.4, wallH], [w + 0.9, wallH], [w + 0.9, 0]]), PALETTE.wall);
@@ -203,7 +238,7 @@ export class HighwayView {
       }
     }
     if (dashes.length) {
-      const m = new THREE.InstancedMesh(dashGeo, new THREE.MeshBasicMaterial({ color: PALETTE.roadLine }), dashes.length);
+      const m = new THREE.InstancedMesh(dashGeo, toon(PALETTE.roadLine, { emissive: PAINT_GLOW }), dashes.length);
       dashes.forEach(([s, d, h], j) => {
         this.sim.track.posAt(s, d, this.pos);
         this.tmp.position.set(this.pos.x, 0.035, this.pos.z);
@@ -226,7 +261,8 @@ export class HighwayView {
       const post = new THREE.Mesh(this.box, toon(PALETTE.pole));
       post.scale.set(0.15, 3, 0.15);
       post.position.y = 1.5;
-      const board = new THREE.Mesh(this.box, toon(PALETTE.signWarn));
+      // Reflective sign face: merges stay telegraphed at night.
+      const board = new THREE.Mesh(this.box, toon(PALETTE.signWarn, { emissive: 0x6a3c08 }));
       board.scale.set(0.12, 1.6, 1.6);
       board.rotation.x = Math.PI / 4;
       board.position.y = 3.4;
@@ -240,7 +276,7 @@ export class HighwayView {
         for (let i = 4; i < seg.length - 4; i += 7) {
           const s = seg.s0 + i;
           this.sim.track.posAt(s, (lane + 0.4) * W, this.pos);
-          const chev = new THREE.Mesh(dashGeo, new THREE.MeshBasicMaterial({ color: PALETTE.roadLine }));
+          const chev = new THREE.Mesh(dashGeo, toon(PALETTE.roadLine, { emissive: 0x606060 }));
           chev.position.set(this.pos.x, 0.036, this.pos.z);
           chev.rotation.y = -this.sim.track.headingAt(s) - 0.6;
           chev.scale.set(2.2, 1, 0.3);
@@ -249,17 +285,12 @@ export class HighwayView {
       }
     }
 
-    // Roadside scenery (cosmetic, seeded per segment): light poles, trees, the odd building, gantries.
+    // Roadside scenery (cosmetic, seeded per segment): sodium streetlights, trees, the odd building, gantries.
     const rng = new Rng((seg.index * 2654435761) >>> 0);
     const s = seg.s0 + 20;
     const w = this.sim.track.widthAt(s);
     const h = this.sim.track.headingAt(s);
-    const side = seg.index & 1 ? -1 : 1;
-    this.sim.track.posAt(s, side > 0 ? w + 1.6 : -1.6, this.pos);
-    const pole = new THREE.Mesh(this.box, toon(PALETTE.pole));
-    pole.scale.set(0.2, 9, 0.2);
-    pole.position.set(this.pos.x, 4.5, this.pos.z);
-    group.add(pole);
+    group.userData.lamps = this.buildLamps(seg, group);
     for (let t = 0; t < 7; t++) {
       const left = rng.chance(0.5);
       const off = rng.range(12, 40);
@@ -313,25 +344,193 @@ export class HighwayView {
       }
       group.add(g);
     }
-    void side;
     return group;
+  }
+
+  /**
+   * Phase 0c sodium streetlights, every `lampSpacing` metres on alternating sides:
+   * pole, arm over the road, lamp head with a halo, and a light pool on the road.
+   */
+  private buildLamps(seg: Segment, group: THREE.Group): LampPos[] {
+    const lamps: LampPos[] = [];
+    const sp = TUNING.look.lampSpacing;
+    const track = this.sim.track;
+    const pool = new THREE.PlaneGeometry(1, 1);
+    pool.rotateX(-Math.PI / 2);
+    for (let s = Math.ceil(seg.s0 / sp) * sp; s < seg.s0 + seg.length; s += sp) {
+      const w = track.widthAt(s);
+      const h = track.headingAt(s);
+      const left = Math.round(s / sp) % 2 === 0;
+      const baseD = left ? -1.6 : w + 1.6;
+      const headD = left ? 2.0 : w - 2.0;
+      const H = 9;
+      const base = track.posAt(s, baseD, { x: 0, z: 0 });
+      const head = track.posAt(s, headD, { x: 0, z: 0 });
+      const pole = new THREE.Mesh(this.box, toon(PALETTE.pole));
+      pole.scale.set(0.22, H, 0.22);
+      pole.position.set(base.x, H / 2, base.z);
+      const arm = new THREE.Mesh(this.box, toon(PALETTE.pole));
+      const mid = track.posAt(s, (baseD + headD) / 2, { x: 0, z: 0 });
+      arm.scale.set(0.16, 0.16, Math.abs(headD - baseD));
+      arm.position.set(mid.x, H, mid.z);
+      arm.rotation.y = -h;
+      const housing = new THREE.Mesh(this.box, toon(0x3a3a40));
+      housing.scale.set(1.0, 0.22, 0.5);
+      housing.position.set(head.x, H - 0.05, head.z);
+      housing.rotation.y = -h;
+      const lens = new THREE.Mesh(this.box, LENS);
+      lens.scale.set(0.8, 0.05, 0.36);
+      lens.position.set(head.x, H - 0.18, head.z);
+      lens.rotation.y = -h;
+      const halo = new THREE.Sprite(GLOW.lampHalo);
+      halo.scale.set(3.4, 3.4, 1);
+      halo.position.set(head.x, H - 0.3, head.z);
+      const p = new THREE.Mesh(pool, GLOW.lampPool);
+      const pc = track.posAt(s, left ? Math.min(headD + 1.5, w / 2) : Math.max(headD - 1.5, w / 2), { x: 0, z: 0 });
+      p.position.set(pc.x, 0.05, pc.z);
+      p.rotation.y = -h;
+      p.scale.set(17, 1, 14);
+      p.renderOrder = 1;
+      group.add(pole, arm, housing, lens, halo, p);
+      lamps.push({ x: head.x, y: H, z: head.z });
+    }
+    return lamps;
+  }
+
+  /** Every streetlight head currently built (for the real lights in the rig). */
+  get lamps(): LampPos[] {
+    if (this.lampsDirty) {
+      this.lampList.length = 0;
+      for (const g of this.segViews.values()) this.lampList.push(...((g.userData.lamps as LampPos[]) ?? []));
+      this.lampsDirty = false;
+    }
+    return this.lampList;
   }
 
   private buildProp(p: Prop): THREE.Group {
     const g = new THREE.Group();
+    // Parts sit on a body group so cars can swerve and bounce without moving the prop's root.
+    const body = new THREE.Group();
+    g.add(body);
     const colors = KIND_COLORS[p.kind];
     const kc = colors[p.variant % colors.length];
     for (const [x, y, z, w, h, d, c] of partsFor(p)) {
       const m = new THREE.Mesh(this.box, toon(c === 'kind' ? kc : c));
       m.position.set(x, y, z);
       m.scale.set(w, h, d);
-      g.add(m);
+      body.add(m);
     }
     this.sim.track.posAt(p.s, p.d, this.pos);
     g.position.set(this.pos.x, 0, this.pos.z);
     g.rotation.y = -this.sim.track.headingAt(p.s);
     g.userData.colors = [kc, ...partsFor(p).map((q) => (q[6] === 'kind' ? kc : q[6]))];
+    if (p.kind === 'car' || p.kind === 'van') this.addCarLights(p, g, body);
     return g;
+  }
+
+  /** Phase 0c: head and tail lights (lens + halo), a headlight throw on the road, hidden hazards. */
+  private addCarLights(p: Prop, g: THREE.Group, body: THREE.Group) {
+    const L = p.hl * 2;
+    const W = p.hw * 2;
+    const y = p.kind === 'van' ? 0.95 : 0.72;
+    const tails: THREE.Sprite[] = [];
+    const hazards: THREE.Sprite[] = [];
+    for (const side of [-1, 1]) {
+      const z = side * W * 0.36;
+      const tl = new THREE.Mesh(this.box, TAIL);
+      tl.scale.set(0.06, 0.2, 0.38);
+      tl.position.set(-L / 2 - 0.02, y, z);
+      const hl = new THREE.Mesh(this.box, HEAD);
+      hl.scale.set(0.06, 0.18, 0.36);
+      hl.position.set(L / 2 + 0.02, y - 0.05, z);
+      const th = new THREE.Sprite(GLOW.tailHalo);
+      th.position.set(-L / 2 - 0.15, y, z);
+      th.scale.set(1.3, 1.3, 1);
+      const hh = new THREE.Sprite(GLOW.headHalo);
+      hh.position.set(L / 2 + 0.2, y - 0.05, z);
+      hh.scale.set(1.6, 1.6, 1);
+      body.add(tl, hl, th, hh);
+      tails.push(th);
+      // Hazards at the rear corners only: the chopper sees cars from behind.
+      const hz = new THREE.Sprite(GLOW.hazardHalo);
+      hz.position.set(-L / 2 - 0.1, y + 0.12, side * W * 0.5);
+      hz.scale.set(1.1, 1.1, 1);
+      hz.visible = false;
+      body.add(hz);
+      hazards.push(hz);
+    }
+    const throwGeo = new THREE.PlaneGeometry(1, 1);
+    throwGeo.rotateX(-Math.PI / 2);
+    const beam = new THREE.Mesh(throwGeo, GLOW.headPool);
+    beam.position.set(L / 2 + 6.5, 0.055, 0);
+    beam.scale.set(13, 1, 6.5);
+    beam.renderOrder = 1;
+    g.add(beam);
+    this.cars.set(p.id, { prop: p, group: g, body, tails, hazards, braking: false, swerveT: -1, swerveDir: 1, honked: false, bounceY: 0, bounceV: 0 });
+  }
+
+  /** Rampage footfall: cars nearby bounce on their suspension (presentation only). */
+  stomp(x: number, z: number) {
+    const T = TUNING.traffic;
+    const omega = T.bounceHz * Math.PI * 2;
+    for (const c of this.cars.values()) {
+      const dx = c.group.position.x - x;
+      const dz = c.group.position.z - z;
+      const d = Math.hypot(dx, dz);
+      if (d > T.bounceRadius) continue;
+      const fall = 1 - d / T.bounceRadius;
+      c.bounceV -= T.bounceDrop * omega * fall * (0.8 + Math.random() * 0.4);
+    }
+  }
+
+  /**
+   * Traffic reacts to the giant coming up behind (presentation only; the sim hitbox
+   * never moves): brake lights and hazards, then a swerve inside the car's own
+   * footprint and a honk. Returns the number of honks this frame (for audio).
+   */
+  private updateTraffic(dt: number, giantS: number, giantD: number) {
+    const T = TUNING.traffic;
+    const omega = T.bounceHz * Math.PI * 2;
+    this.fxTime += dt;
+    this.honkCd = Math.max(0, this.honkCd - dt);
+    const blink = this.fxTime * 3 % 1 < 0.55;
+    for (const c of this.cars.values()) {
+      const p = c.prop;
+      const ds = p.s - giantS;
+      const dd = p.d - giantD;
+      const inReach = ds > 0 && Math.abs(dd) < T.lateralReach;
+      if (inReach && ds < T.brakeAt && !c.braking) {
+        c.braking = true;
+        for (const t of c.tails) {
+          t.material = GLOW.brakeHalo;
+          t.scale.set(1.9, 1.9, 1);
+        }
+      }
+      if (inReach && ds < T.swerveAt && c.swerveT < 0) {
+        c.swerveT = 0;
+        c.swerveDir = Math.sign(dd) || (p.id & 1 ? 1 : -1);
+        if (!c.honked && this.honkCd <= 0) {
+          c.honked = true;
+          this.honkCd = T.honkGap;
+          this.onHonk?.(Math.max(0.25, 1 - ds / T.swerveAt));
+        }
+      }
+      for (const hz of c.hazards) hz.visible = c.braking && blink;
+      let off = 0;
+      let yaw = 0;
+      if (c.swerveT >= 0) {
+        c.swerveT += dt;
+        const k = Math.min(1, c.swerveT / 0.9);
+        off = T.swerveOffset * c.swerveDir * (1 - (1 - k) ** 3);
+        yaw = T.swerveYawDeg * (Math.PI / 180) * c.swerveDir * Math.sin(Math.PI * k) * Math.exp(-c.swerveT);
+      }
+      // Suspension: damped spring on the body's height, a little pitch with it.
+      const acc = -omega * omega * c.bounceY - 2 * T.bounceDamping * omega * c.bounceV;
+      c.bounceV += acc * dt;
+      c.bounceY += c.bounceV * dt;
+      c.body.position.set(0, c.bounceY, off);
+      c.body.rotation.set(c.bounceY * 0.25, -yaw, c.braking ? -0.02 : 0);
+    }
   }
 
   // --- Effects ------------------------------------------------------------------
@@ -367,6 +566,7 @@ export class HighwayView {
     if (g) {
       this.group.remove(g);
       this.propViews.delete(propId);
+      this.cars.delete(propId);
     }
     if (!p) return;
     this.sim.track.posAt(p.s, p.d, this.pos);
@@ -396,9 +596,10 @@ export class HighwayView {
     c.mesh.scale.set(s, 1, s);
   }
 
-  update(dt: number, focusX: number, focusZ: number) {
+  update(dt: number, focusX: number, focusZ: number, giantS = 0, giantD = 0) {
     this.ground.position.x = focusX;
     this.ground.position.z = focusZ;
+    if (dt > 0) this.updateTraffic(dt, giantS, giantD);
     const g = 30;
     for (let i = 0; i < MAX_DEBRIS; i++) {
       const d = this.debris[i];

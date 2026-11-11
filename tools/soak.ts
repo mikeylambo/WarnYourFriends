@@ -8,7 +8,12 @@
  *   - cadence within 2.0–2.3 steps/s at every tier; foot slide < 5cm per plant
  * Camera (v0.3)
  *   - screen-up law (LOCKED): travel within ±35° of screen-up, every frame
- *   - no cut while a lane change is in progress; cuts ≥ 7s apart
+ *   - Phase 0c director: cut-aways only on Rampage / Heavy smash / merge, each
+ *     backed by that event; ≥15s between cut-aways; never the same trigger twice
+ *     in a row; home (Chase High) after 6–10s; no cut during a lane change;
+ *     zero cuts with the setting off
+ * Escort (Phase 0c)
+ *   - cruisers join ≥40m back (LOCKED) and off camera; never closer than the gap floor
  *   - giant never below 85% of the screen; ≥ 2s of road visible ahead
  *
  * Usage: tsx tools/soak.ts [seeds=200] [seconds=60]
@@ -16,7 +21,8 @@
 import { Sim } from '../src/sim/sim';
 import { Bot } from '../src/sim/bot';
 import { Gait } from '../src/anim/gait';
-import { CameraRig, Director } from '../src/render/camera';
+import { CameraRig, Director, cutTriggerFor, type CutTrigger } from '../src/render/camera';
+import * as THREE from 'three';
 import { TUNING } from '../src/tuning';
 
 const seeds = Number(process.argv[2] ?? 200);
@@ -36,6 +42,11 @@ const plants = [0, 0, 0];
 let earlyLifts = 0;
 const aheadBy: Record<string, number> = {};
 const cam = { frames: 0, maxScreenUp: 0, maxGiantY: 0, minAhead: Infinity, aheadUnder2: 0, cuts: 0, cutsDuringLane: 0, minCutGap: Infinity, perAngle: {} as Record<string, number> };
+const cuts = { away: 0, home: 0, byTrigger: { rampage: 0, heavy: 0, merge: 0 } as Record<CutTrigger, number>, minAwayGap: Infinity, minAwayHold: Infinity, maxAwayHold: 0, offCuts: 0, triggersSeen: 0 };
+const esc = { joins: 0, minJoinBehind: Infinity, joinsOnCamera: 0, minGap: Infinity, ahead: 0 };
+const ndc = new THREE.Vector3();
+// A few seeds with cuts switched off: Chase High must hold the whole run.
+const OFF_SEEDS = new Set([7, 77, 177]);
 const stepSamples: number[] = [];
 let maxStepMs = 0;
 const t0 = performance.now();
@@ -57,6 +68,11 @@ for (let seed = 1; seed <= seeds; seed++) {
   let path = 0;
   let lastFoot = -1;
   let lastCut = -Infinity;
+  let lastAway = -Infinity;
+  let lastAwayTrigger: CutTrigger | null = null;
+  const lastSeen: Record<CutTrigger, number> = { rampage: -Infinity, heavy: -Infinity, merge: -Infinity };
+  const cutsOff = OFF_SEEDS.has(seed);
+  director.enabled = !cutsOff;
   const dt = sim.dt;
 
   for (let i = 0; i < ticks; i++) {
@@ -88,6 +104,12 @@ for (let seed = 1; seed <= seeds; seed++) {
     }
 
     for (const e of events) {
+      const trig = cutTriggerFor(e);
+      if (trig) {
+        lastSeen[trig] = sim.time;
+        cuts.triggersSeen++;
+        director.trigger(trig);
+      }
       if (e.type === 'footfall') {
         if (lastFoot >= 0) {
           const c = 1 / (e.t - lastFoot);
@@ -108,8 +130,26 @@ for (let seed = 1; seed <= seeds; seed++) {
     const cutTo = director.update(dt, sim.laneBusy);
     if (cutTo) {
       if (sim.laneBusy) cam.cutsDuringLane++;
+      if (cutsOff) cuts.offCuts++;
       cam.cuts++;
       cam.minCutGap = Math.min(cam.minCutGap, sim.time - lastCut);
+      if (cutTo.reason === 'home') {
+        cuts.home++;
+        const held = sim.time - lastAway;
+        cuts.minAwayHold = Math.min(cuts.minAwayHold, held);
+        cuts.maxAwayHold = Math.max(cuts.maxAwayHold, held);
+        if (cutTo.index !== TUNING.camera.homeAngle) fail(`seed ${seed}: 'home' cut went to angle ${cutTo.index}`);
+      } else {
+        cuts.away++;
+        cuts.byTrigger[cutTo.reason]++;
+        const age = sim.time - lastSeen[cutTo.reason];
+        if (!(age <= TUNING.camera.triggerPending + dt * 1.5)) fail(`seed ${seed}: cut-away on '${cutTo.reason}' with no such event in the last ${TUNING.camera.triggerPending}s (age ${age.toFixed(2)}s) at t=${sim.time.toFixed(2)}`);
+        if (cutTo.reason === lastAwayTrigger) fail(`seed ${seed}: two cut-aways in a row on '${cutTo.reason}'`);
+        if (cutTo.index === TUNING.camera.homeAngle) fail(`seed ${seed}: cut-away to the home angle`);
+        cuts.minAwayGap = Math.min(cuts.minAwayGap, sim.time - lastAway);
+        lastAway = sim.time;
+        lastAwayTrigger = cutTo.reason;
+      }
       lastCut = sim.time;
       rig.cut(cutTo.index, cutTo.side, tg);
     }
@@ -124,6 +164,34 @@ for (let seed = 1; seed <= seeds; seed++) {
       cam.aheadUnder2++;
       const key = `${info.angle}/${TUNING.tiers[g.tier].name}${sim.laneBusy ? '/lane' : ''}`;
       aheadBy[key] = Math.min(aheadBy[key] ?? Infinity, info.aheadSeconds);
+    }
+    // Escort: joined ≥40m back and off camera; never closer than the gap floor.
+    for (const e of events) {
+      if (e.type !== 'escortJoin') continue;
+      const c = sim.escort.cruisers[e.id];
+      esc.joins++;
+      esc.minJoinBehind = Math.min(esc.minJoinBehind, e.behind);
+      if (e.behind < 40) fail(`seed ${seed}: cruiser joined ${e.behind.toFixed(1)}m back (LOCKED ≥40m)`);
+      sim.track.posAt(c.s, c.d, pos);
+      // Any part of a car-sized box (±3m, 0–2m up) in the frame counts as on camera.
+      let seen = false;
+      for (const [ox, oy, oz] of [[0, 0, 0], [3, 0, 3], [-3, 0, -3], [3, 2, -3], [-3, 2, 3]]) {
+        ndc.set(pos.x + ox, oy, pos.z + oz).project(rig.camera);
+        if (ndc.z > -1 && ndc.z < 1 && Math.abs(ndc.x) <= 1 && Math.abs(ndc.y) <= 1) seen = true;
+      }
+      if (seen) {
+        esc.joinsOnCamera++;
+        fail(`seed ${seed}: cruiser ${e.id} joined on camera (${info.angle})`);
+      }
+    }
+    for (const c of sim.escort.cruisers) {
+      if (!c.active) continue;
+      const gap = g.s - c.s;
+      esc.minGap = Math.min(esc.minGap, gap);
+      if (gap < TUNING.escort.minGap - 1e-6) {
+        esc.ahead++;
+        fail(`seed ${seed}: cruiser ${c.id} within ${gap.toFixed(2)}m at tick ${i}`);
+      }
     }
     if (Math.abs(info.screenUpDeg) > TUNING.camera.screenUpMaxDeg) fail(`seed ${seed}: screen-up law broken (${info.screenUpDeg.toFixed(1)}°, ${info.angle}) at tick ${i}`);
     if (info.giantScreenY > TUNING.camera.giantMaxScreenY + 0.005) fail(`seed ${seed}: giant at ${info.giantScreenY.toFixed(3)} of screen (${info.angle}) at tick ${i}`);
@@ -163,6 +231,12 @@ console.log(
     Object.entries(cam.perAngle).map(([k, v]) => `${k} ${((v / cam.frames) * 100).toFixed(0)}%`).join(', '),
 );
 
+console.log(
+  `  cuts (Phase 0c): ${cuts.away} cut-aways (rampage ${cuts.byTrigger.rampage}, heavy ${cuts.byTrigger.heavy}, merge ${cuts.byTrigger.merge}) from ${cuts.triggersSeen} trigger events; ` +
+    `${cuts.home} returns home; min gap between cut-aways ${cuts.minAwayGap.toFixed(2)}s; away held ${cuts.minAwayHold.toFixed(2)}–${cuts.maxAwayHold.toFixed(2)}s; ` +
+    `cuts with the setting off ${cuts.offCuts} (${OFF_SEEDS.size} seeds)`,
+);
+console.log(`  escort: ${esc.joins} joins, nearest join ${esc.minJoinBehind.toFixed(1)}m back, ${esc.joinsOnCamera} on camera; closest gap ever ${esc.minGap.toFixed(2)}m (floor ${TUNING.escort.minGap}m)`);
 if (Object.keys(aheadBy).length) console.log('  road-ahead shortfalls (min s by angle/tier):', JSON.stringify(Object.fromEntries(Object.entries(aheadBy).map(([k, v]) => [k, +v.toFixed(2)]))));
 for (let t = 0; t < 3; t++) {
   if (cad[t].n < 20) fail(`too few cadence samples at ${TUNING.tiers[t].name} (${cad[t].n})`);
@@ -170,8 +244,13 @@ for (let t = 0; t < 3; t++) {
   if (slide[t] >= TUNING.gait.maxFootSlide) fail(`foot slide ${slide[t]}m at ${TUNING.tiers[t].name}`);
 }
 if (cam.cutsDuringLane > 0) fail(`${cam.cutsDuringLane} camera cuts during a lane change`);
-if (cam.minCutGap < TUNING.camera.cutMinInterval - 1e-6) fail(`cuts only ${cam.minCutGap.toFixed(2)}s apart`);
-if (cam.cuts < seeds) fail(`too few cuts to test (${cam.cuts})`);
+if (cuts.minAwayGap < TUNING.camera.cutMinInterval - 1e-6) fail(`cut-aways only ${cuts.minAwayGap.toFixed(2)}s apart`);
+if (cuts.away < seeds) fail(`too few cut-aways to test (${cuts.away})`);
+for (const k of ['rampage', 'heavy', 'merge'] as CutTrigger[]) if (cuts.byTrigger[k] === 0) fail(`no cut-away on '${k}' in ${seeds} seeds`);
+if (cuts.minAwayHold < TUNING.camera.awayHold[0] - 1e-6) fail(`returned home after only ${cuts.minAwayHold.toFixed(2)}s`);
+if (cuts.maxAwayHold > TUNING.camera.awayHold[1] + 2) fail(`stayed away ${cuts.maxAwayHold.toFixed(2)}s`);
+if (cuts.offCuts > 0) fail(`${cuts.offCuts} cuts with Camera cuts: Off`);
+if (esc.joins < seeds) fail(`too few escort joins (${esc.joins})`);
 if (cam.aheadUnder2 > 0) fail(`road ahead under 2s in ${cam.aheadUnder2} frames (min ${cam.minAhead.toFixed(2)}s)`);
 if (p99 > 2) fail(`sim step p99 ${p99.toFixed(2)}ms exceeds the 2ms budget`);
 if (agg.reachedRampage < seeds * 0.5) fail(`bot reached Rampage in only ${agg.reachedRampage}/${seeds} seeds`);

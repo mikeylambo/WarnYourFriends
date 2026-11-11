@@ -2,6 +2,7 @@ import { TUNING, type MassClass } from '../tuning';
 import { clamp } from './math';
 import { Rng } from './rng';
 import { Track } from './track';
+import { Escort } from './escort';
 import type { GiantState, Prop, SimEvent, SimInput, TierDropReason } from './types';
 
 export const CLASS_RANK: Record<MassClass, number> = { light: 0, medium: 1, heavy: 2, immovable: 3 };
@@ -40,6 +41,7 @@ export interface SimStats {
   tierUps: number;
   tierDowns: number;
   footfalls: number;
+  merges: number;
   minSpeed: number;
 }
 
@@ -59,9 +61,11 @@ export class Sim {
   readonly track: Track;
   readonly giant: GiantState;
   readonly rng: Rng;
+  /** Phase 0c: cosmetic police escort (never touches the giant or props). */
+  readonly escort: Escort;
   tick = 0;
   time = 0;
-  stats: SimStats = { timeAtTier: [0, 0, 0], smashes: 0, smashesAcross: 0, bounces: 0, wallBumps: 0, laneChanges: 0, tierUps: 0, tierDowns: 0, footfalls: 0, minSpeed: Infinity };
+  stats: SimStats = { timeAtTier: [0, 0, 0], smashes: 0, smashesAcross: 0, bounces: 0, wallBumps: 0, laneChanges: 0, tierUps: 0, tierDowns: 0, footfalls: 0, merges: 0, minSpeed: Infinity };
 
   private events: SimEvent[] = [];
   private near: Prop[] = [];
@@ -70,6 +74,7 @@ export class Sim {
     this.seed = opts.seed;
     this.rng = new Rng(opts.seed ^ 0x51ed);
     this.track = new Track(opts.seed);
+    this.escort = new Escort(opts.seed, this.track);
     const lane = Math.floor(TUNING.lanes.start / 2);
     const d = this.track.laneCenter(lane);
     const speed = TUNING.giant.startSpeed;
@@ -118,9 +123,16 @@ export class Sim {
     this.stepShoulder(input, dt);
     this.stepLanes(input);
     this.stepSpeed(input, dt);
+    const segBefore = this.track.segmentAt(this.giant.s).index;
     this.advance(dt);
     this.stepLateral(dt);
     this.collide();
+    const seg = this.track.segmentAt(this.giant.s);
+    if (seg.index !== segBefore && seg.kind === 'merge') this.emit({ type: 'merge', from: seg.lanes0, to: seg.lanes1, s: seg.s0 });
+    for (const id of this.escort.step(dt, this.time, this.giant)) {
+      const c = this.escort.cruisers[id];
+      this.emit({ type: 'escortJoin', id, behind: this.giant.s - c.s });
+    }
     this.track.ensure(this.giant.s + TUNING.track.aheadDistance);
     if ((this.tick & 63) === 0) this.track.prune(this.giant.s);
     const g = this.giant;
@@ -145,6 +157,7 @@ export class Sim {
       case 'tierUp': st.tierUps++; break;
       case 'tierDown': st.tierDowns++; break;
       case 'footfall': st.footfalls++; break;
+      case 'merge': st.merges++; break;
     }
   }
 

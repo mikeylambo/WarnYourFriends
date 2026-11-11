@@ -11,6 +11,36 @@ export function toonRamp(): THREE.DataTexture {
   return ramp;
 }
 
+/**
+ * Phase 0c rim light for the giant: a view-space fresnel edge added after
+ * lighting, so his outline reads against a dark road at night. Strength is set
+ * per look (night strongest); one shared uniform drives every giant material.
+ */
+export const RIM = {
+  color: { value: new THREE.Color(0xcbb6ff) },
+  strength: { value: 1 },
+  power: { value: 3.0 },
+};
+const rimCache = new Map<string, THREE.MeshToonMaterial>();
+export function rimToon(color: number, side: THREE.Side = THREE.FrontSide): THREE.MeshToonMaterial {
+  const key = `${color}:${side}`;
+  let m = rimCache.get(key);
+  if (m) return m;
+  m = new THREE.MeshToonMaterial({ color, gradientMap: toonRamp(), side });
+  m.onBeforeCompile = (sh) => {
+    sh.uniforms.rimColor = RIM.color;
+    sh.uniforms.rimStrength = RIM.strength;
+    sh.uniforms.rimPower = RIM.power;
+    sh.fragmentShader = 'uniform vec3 rimColor;\nuniform float rimStrength;\nuniform float rimPower;\n' + sh.fragmentShader.replace(
+      '#include <opaque_fragment>',
+      'float rimF = pow(1.0 - clamp(abs(dot(normalize(normal), normalize(vViewPosition))), 0.0, 1.0), rimPower);\noutgoingLight += rimColor * rimF * rimStrength;\n#include <opaque_fragment>',
+    );
+  };
+  m.customProgramCacheKey = () => 'rim';
+  rimCache.set(key, m);
+  return m;
+}
+
 const cache = new Map<string, THREE.MeshToonMaterial>();
 export function toon(color: number, extra: THREE.MeshToonMaterialParameters = {}): THREE.MeshToonMaterial {
   const key = `${color}:${JSON.stringify(extra)}`;

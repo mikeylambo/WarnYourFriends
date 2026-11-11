@@ -49,7 +49,7 @@ TUNING.camera.angles.forEach((a, i) => {
 });
 KNOBS.push(
   { label: 'Cam look-ahead s', obj: sect('camera'), key: 'lookAheadTime', min: 0, max: 3, step: 0.1, path: 'camera' },
-  { label: 'Cam cut hold min s', obj: sect('camera'), key: 'cutMinInterval', min: 7, max: 30, step: 0.5, path: 'camera' },
+  { label: 'Cam min gap between cut-aways s', obj: sect('camera'), key: 'cutMinInterval', min: 15, max: 60, step: 1, path: 'camera' },
   { label: 'Cam position lag s', obj: sect('camera'), key: 'positionLag', min: 0, max: 1, step: 0.05, path: 'camera' },
   { label: 'Cam look lag s', obj: sect('camera'), key: 'lookLag', min: 0, max: 1, step: 0.05, path: 'camera' },
   { label: 'Stance max m', obj: sect('gait'), key: 'stanceMaxDistance', min: 0.8, max: 3, step: 0.05, path: 'gait' },

@@ -89,4 +89,8 @@ export type SimEvent =
   | { type: 'tierDown'; tier: number; reason: TierDropReason }
   /** `t` is the exact sim time of the plant (sub-tick), for cadence measurement. */
   | { type: 'footfall'; tier: number; foot: 0 | 1; step: number; t: number; s: number; d: number; speed: number; stepLen: number }
-  | { type: 'shoulder'; s: number; d: number };
+  | { type: 'shoulder'; s: number; d: number }
+  /** Phase 0c: the giant enters a merge segment (lane count changes from `from` to `to`). */
+  | { type: 'merge'; from: number; to: number; s: number }
+  /** Phase 0c: an escort cruiser joins the chase, `behind` metres back. */
+  | { type: 'escortJoin'; id: number; behind: number };

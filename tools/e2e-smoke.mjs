@@ -11,6 +11,12 @@
  *   3. Regression (2026-11-10): with WebGL unavailable, the page shows the
  *      "WebGL is switched off" message instead of an inert title.
  *   4. Bot run: reaches Rampage, smashes props, speed floor holds.
+ *   5. Phase 0c: night is the default look; event-driven cuts (each cut-away backed
+ *      by a Rampage / Heavy / merge trigger, ≥15s apart, none mid-lane-change);
+ *      broadcast HUD (LIVE + clock, station bug, chyron from real events);
+ *      escort cruisers trailing; silhouette test passes from every angle at
+ *      night, dusk and day; Camera cuts: Off holds Chase High; pause menu has the
+ *      two new settings.
  */
 import { spawn } from 'node:child_process';
 import { existsSync, mkdirSync } from 'node:fs';
@@ -81,11 +87,12 @@ async function bootAndStart(browser, label, ctxOpts, startAction) {
   if (!(await page.isVisible('#title'))) fail(`${label}: title not visible`);
   if (await page.evaluate(() => window.__GAME.started)) fail(`${label}: started before input`);
   await startAction(page);
-  await page.waitForTimeout(800);
+  // Software GL renders ~10 fps with the night lights, so allow up to 3s for 0.3s of sim time.
+  await page.waitForFunction(() => window.__GAME.started && window.__GAME.state().time > 0.3, null, { timeout: 3000 }).catch(() => {});
   const s = await page.evaluate(() => ({ started: window.__GAME.started, t: window.__GAME.state().time, title: !document.getElementById('title').hidden }));
   if (!s.started || s.title) fail(`${label}: start button did not start the run (${JSON.stringify(s)})`);
   else if (!(s.t > 0.3)) fail(`${label}: sim not advancing after start (t=${s.t})`);
-  else ok(`${label}: starts the sim (t=${s.t.toFixed(2)}s after 0.8s)`);
+  else ok(`${label}: starts the sim (t=${s.t.toFixed(2)}s)`);
   return { ctx, page, problems };
 }
 
@@ -104,7 +111,8 @@ try {
     else ok(`A changes lane ${lane0 + 1} → ${s.lane + 1}`);
     if (s.speed < 2) fail(`speed below floor (${s.speed})`);
     await page.keyboard.press('Escape');
-    await page.waitForTimeout(100);
+    // Pause lands on the next rendered frame; software GL runs ~12 fps, so wait for it (≤1s) rather than a fixed 100ms.
+    await page.waitForFunction(() => window.__GAME.paused, null, { timeout: 1000 }).catch(() => {});
     if (!(await page.evaluate(() => window.__GAME.paused))) fail('Esc did not pause');
     else ok('Esc pauses');
     await page.screenshot({ path: 'test-results/e2e-paused.png' });
@@ -144,7 +152,62 @@ try {
     if (c.minAhead < 2) fail(`under 2s of road ahead (${c.minAhead.toFixed(2)}s)`);
     if (c.cutsDuringLane > 0) fail(`${c.cutsDuringLane} cuts during a lane change`);
     if (c.cuts < 1) fail('no camera cut happened in 30s');
-    if (c.cuts > 1 && c.minCutGap < 7) fail(`cuts ${c.minCutGap.toFixed(2)}s apart`);
+    // Phase 0c: every cut-away backed by a listed trigger; ≥15s apart; never two in a row on the same trigger.
+    const cutLog = await page.evaluate(() => window.__GAME.cutLog());
+    const trig = await page.evaluate(() => window.__GAME.triggerLog());
+    const away = cutLog.filter((k) => k.reason !== 'home');
+    console.log(`  cuts: ${cutLog.map((k) => `${k.t.toFixed(1)}s ${k.reason}`).join(', ')}`);
+    for (const k of away) {
+      if (!['rampage', 'heavy', 'merge'].includes(k.reason)) fail(`cut-away on unknown trigger ${k.reason}`);
+      if (!trig.some((x) => x.kind === k.reason && k.t - x.t >= -1e-6 && k.t - x.t <= 1.05)) fail(`cut-away at ${k.t.toFixed(2)}s on '${k.reason}' with no matching event`);
+    }
+    for (let i = 1; i < away.length; i++) {
+      if (away[i].t - away[i - 1].t < 15 - 1e-6) fail(`cut-aways ${(away[i].t - away[i - 1].t).toFixed(2)}s apart`);
+      if (away[i].reason === away[i - 1].reason) fail(`two cut-aways in a row on '${away[i].reason}'`);
+    }
+    if (cutLog.some((k) => k.laneBusy)) fail('a cut happened during a lane change');
+    if (cutLog.some((k) => k.reason === 'home' && k.index !== 0)) fail('a return home did not go to Chase High');
+    else ok(`cuts: ${away.length} cut-aways, all on listed events, ≥15s apart; ${cutLog.length - away.length} returns to Chase High`);
+
+    // Phase 0c broadcast HUD and escort.
+    const hud = await page.evaluate(() => ({
+      look: window.__GAME.look(),
+      live: getComputedStyle(document.getElementById('hud')).opacity,
+      clock: document.getElementById('clock').textContent,
+      bug: document.getElementById('bug').textContent,
+      chyron: window.__GAME.chyron(),
+      headlines: window.__GAME.headlines(),
+      escort: window.__GAME.escort(),
+    }));
+    if (hud.look !== 'night') fail(`default look is ${hud.look}, expected night`);
+    if (hud.live !== '1') fail('broadcast HUD not visible during play');
+    if (!/^\d+:\d\d$/.test(hud.clock) || hud.clock === '0:00') fail(`LIVE clock not running (${hud.clock})`);
+    if (!/WYF/.test(hud.bug)) fail('station bug missing');
+    if (!hud.chyron.text?.trim()) fail('chyron empty');
+    if (hud.headlines.length < 3) fail(`only ${hud.headlines.length} headlines in 30s`);
+    if (hud.headlines.slice(1).some((h) => !h.sources.length)) fail('a headline with no source event');
+    console.log(`  headlines: ${hud.headlines.map((h) => `[${h.kicker}] ${h.text}`).join(' · ')}`);
+    const active = hud.escort.filter((e) => e.active);
+    if (active.length < 2) fail(`only ${active.length} cruisers in the chase after 30s`);
+    if (active.some((e) => e.gap < 7 - 1e-6)) fail(`a cruiser closed to ${Math.min(...active.map((e) => e.gap)).toFixed(2)}m`);
+    else ok(`escort: ${active.length} cruisers trailing at ${active.map((e) => e.gap.toFixed(1) + 'm').join(', ')}`);
+
+    // Phase 0c silhouette test: every angle at night, dusk and day.
+    await page.evaluate(() => window.__GAME.pause());
+    for (const look of ['night', 'dusk', 'day']) {
+      await page.evaluate((l) => window.__GAME.setLook(l), look);
+      for (let a = 0; a < 3; a++) {
+        await page.evaluate((i) => window.__GAME.setAngle(i, 1), a);
+        const r = await page.evaluate(() => window.__GAME.silhouette());
+        const line = `${look}/${['Chase High', 'Wide Side', 'Long Lens'][a]}: ${r.heightPx.toFixed(0)}px tall, contrast ${r.contrast.toFixed(2)}:1 (${r.polarity}), edge ${(r.edgeShare * 100).toFixed(0)}%`;
+        if (!r.pass) fail(`silhouette ${line}`);
+        else ok(`silhouette ${line}`);
+      }
+    }
+    await page.evaluate(() => {
+      window.__GAME.setLook(null);
+      window.__GAME.setAngle(0, 1);
+    });
     for (let t = 0; t < 3; t++) {
       const k = gt.cadence[t];
       if (k.n && (k.min < 2.0 - 1e-6 || k.max > 2.3 + 1e-6)) fail(`cadence out of band at tier ${t}: ${k.min}–${k.max}`);
@@ -158,6 +221,23 @@ try {
     if (s.stats.smashes + s.stats.knocks <= 0) fail('nothing smashed');
     if (s.stats.minSpeed < 2) fail('speed floor violated');
     if (problems.length) fail(`bot run problems:\n    ${problems.join('\n    ')}`);
+    await ctx.close();
+  }
+  // 5b. Camera cuts: Off holds Chase High for the whole run; the pause menu has both new settings.
+  {
+    const ctx = await browser.newContext({ viewport: { width: 1280, height: 720 } });
+    const page = await ctx.newPage();
+    await page.goto(`${URL}?seed=3&bot=1&timescale=3&cuts=0`);
+    await page.waitForFunction(() => window.__GAME && window.__GAME.started, null, { timeout: 15000 });
+    await page.waitForFunction(() => window.__GAME.state().time > 25, null, { timeout: 60000 });
+    const r = await page.evaluate(() => ({ cuts: window.__GAME.cutLog().length, trig: window.__GAME.triggerLog().length, cam: window.__GAME.camera().angle }));
+    if (r.cuts !== 0 || r.cam !== 'Chase High') fail(`Camera cuts: Off still cut (${JSON.stringify(r)})`);
+    else ok(`Camera cuts: Off holds Chase High (${r.trig} trigger events, 0 cuts)`);
+    await page.keyboard.press('Escape');
+    const opts = await page.evaluate(() => ({ cuts: !!document.getElementById('opt-cuts'), live: !!document.getElementById('opt-livetime'), liveChecked: document.getElementById('opt-livetime').checked }));
+    if (!opts.cuts || !opts.live) fail('pause menu is missing Camera cuts or LIVE TIME');
+    else if (opts.liveChecked) fail('LIVE TIME should default to off');
+    else ok('pause menu: Camera cuts and LIVE TIME (default off)');
     await ctx.close();
   }
   await browser.close();

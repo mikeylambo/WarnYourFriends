@@ -54,6 +54,8 @@ export interface CameraAngle {
   /** Camera to framed point, before the tier scale. */
   distance: number;
   fov: number;
+  /** Phase 0c: per-angle look-ahead (s); defaults to camera.lookAheadTime. */
+  lookAheadTime?: number;
 }
 
 export const TUNING = {
@@ -213,17 +215,28 @@ export const TUNING = {
   camera: {
     angles: [
       { name: 'Chase High', yawDeg: 0, pitchDeg: 48, distance: 40, fov: 35 },
-      { name: 'Wide Side', yawDeg: 35, pitchDeg: 52, distance: 55, fov: 35 },
-      { name: 'Long Lens', yawDeg: 15, pitchDeg: 40, distance: 70, fov: 22 },
+      // Cut-aways look less far ahead so the escort behind the giant is in shot (≥2s of road ahead still enforced).
+      { name: 'Wide Side', yawDeg: 35, pitchDeg: 52, distance: 55, fov: 35, lookAheadTime: 0.5 },
+      { name: 'Long Lens', yawDeg: 15, pitchDeg: 40, distance: 70, fov: 22, lookAheadTime: 0.7 },
     ] as CameraAngle[],
     /** LOCKED (v0.3): direction of travel points up the screen within this many degrees. */
     screenUpMaxDeg: 35,
     /** Yaw is clamped this far inside the law, for lag on curves and wobble. */
     screenUpMarginDeg: 4,
-    /** v0.3: cut at most once per 7s. */
-    cutMinInterval: 7,
-    /** Hold an angle this long (s, random in range) before the director wants to cut. */
-    cutHold: [7, 12] as [number, number],
+    /**
+     * Phase 0c: cuts are event-driven. Chase High is home; the director cuts away
+     * only on these triggers and returns home after `awayHold`.
+     */
+    homeAngle: 0,
+    /** Phase 0c: at least 15s between cut-aways (tighter than v0.3's 7s). */
+    cutMinInterval: 15,
+    /** Phase 0c: return to Chase High after this long away (s, random in range). */
+    awayHold: [6, 10] as [number, number],
+    /**
+     * A trigger that lands mid-lane-change waits this long for the move to end (s).
+     * Covers a lane change plus one queued change at Rampage (0.4 + 0.4).
+     */
+    triggerPending: 1.0,
     /** v0.3: hard cut with a 1-frame flash. */
     cutFlashFrames: 1,
     /** Frame the point this many seconds ahead of the giant (speed × time). */
@@ -250,6 +263,85 @@ export const TUNING = {
     /** §10 tier-up: brief camera pull-out (extra metres of distance, decays). */
     tierUpPullOut: 6,
     tierUpPullOutTime: 0.5,
+  },
+
+  /**
+   * Phase 0c escort: 2–3 cruisers trail the giant with lights and sirens. They
+   * never catch up and never attack (pursuit AI is Phase 2); they sell the chase.
+   */
+  escort: {
+    count: 3,
+    /** LOCKED (§1): pursuers never spawn within 40m. Spawning 100m back also keeps them behind every camera angle. */
+    spawnBehind: 100,
+    /** First cruiser joins after this long; the rest follow at these gaps (s). */
+    firstJoin: [5, 8] as [number, number],
+    joinGap: [3, 6] as [number, number],
+    /** Gap each cruiser settles at behind the giant (m): the lead's light bar peeks into the bottom of the Chase High frame. */
+    trail: [9, 14, 20],
+    /** Hard floor on the gap (m). They never catch up. */
+    minGap: 7,
+    /** Closing speed over the giant's while catching up to the trail gap (m/s). */
+    closeSpeed: 6,
+    /** Time constant for holding the trail gap (s). */
+    holdTau: 0.6,
+    /** Side offset from the giant's path for the 2nd and 3rd cruisers (m), dropped when a prop is in the way. */
+    sideOffset: 1.6,
+    /** Lateral easing speed for that offset (m/s). */
+    sideSpeed: 3,
+  },
+
+  /** Phase 0c traffic reactions (presentation): cars ahead brake, swerve and honk as he approaches. */
+  traffic: {
+    /** Brake lights and hazards come on when the giant is this close behind (m). */
+    brakeAt: 45,
+    /** Swerve and honk inside this distance (m). */
+    swerveAt: 26,
+    /** Only cars within this many metres across the road react. */
+    lateralReach: 7,
+    /** Visual swerve: lateral nudge (m) and yaw (deg) inside the car's own footprint; the hitbox doesn't move. */
+    swerveOffset: 0.35,
+    swerveYawDeg: 7,
+    /** At most one honk this often (s). */
+    honkGap: 0.45,
+    /** Rampage footfalls bounce cars within this radius (m) on their suspension. */
+    bounceRadius: 16,
+    /** Suspension spring: peak drop (m) at the foot, frequency (Hz), damping ratio. */
+    bounceDrop: 0.18,
+    bounceHz: 2.2,
+    bounceDamping: 0.25,
+  },
+
+  /** Phase 0c broadcast (§21). */
+  broadcast: {
+    /** §21: a new headline at most every 4s; tier changes interrupt with BREAKING. */
+    headlineEvery: 4,
+    /** §21: no verb or place reused within the last 5 headlines. */
+    antiRepeat: 5,
+    /** Smashes inside one headline window are counted together ("3 Cars"). */
+    tallyWindow: 4,
+    /** Opening headline after this long. */
+    openAt: 1.2,
+  },
+
+  /** Phase 0c look: night by default; LIVE TIME follows the local clock. */
+  look: {
+    /** Local hours (24h): day from dayStart, dusk from duskStart, night from nightStart; dawn counts as dusk. */
+    dawnStart: 5,
+    dayStart: 7,
+    duskStart: 17,
+    nightStart: 20,
+    /** Sodium streetlights every this many metres, alternating sides. */
+    lampSpacing: 20,
+    /** Real point lights reused on the nearest lamps (the rest are glow decals). Each light costs every lit pixel. */
+    lampLights: 2,
+    /** Chopper spotlight: ground pool radius (m), lag following the giant (s), wander (m). */
+    spotRadius: 7,
+    spotLag: 0.25,
+    spotWander: 1.2,
+    /** Chopper shadow crosses the road every this many seconds (random in range). */
+    chopperShadowEvery: [16, 32] as [number, number],
+    /** Siren flash rate (Hz). */
+    sirenHz: 2.2,
   },
 
   /** Input gestures (v0.3). */

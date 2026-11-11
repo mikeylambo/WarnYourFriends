@@ -2,8 +2,10 @@ import type { Material, PropKind } from '../sim/types';
 
 /**
  * §23 value rule: the world sits light, the giant is always the darkest thing,
- * props are mid-value. Sun-bleached, slightly toy-like. (The v0.3 references are
- * night footage; a night look is an open question for Mike, not built.)
+ * props are mid-value. Sun-bleached, slightly toy-like by day. Phase 0c makes
+ * night the default look (the v0.3 reference footage): albedos stay the same and
+ * the LOOKS below set the light. At night the road is lit in sodium pools and the
+ * chopper's spotlight, and the giant reads as a dark silhouette with a rim.
  */
 export const PALETTE = {
   sky: 0xf1ebdf,
@@ -31,6 +33,8 @@ export const PALETTE = {
   giantHair: 0xfaf7f0,
   giantSkin: 0x6b4a5e,
   giantBand: 0xd9ccb0,
+  /** Phase 0c ink outline around the giant. */
+  giantOutline: 0x07030f,
 };
 
 export const KIND_COLORS: Record<PropKind, number[]> = {
@@ -50,4 +54,37 @@ export const MATERIAL_DEBRIS: Record<Material, number[]> = {
   fruit: [0xf28c28, 0xe4412b, 0x7cbf3a, 0xf5d33b],
   concrete: [0xcfcac0, 0xb5b0a6, 0xe0dbd1],
   paper: [0xf4f0e6, 0xe8e2d4, 0x333333],
+};
+
+export type TimeOfDay = 'night' | 'dusk' | 'day';
+
+/** Light rig per time of day. Intensities are three.js physical units (point/spot in candela). */
+export interface Look {
+  sky: number;
+  fog: number;
+  fogNear: number;
+  fogFar: number;
+  hemiSky: number;
+  hemiGround: number;
+  hemi: number;
+  sunColor: number;
+  sun: number;
+  /** Sun/moon direction (from). */
+  sunPos: [number, number, number];
+  /** Glow decals and halos (0 = off). */
+  glow: number;
+  lamp: number;
+  spot: number;
+  siren: number;
+  rim: number;
+  /** Faint chopper-shadow opacity. */
+  shadow: number;
+  /** Emissive "lit window" level on buildings. */
+  windows: number;
+}
+
+export const LOOKS: Record<TimeOfDay, Look> = {
+  night: { sky: 0x0a0c18, fog: 0x0a0c18, fogNear: 90, fogFar: 320, hemiSky: 0x5a6aa8, hemiGround: 0x1a1622, hemi: 0.16, sunColor: 0x8fa2ff, sun: 0.16, sunPos: [30, 100, 40], glow: 1, lamp: 38, spot: 300, siren: 32, rim: 0.55, shadow: 0.2, windows: 1 },
+  dusk: { sky: 0x4a3a5e, fog: 0x6a4f6a, fogNear: 110, fogFar: 380, hemiSky: 0xd89a80, hemiGround: 0x3a3040, hemi: 0.7, sunColor: 0xff9a5a, sun: 0.75, sunPos: [-90, 30, -20], glow: 0.55, lamp: 20, spot: 200, siren: 30, rim: 0.45, shadow: 0.25, windows: 0.6 },
+  day: { sky: 0xf1ebdf, fog: 0xf1ebdf, fogNear: 160, fogFar: 420, hemiSky: 0xfff7e8, hemiGround: 0xb8b0a0, hemi: 1.5, sunColor: 0xffffff, sun: 1.7, sunPos: [-40, 100, -25], glow: 0, lamp: 0, spot: 0, siren: 18, rim: 0.2, shadow: 0.32, windows: 0 },
 };

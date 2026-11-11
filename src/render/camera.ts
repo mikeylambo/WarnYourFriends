@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { TUNING, type CameraAngle } from '../tuning';
 import { approach } from '../sim/math';
 import { Rng } from '../sim/rng';
+import type { SimEvent } from '../sim/types';
 
 /**
  * Oblique news-chopper camera with v0.3 broadcast angle cuts.
@@ -17,8 +18,8 @@ import { Rng } from '../sim/rng';
  *  2. The giant never sits below 85% of the screen height (look target pulled in).
  *  3. Line of sight: climb rather than cut through anything solid.
  *
- * Cuts are hard: the director picks the moment (no lane change in progress,
- * at most once per 7s) and the rig snaps to the new angle with no lag.
+ * Cuts are hard: the director picks the moment (event-driven, never during a
+ * lane change; see Director) and the rig snaps to the new angle with no lag.
  * Uses only three.js math, so it runs headless in tests.
  */
 
@@ -151,7 +152,7 @@ export class CameraRig {
    */
   private solveLeadCap(t: CameraTarget): number {
     const C = TUNING.camera;
-    const full = t.speed * C.lookAheadTime;
+    const full = t.speed * this.leadTime();
     let lo = 0;
     let hi = full;
     const fits = (cap: number) => {
@@ -187,15 +188,19 @@ export class CameraRig {
     return Math.max(-lim, Math.min(lim, a.yawDeg)) * this.side;
   }
 
+  /** Look-ahead time for the current angle (cut-aways frame less ahead, more of the chase behind). */
+  private leadTime(): number {
+    return this.angle.lookAheadTime ?? TUNING.camera.lookAheadTime;
+  }
+
   private distance(): number {
     return this.angle.distance * this.tierScale + this.pullOut;
   }
 
   private desired(t: CameraTarget) {
-    const C = TUNING.camera;
     const a = this.angle;
     const dist = this.distance();
-    const lookAhead = Math.max(0, Math.min(t.speed * C.lookAheadTime, this.leadCap));
+    const lookAhead = Math.max(0, Math.min(t.speed * this.leadTime(), this.leadCap));
     const fx = Math.cos(t.travel);
     const fz = Math.sin(t.travel);
     const look = new THREE.Vector3(t.x + fx * lookAhead, 0, t.z + fz * lookAhead);
@@ -388,7 +393,7 @@ export class CameraRig {
     // Look-ahead feedback: remember how far ahead framing allowed, so the next frame starts there.
     if (dt > 0) {
       const err = C.giantMaxScreenY - 0.01 - yBeforeClamp;
-      const full = t.speed * C.lookAheadTime;
+      const full = t.speed * this.leadTime();
       if (!Number.isFinite(this.leadCap)) this.leadCap = full;
       this.leadCap = Math.max(0, Math.min(full + 2, this.leadCap + err * 3 * this.distance() * dt));
     }
@@ -416,48 +421,114 @@ export class CameraRig {
   }
 }
 
+/** Phase 0c: the only things allowed to cut the camera away from Chase High. */
+export type CutTrigger = 'rampage' | 'heavy' | 'merge';
+
+/** Map a sim event to the cut trigger it is, if any. */
+export function cutTriggerFor(e: SimEvent): CutTrigger | null {
+  if (e.type === 'tierUp' && e.tier === TUNING.tiers.length - 1) return 'rampage';
+  if (e.type === 'smash' && e.cls === 'heavy') return 'heavy';
+  if (e.type === 'merge' && e.from !== e.to) return 'merge';
+  return null;
+}
+
+export interface CutDecision {
+  index: number;
+  side: number;
+  /** What caused it: a trigger for a cut-away, 'home' for the return to Chase High. */
+  reason: CutTrigger | 'home';
+}
+
 /**
- * The broadcast director: decides when to cut and to which angle.
- * Cuts only when no lane change is in progress, at most once per 7s.
+ * The broadcast director (Phase 0c): event-driven, not timed.
+ *
+ * Chase High is home. It cuts away only on a trigger (reaching Rampage, a Heavy
+ * smash, a lane-count merge), returns home after 6–10s, keeps ≥15s between
+ * cut-aways, never cuts away twice in a row on the same trigger, and never cuts
+ * (away or home) while a lane change is in progress. A trigger that lands
+ * mid-lane-change waits up to `triggerPending` for the move to finish.
  * Seeded per run so headless tests are reproducible.
  */
 export class Director {
   private rng: Rng;
-  private sinceCut = 0;
-  private hold: number;
-  current = 0;
+  /** Sim time since the last cut-away. */
+  private sinceAway = Infinity;
+  private awayFor = 0;
+  private hold = 0;
+  private pending: { kind: CutTrigger; ttl: number } | null = null;
+  private lastAwayAngle = 0;
+  /** Trigger of the most recent cut-away. */
+  lastTrigger: CutTrigger | null = null;
+  /** Cuts on/off (setting). Off holds Chase High. */
+  enabled = true;
+  /** Dev: hold a forced angle until released (?angle=, screenshots). */
+  pinned = false;
+  current: number = TUNING.camera.homeAngle;
   side = 1;
   cuts = 0;
+  awayCuts = 0;
 
   constructor(seed: number) {
     this.rng = new Rng((seed ^ 0xc0ffee) >>> 0);
-    this.hold = this.nextHold();
   }
 
-  private nextHold(): number {
+  get home(): boolean {
+    return this.current === TUNING.camera.homeAngle;
+  }
+
+  /** A cut-worthy event happened. Returns whether it was accepted (pending a cut). */
+  trigger(kind: CutTrigger): boolean {
+    if (!this.enabled || this.pinned || !this.home || this.pending) return false;
+    if (this.sinceAway < TUNING.camera.cutMinInterval) return false;
+    if (kind === this.lastTrigger) return false;
+    this.pending = { kind, ttl: TUNING.camera.triggerPending };
+    return true;
+  }
+
+  /** Advance in sim time; returns a cut to make now, else null. */
+  update(dt: number, laneBusy: boolean): CutDecision | null {
     const C = TUNING.camera;
-    return Math.max(C.cutMinInterval, this.rng.range(C.cutHold[0], C.cutHold[1]));
-  }
-
-  /** Advance; returns the new angle index and side when it's time to cut, else null. */
-  update(dt: number, laneBusy: boolean): { index: number; side: number } | null {
-    this.sinceCut += dt;
-    if (this.sinceCut < this.hold || laneBusy) return null;
-    const n = TUNING.camera.angles.length;
-    let next = this.rng.int(0, n - 2);
-    if (next >= this.current) next++;
-    this.current = next;
+    this.sinceAway += dt;
+    if (this.pinned) return null;
+    if (!this.home) {
+      this.awayFor += dt;
+      if ((this.awayFor >= this.hold || !this.enabled) && !laneBusy) {
+        this.current = C.homeAngle;
+        this.side = 1;
+        this.cuts++;
+        return { index: this.current, side: this.side, reason: 'home' };
+      }
+      return null;
+    }
+    if (!this.pending) return null;
+    if (laneBusy) {
+      this.pending.ttl -= dt;
+      if (this.pending.ttl <= 0) this.pending = null;
+      return null;
+    }
+    const kind = this.pending.kind;
+    this.pending = null;
+    // Alternate the away angles so two cut-aways in a row look different.
+    const away: number[] = [];
+    for (let i = 0; i < C.angles.length; i++) if (i !== C.homeAngle) away.push(i);
+    const pool = away.length > 1 ? away.filter((i) => i !== this.lastAwayAngle) : away;
+    this.current = pool[this.rng.int(0, pool.length - 1)];
+    this.lastAwayAngle = this.current;
     this.side = this.rng.chance(0.5) ? 1 : -1;
-    this.sinceCut = 0;
-    this.hold = this.nextHold();
+    this.hold = this.rng.range(C.awayHold[0], C.awayHold[1]);
+    this.awayFor = 0;
+    this.sinceAway = 0;
+    this.lastTrigger = kind;
     this.cuts++;
-    return { index: this.current, side: this.side };
+    this.awayCuts++;
+    return { index: this.current, side: this.side, reason: kind };
   }
 
-  /** Force an angle (dev/screenshots only; the T panel and ?angle=). */
-  force(index: number, side = 1) {
+  /** Force an angle (dev/screenshots only: C key, ?angle=, __GAME.setAngle). Pinned until released. */
+  force(index: number, side = 1, pin = true) {
     this.current = index;
     this.side = side;
-    this.sinceCut = 0;
+    this.pending = null;
+    this.pinned = pin && index !== TUNING.camera.homeAngle;
   }
 }

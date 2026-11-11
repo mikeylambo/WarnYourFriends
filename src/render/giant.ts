@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { TUNING } from '../tuning';
 import type { GaitFrame, Vec3 } from '../anim/gait';
 import { PALETTE } from './palette';
-import { blobTexture, toon } from './toon';
+import { blobTexture, rimToon } from './toon';
 
 /**
  * Greybox giant (Phase 0b). A placeholder that swaps without touching logic
@@ -20,6 +20,8 @@ import { blobTexture, toon } from './toon';
 const CAPE_SEGS = 6;
 /** Knee length: from the shoulders (~3.0m) to about the knee (~1.0m). */
 const CAPE_LEN = 1.9;
+/** Ink outline thickness (m): ~2px at Chase High distance. */
+const OUTLINE_WIDTH = 0.06;
 
 export interface GiantPose {
   x: number;
@@ -38,7 +40,7 @@ export interface GiantPose {
 }
 
 function box(w: number, h: number, d: number, color: number): THREE.Mesh {
-  return new THREE.Mesh(new THREE.BoxGeometry(w, h, d), toon(color));
+  return new THREE.Mesh(new THREE.BoxGeometry(w, h, d), rimToon(color));
 }
 
 const UP = new THREE.Vector3(0, 1, 0);
@@ -89,7 +91,7 @@ export class GiantView {
       const pauldron = box(0.95, 0.38, 0.62, PALETTE.giantBone);
       pauldron.position.set(0, 1.42, side * 0.78);
       pauldron.rotation.x = side * 0.25;
-      const horn = new THREE.Mesh(new THREE.ConeGeometry(0.16, 0.85, 6), toon(PALETTE.giantBone));
+      const horn = new THREE.Mesh(new THREE.ConeGeometry(0.16, 0.85, 6), rimToon(PALETTE.giantBone));
       horn.position.set(0.1, 1.85, side * 1.02);
       horn.rotation.x = side * -0.75;
       horn.rotation.z = -0.25;
@@ -132,7 +134,7 @@ export class GiantView {
     const seg = (w: number, color: number) => {
       const g = new THREE.BoxGeometry(w, 1, w);
       g.translate(0, 0.5, 0);
-      return new THREE.Mesh(g, toon(color));
+      return new THREE.Mesh(g, rimToon(color));
     };
     for (let i = 0; i < 2; i++) {
       const thigh = seg(0.44, PALETTE.giantBody);
@@ -152,7 +154,7 @@ export class GiantView {
       idx.push(a, a + 1, a + 2, a + 1, a + 3, a + 2);
     }
     this.capeGeo.setIndex(idx);
-    this.cape = new THREE.Mesh(this.capeGeo, toon(PALETTE.giantCape, { side: THREE.DoubleSide }));
+    this.cape = new THREE.Mesh(this.capeGeo, rimToon(PALETTE.giantCape, THREE.DoubleSide));
     this.cape.frustumCulled = false;
     for (let i = 0; i <= CAPE_SEGS; i++) this.capePts.push(new THREE.Vector3());
 
@@ -160,10 +162,40 @@ export class GiantView {
     sg.rotateX(-Math.PI / 2);
     this.shadow = new THREE.Mesh(sg, new THREE.MeshBasicMaterial({ map: blobTexture(), transparent: true, depthWrite: false }));
     this.shadow.scale.set(3.2, 1, 3.2);
+    this.addOutlines();
+  }
+
+  /**
+   * Phase 0c ink outline: an inverted hull (back faces of each part grown by a few
+   * cm) so the giant's shape holds against a lit road even where his bone and
+   * hair parts are light. The cape is already the darkest thing on screen.
+   */
+  private addOutlines() {
+    const mat = new THREE.MeshBasicMaterial({ color: PALETTE.giantOutline, side: THREE.BackSide });
+    const t = OUTLINE_WIDTH;
+    const parts: THREE.Mesh[] = [];
+    for (const o of [this.root, this.legs, ...this.braid]) o.traverse((m) => (m as THREE.Mesh).isMesh && parts.push(m as THREE.Mesh));
+    for (const m of parts) {
+      const g = m.geometry.clone();
+      g.computeBoundingBox();
+      const c = g.boundingBox!.getCenter(new THREE.Vector3());
+      const p = g.getAttribute('position');
+      for (let i = 0; i < p.count; i++) {
+        p.setXYZ(i, p.getX(i) + Math.sign(p.getX(i) - c.x) * t, p.getY(i) + Math.sign(p.getY(i) - c.y) * t, p.getZ(i) + Math.sign(p.getZ(i) - c.z) * t);
+      }
+      const hull = new THREE.Mesh(g, mat);
+      hull.userData.outline = true;
+      m.add(hull);
+    }
   }
 
   get objects(): THREE.Object3D[] {
     return [this.root, this.legs, this.cape, this.shadow, ...this.braid];
+  }
+
+  /** The giant's body without his ground shadow (silhouette test). */
+  get bodyObjects(): THREE.Object3D[] {
+    return [this.root, this.legs, this.cape, ...this.braid];
   }
 
   reset() {

@@ -13,6 +13,14 @@
       <div id="flash"></div>
 
       <div id="debug" hidden></div>
+
+      <!-- Phase 0c broadcast HUD (§21): LIVE badge, station bug, chyron. -->
+      <div id="hud" aria-live="polite">
+        <div id="live"><span class="dot"></span><b>LIVE</b><span id="clock">0:00</span></div>
+        <div id="bug" aria-hidden="true"><span class="ch">6</span><span class="call">WYF<i>NEWS</i></span></div>
+        <div id="breaking" aria-hidden="true"><span>BREAKING NEWS</span></div>
+        <div id="chyron"><div class="kicker">SPOTTED</div><div class="text"><span>&nbsp;</span></div></div>
+      </div>
       <div id="camtag" aria-hidden="true"></div>
       <div id="tierbar" aria-hidden="true"><span class="name">JOG</span><span class="meter"><i></i></span></div>
 
@@ -24,9 +32,9 @@
 
       <div id="title" class="overlay">
         <div class="card">
-          <div class="kicker">PHASE 0b · THE LANE RUN</div>
+          <div class="kicker">PHASE 0c · LIVE AT NIGHT</div>
           <h1>WARN YOUR FRIENDS</h1>
-          <p class="sub">Greybox feel test. He runs; you pick the lane. Smash across it. No ratings, no cops.</p>
+          <p class="sub">Greybox feel test. He runs; you pick the lane. Smash across it. The news is watching. The cruisers are just watching.</p>
           <ul class="controls">
             <li><b>Lane</b> A/D or ←/→ · stick flick or d-pad · swipe left/right</li>
             <li><b>Brake</b> S / Space · LT · swipe down and hold</li>
@@ -52,6 +60,8 @@
           <h2>PAUSED</h2>
           <label><input type="checkbox" id="opt-reduced" /> Reduced Motion (no wobble, no camera jolt)</label>
           <label><input type="checkbox" id="opt-flashes" /> Reduce Flashes</label>
+          <label><input type="checkbox" id="opt-cuts" /> Camera cuts: On (off holds Chase High)</label>
+          <label><input type="checkbox" id="opt-livetime" /> LIVE TIME (lighting follows your clock; off = always night)</label>
           <label><input type="checkbox" id="opt-debug" /> Debug overlay</label>
           <button id="resume" class="go">Resume</button>
         </div>

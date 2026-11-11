@@ -3,10 +3,14 @@ export interface Settings {
   reducedMotion: boolean;
   reduceFlashes: boolean;
   debug: boolean;
+  /** Phase 0c: event-driven broadcast cuts. Off holds Chase High. */
+  cameraCuts: boolean;
+  /** Phase 0c LIVE TIME: lighting follows the local clock. Off = always night. */
+  liveTime: boolean;
 }
 
 const KEY = 'wyf.settings.v1';
-const DEFAULTS: Settings = { reducedMotion: false, reduceFlashes: false, debug: true };
+const DEFAULTS: Settings = { reducedMotion: false, reduceFlashes: false, debug: true, cameraCuts: true, liveTime: false };
 
 export function loadSettings(): Settings {
   try {
@@ -17,6 +21,8 @@ export function loadSettings(): Settings {
       reducedMotion: typeof parsed.reducedMotion === 'boolean' ? parsed.reducedMotion : DEFAULTS.reducedMotion,
       reduceFlashes: typeof parsed.reduceFlashes === 'boolean' ? parsed.reduceFlashes : DEFAULTS.reduceFlashes,
       debug: typeof parsed.debug === 'boolean' ? parsed.debug : DEFAULTS.debug,
+      cameraCuts: typeof parsed.cameraCuts === 'boolean' ? parsed.cameraCuts : DEFAULTS.cameraCuts,
+      liveTime: typeof parsed.liveTime === 'boolean' ? parsed.liveTime : DEFAULTS.liveTime,
     };
   } catch {
     console.warn('Settings were unreadable and have been reset to defaults.');

@@ -23,7 +23,7 @@ html, body {
 #flash { position: absolute; inset: 0; background: #fff; opacity: 0; pointer-events: none; }
 
 #debug {
-  position: absolute; top: 8px; left: 8px;
+  position: absolute; top: 52px; left: 8px;
   font: 12px/1.35 ui-monospace, SFMono-Regular, Menlo, monospace;
   background: rgba(20, 8, 36, 0.72); color: #f6f1e4;
   padding: 6px 8px; border-radius: 4px; white-space: pre; pointer-events: none;
@@ -31,7 +31,7 @@ html, body {
 
 /* Phase 0 tier readout: greybox stand-in until the broadcast HUD (§21). */
 #tierbar {
-  position: absolute; left: 50%; bottom: calc(16px + env(safe-area-inset-bottom));
+  position: absolute; left: 50%; top: calc(12px + env(safe-area-inset-top));
   transform: translateX(-50%);
   display: flex; align-items: center; gap: 10px;
   background: rgba(20, 8, 36, 0.8); padding: 6px 12px; border-radius: 3px;
@@ -108,9 +108,57 @@ html:not([data-boot='ok']) #start { opacity: 0.55; cursor: progress; }
 
 /* v0.3 cut graphic: a subtle angle tag, bottom-left like a broadcast camera ID. */
 #camtag {
-  position: absolute; left: 16px; bottom: calc(16px + env(safe-area-inset-bottom));
+  position: absolute; left: 16px; bottom: calc(78px + env(safe-area-inset-bottom));
   font: 700 12px/1 ui-sans-serif, system-ui, sans-serif; letter-spacing: 0.16em;
   color: #fff; background: rgba(20, 8, 36, 0.55); padding: 5px 8px; border-left: 3px solid var(--red);
   opacity: 0; transform: translateX(-6px); transition: opacity 0.25s, transform 0.25s; pointer-events: none;
 }
 #camtag.show { opacity: 1; transform: none; }
+
+/* --- Phase 0c broadcast HUD (§21) ------------------------------------------- */
+#hud { position: absolute; inset: 0; pointer-events: none; opacity: 0; transition: opacity 0.4s; }
+html.playing #hud { opacity: 1; }
+#live {
+  position: absolute; top: calc(10px + env(safe-area-inset-top)); left: 10px;
+  display: flex; align-items: center; gap: 7px;
+  font: 800 13px/1 ui-sans-serif, system-ui, sans-serif; letter-spacing: 0.12em; color: #fff;
+}
+#live b { background: var(--red); padding: 5px 8px 4px; box-shadow: 0 0 14px rgba(215, 38, 61, 0.65); }
+#live .dot { width: 9px; height: 9px; border-radius: 50%; background: #ff3b4e; box-shadow: 0 0 8px #ff3b4e; animation: livepulse 1.2s ease-in-out infinite; }
+#live #clock { background: rgba(10, 8, 20, 0.7); padding: 5px 8px 4px; font-variant-numeric: tabular-nums; letter-spacing: 0.06em; }
+@keyframes livepulse { 50% { opacity: 0.25; } }
+#bug {
+  position: absolute; top: calc(10px + env(safe-area-inset-top)); right: 58px;
+  display: flex; align-items: stretch; opacity: 0.82; color: #fff;
+  font: 900 12px/1 ui-sans-serif, system-ui, sans-serif;
+}
+#bug .ch { background: #fff; color: var(--red); font-size: 26px; padding: 2px 7px 0; display: grid; place-items: center; }
+#bug .call { background: rgba(10, 8, 20, 0.72); padding: 5px 7px; letter-spacing: 0.14em; display: flex; flex-direction: column; justify-content: center; gap: 3px; }
+#bug .call i { font-style: normal; font-weight: 700; font-size: 9px; letter-spacing: 0.3em; color: #ff8a96; }
+#chyron {
+  position: absolute; left: 12px; right: 12px; bottom: calc(14px + env(safe-area-inset-bottom));
+  display: flex; align-items: stretch; height: 44px; max-width: 980px; margin: 0 auto;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.45);
+}
+html.touch #chyron { right: 128px; }
+#chyron .kicker {
+  background: var(--red); color: #fff; padding: 0 12px; display: grid; place-items: center;
+  font: 900 13px/1 ui-sans-serif, system-ui, sans-serif; letter-spacing: 0.14em; white-space: nowrap;
+}
+#chyron .kicker.breaking { background: #fff; color: var(--red); }
+#chyron .text {
+  flex: 1; background: rgba(246, 241, 228, 0.96); color: var(--ink); overflow: hidden; position: relative;
+  font: 800 clamp(13px, 2.1vw, 20px)/44px ui-sans-serif, system-ui, sans-serif; letter-spacing: 0.01em; text-transform: uppercase;
+}
+#chyron .text span { display: block; padding: 0 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#chyron .text span.in { animation: chyin 0.35s cubic-bezier(.2,.8,.2,1); }
+@keyframes chyin { from { transform: translateY(100%); opacity: 0; } to { transform: none; opacity: 1; } }
+#breaking {
+  position: absolute; left: 0; right: 0; bottom: calc(66px + env(safe-area-inset-bottom)); height: 34px;
+  background: var(--red); color: #fff; display: grid; place-items: center; transform: translateX(-102%);
+  font: 900 18px/1 ui-sans-serif, system-ui, sans-serif; letter-spacing: 0.3em; box-shadow: 0 0 30px rgba(215, 38, 61, 0.6);
+}
+#breaking.go { animation: wipe 1.5s cubic-bezier(.15,.9,.2,1) forwards; }
+#breaking.soft.go { animation: wipesoft 1.5s ease forwards; }
+@keyframes wipe { 0% { transform: translateX(-102%); } 14% { transform: none; } 80% { transform: none; opacity: 1; } 100% { transform: none; opacity: 0; } }
+@keyframes wipesoft { 0% { transform: none; opacity: 0; } 20% { opacity: 0.9; } 80% { opacity: 0.9; } 100% { opacity: 0; transform: none; } }

@@ -1,0 +1,200 @@
+[
+  {
+    "file": "night-1-chase-high.png",
+    "look": "night",
+    "angle": "Chase High",
+    "tier": 2,
+    "speed": 15,
+    "screenUp": 0,
+    "giantY": 0.792,
+    "silhouette": {
+      "heightPx": 123,
+      "giantLuma": 0.02,
+      "surroundLuma": 0.553,
+      "contrast": 8.585,
+      "edgeShare": 0.97,
+      "polarity": "dark-on-light",
+      "pass": true
+    },
+    "chyron": {
+      "kicker": "RAMPAGE",
+      "text": "Giant Pancakes Box Truck Northbound"
+    }
+  },
+  {
+    "file": "night-2-wide-side.png",
+    "look": "night",
+    "angle": "Wide Side",
+    "tier": 2,
+    "speed": 15,
+    "screenUp": -30.35,
+    "giantY": 0.574,
+    "silhouette": {
+      "heightPx": 81,
+      "giantLuma": 0.033,
+      "surroundLuma": 0.419,
+      "contrast": 5.655,
+      "edgeShare": 0.934,
+      "polarity": "dark-on-light",
+      "pass": true
+    },
+    "chyron": {
+      "kicker": "RAMPAGE",
+      "text": "Giant Pancakes Box Truck Northbound"
+    }
+  },
+  {
+    "file": "night-3-long-lens.png",
+    "look": "night",
+    "angle": "Long Lens",
+    "tier": 2,
+    "speed": 15,
+    "screenUp": -22.4,
+    "giantY": 0.632,
+    "silhouette": {
+      "heightPx": 110,
+      "giantLuma": 0.022,
+      "surroundLuma": 0.482,
+      "contrast": 7.388,
+      "edgeShare": 0.972,
+      "polarity": "dark-on-light",
+      "pass": true
+    },
+    "chyron": {
+      "kicker": "RAMPAGE",
+      "text": "Giant Pancakes Box Truck Northbound"
+    }
+  },
+  {
+    "file": "dusk-1-chase-high.png",
+    "look": "dusk",
+    "angle": "Chase High",
+    "tier": 2,
+    "speed": 15,
+    "screenUp": 0,
+    "giantY": 0.793,
+    "silhouette": {
+      "heightPx": 121,
+      "giantLuma": 0.026,
+      "surroundLuma": 0.36,
+      "contrast": 5.376,
+      "edgeShare": 0.902,
+      "polarity": "dark-on-light",
+      "pass": true
+    },
+    "chyron": {
+      "kicker": "RAMPAGE",
+      "text": "Rampaging Giant Totals Sedan In The Fast Lane"
+    }
+  },
+  {
+    "file": "dusk-2-wide-side.png",
+    "look": "dusk",
+    "angle": "Wide Side",
+    "tier": 2,
+    "speed": 15,
+    "screenUp": -32.29,
+    "giantY": 0.56,
+    "silhouette": {
+      "heightPx": 82,
+      "giantLuma": 0.026,
+      "surroundLuma": 0.311,
+      "contrast": 4.725,
+      "edgeShare": 0.824,
+      "polarity": "dark-on-light",
+      "pass": true
+    },
+    "chyron": {
+      "kicker": "RAMPAGE",
+      "text": "Rampaging Giant Totals Sedan In The Fast Lane"
+    }
+  },
+  {
+    "file": "dusk-3-long-lens.png",
+    "look": "dusk",
+    "angle": "Long Lens",
+    "tier": 2,
+    "speed": 15,
+    "screenUp": -22.42,
+    "giantY": 0.637,
+    "silhouette": {
+      "heightPx": 105,
+      "giantLuma": 0.022,
+      "surroundLuma": 0.316,
+      "contrast": 5.054,
+      "edgeShare": 0.897,
+      "polarity": "dark-on-light",
+      "pass": true
+    },
+    "chyron": {
+      "kicker": "RAMPAGE",
+      "text": "Rampaging Giant Totals Sedan In The Fast Lane"
+    }
+  },
+  {
+    "file": "day-1-chase-high.png",
+    "look": "day",
+    "angle": "Chase High",
+    "tier": 2,
+    "speed": 15,
+    "screenUp": 1.76,
+    "giantY": 0.811,
+    "silhouette": {
+      "heightPx": 134,
+      "giantLuma": 0.021,
+      "surroundLuma": 0.43,
+      "contrast": 6.752,
+      "edgeShare": 0.971,
+      "polarity": "dark-on-light",
+      "pass": true
+    },
+    "chyron": {
+      "kicker": "RAMPAGE",
+      "text": "Rampaging Giant Totals Sedan In The Fast Lane"
+    }
+  },
+  {
+    "file": "day-2-wide-side.png",
+    "look": "day",
+    "angle": "Wide Side",
+    "tier": 2,
+    "speed": 15,
+    "screenUp": -29.8,
+    "giantY": 0.571,
+    "silhouette": {
+      "heightPx": 87,
+      "giantLuma": 0.016,
+      "surroundLuma": 0.436,
+      "contrast": 7.347,
+      "edgeShare": 0.97,
+      "polarity": "dark-on-light",
+      "pass": true
+    },
+    "chyron": {
+      "kicker": "RAMPAGE",
+      "text": "Rampaging Giant Punts Box Truck On The Interstate"
+    }
+  },
+  {
+    "file": "day-3-long-lens.png",
+    "look": "day",
+    "angle": "Long Lens",
+    "tier": 2,
+    "speed": 15,
+    "screenUp": -23.21,
+    "giantY": 0.633,
+    "silhouette": {
+      "heightPx": 97,
+      "giantLuma": 0.023,
+      "surroundLuma": 0.431,
+      "contrast": 6.627,
+      "edgeShare": 0.932,
+      "polarity": "dark-on-light",
+      "pass": true
+    },
+    "chyron": {
+      "kicker": "RAMPAGE",
+      "text": "Rampaging Giant Punts Box Truck On The Interstate"
+    }
+  }
+]

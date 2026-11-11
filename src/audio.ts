@@ -12,6 +12,8 @@ export class Audio {
   private noiseBuf!: AudioBuffer;
   private rotor: { gain: GainNode } | null = null;
   private lastWhip = 0;
+  private sirens: GainNode[] = [];
+  private bed: { next: number; step: number; timer: number } | null = null;
 
   get ready(): boolean {
     return !!this.ctx && this.ctx.state === 'running';
@@ -39,6 +41,8 @@ export class Audio {
       const d = this.noiseBuf.getChannelData(0);
       for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
       this.startRotor();
+      this.startSirens(3);
+      this.startBed();
     }
     if (this.ctx.state === 'suspended') void this.ctx.resume();
   }
@@ -189,6 +193,150 @@ export class Audio {
     src.start();
     lfo.start();
     this.rotor = { gain: g };
+  }
+
+  /** Phase 0c: car horn, two detuned square tones (deadpan, not angry). */
+  honk(vol: number) {
+    if (!this.ready) return;
+    const c = this.ctx!;
+    const t = c.currentTime;
+    const dur = 0.18 + Math.random() * 0.2;
+    const g = c.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.07 * vol, t + 0.01);
+    g.gain.setValueAtTime(0.07 * vol, t + dur);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur + 0.05);
+    const f = c.createBiquadFilter();
+    f.type = 'lowpass';
+    f.frequency.value = 1800;
+    g.connect(f).connect(this.buses.sfx);
+    const base = 380 + Math.random() * 60;
+    for (const m of [1, 1.26]) {
+      const o = c.createOscillator();
+      o.type = 'square';
+      o.frequency.value = base * m;
+      o.connect(g);
+      o.start(t);
+      o.stop(t + dur + 0.08);
+    }
+  }
+
+  /** Phase 0c: one continuous siren voice per cruiser (wail, yelp, hi-lo), silent until set. */
+  private startSirens(n: number) {
+    const c = this.ctx!;
+    const modes = [
+      { centre: 950, depth: 380, rate: 0.19, wave: 'sine' as OscillatorType },
+      { centre: 1050, depth: 300, rate: 2.7, wave: 'sine' as OscillatorType },
+      { centre: 820, depth: 140, rate: 0.85, wave: 'square' as OscillatorType },
+    ];
+    for (let i = 0; i < n; i++) {
+      const m = modes[i % modes.length];
+      const o = c.createOscillator();
+      o.type = 'sawtooth';
+      o.frequency.value = m.centre;
+      const lfo = c.createOscillator();
+      lfo.type = m.wave;
+      lfo.frequency.value = m.rate;
+      const depth = c.createGain();
+      depth.gain.value = m.depth;
+      lfo.connect(depth).connect(o.frequency);
+      const bp = c.createBiquadFilter();
+      bp.type = 'bandpass';
+      bp.frequency.value = 1100;
+      bp.Q.value = 0.9;
+      const g = c.createGain();
+      g.gain.value = 0;
+      o.connect(bp).connect(g).connect(this.buses.sfx);
+      o.start();
+      lfo.start();
+      this.sirens.push(g);
+    }
+  }
+
+  /** Siren levels 0..1 per cruiser (distance-based; 0 = not in the chase). */
+  setSirens(levels: number[]) {
+    if (!this.ctx) return;
+    const t = this.ctx.currentTime;
+    this.sirens.forEach((g, i) => g.gain.setTargetAtTime(0.022 * (levels[i] ?? 0), t, 0.4));
+  }
+
+  /**
+   * Phase 0c: a low, original news-theme bed on the music bus. 100 BPM: a pulsing
+   * bass ostinato over i–VI–VII–V in D minor, a soft pad, a teletype tick, and a
+   * low drum every four bars. Scheduled ahead in small batches.
+   */
+  private startBed() {
+    const c = this.ctx!;
+    const beat = 60 / 100;
+    const eighth = beat / 2;
+    const roots = [73.42, 58.27, 65.41, 55.0]; // D2, Bb1, C2, A1
+    const thirds = [1.189, 1.26, 1.26, 1.26]; // minor third on i, major on VI/VII/V
+    const bus = this.buses.music;
+    bus.gain.value = 0.55;
+    this.bed = { next: c.currentTime + 0.1, step: 0, timer: 0 };
+    const voice = (t: number, f: number, dur: number, vol: number, type: OscillatorType, cutoff: number) => {
+      const o = c.createOscillator();
+      o.type = type;
+      o.frequency.value = f;
+      const lp = c.createBiquadFilter();
+      lp.type = 'lowpass';
+      lp.frequency.value = cutoff;
+      const g = c.createGain();
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(vol, t + Math.min(0.02, dur / 4));
+      g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+      o.connect(lp).connect(g).connect(bus);
+      o.start(t);
+      o.stop(t + dur + 0.05);
+    };
+    const tick = () => {
+      const b = this.bed!;
+      if (c.state !== 'running') return;
+      while (b.next < c.currentTime + 0.25) {
+        const t = b.next;
+        const step = b.step; // 8th notes, 32 per 4-bar phrase
+        const bar = Math.floor(step / 8) % 4;
+        const root = roots[bar];
+        // Bass: driving 8ths, octave pop on the off-beat of beat 4.
+        voice(t, step % 8 === 7 ? root * 2 : root, eighth * 0.9, step % 2 === 0 ? 0.16 : 0.1, 'sawtooth', 380);
+        // Pad: one chord per bar.
+        if (step % 8 === 0) for (const k of [2, 2 * thirds[bar], 3]) voice(t, root * k, beat * 4 * 0.98, 0.022, 'triangle', 1400);
+        // Teletype tick on 8ths, accented on the beat.
+        voice(t, 2400, 0.03, step % 2 === 0 ? 0.018 : 0.009, 'square', 6000);
+        // Low drum at the top of each phrase and before the turnaround.
+        if (step % 32 === 0 || step % 32 === 30) voice(t, 58, 0.5, 0.22, 'sine', 300);
+        b.step++;
+        b.next += eighth;
+      }
+    };
+    this.bed.timer = window.setInterval(tick, 60);
+  }
+
+  /** §25/§26 BREAKING stinger: a short brass-like stab on the music bus. */
+  breaking() {
+    if (!this.ready) return;
+    const c = this.ctx!;
+    const t = c.currentTime;
+    for (const [f, d] of [[293.66, 0], [349.23, 0], [440, 0], [587.33, 0.0]] as const) {
+      for (const det of [-6, 6]) {
+        const o = c.createOscillator();
+        o.type = 'sawtooth';
+        o.frequency.value = f;
+        o.detune.value = det;
+        const lp = c.createBiquadFilter();
+        lp.type = 'lowpass';
+        lp.frequency.setValueAtTime(3200, t);
+        lp.frequency.exponentialRampToValueAtTime(700, t + 0.5);
+        const g = c.createGain();
+        g.gain.setValueAtTime(0.0001, t + d);
+        g.gain.exponentialRampToValueAtTime(0.035, t + d + 0.02);
+        g.gain.exponentialRampToValueAtTime(0.0001, t + d + 0.6);
+        o.connect(lp).connect(g).connect(this.buses.music);
+        o.start(t + d);
+        o.stop(t + d + 0.65);
+      }
+    }
+    this.tone(t, 0.6, 70, 40, 0.5);
   }
 
   setRotor(level: number) {
