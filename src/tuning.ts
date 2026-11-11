@@ -47,7 +47,7 @@ export interface TierTuning {
 }
 
 export interface CameraAngle {
-  name: 'Chase High' | 'Wide Side' | 'Long Lens';
+  name: 'Chase High' | 'Wide Side' | 'Long Lens' | 'Head-On';
   /** Requested yaw off the direction of travel. Clamped by the screen-up law. */
   yawDeg: number;
   pitchDeg: number;
@@ -56,6 +56,13 @@ export interface CameraAngle {
   fov: number;
   /** Phase 0c: per-angle look-ahead (s); defaults to camera.lookAheadTime. */
   lookAheadTime?: number;
+  /**
+   * Phase 0c: the camera flies ahead and looks back, so he runs DOWN the screen at
+   * you (yaw is the offset from dead ahead). The camera rules are mirrored: travel
+   * within ±35° of screen-down, giant never above 15% of the frame, ≥2s of road
+   * ahead (below him). Lane input follows what's on screen.
+   */
+  headOn?: boolean;
 }
 
 export const TUNING = {
@@ -218,14 +225,18 @@ export const TUNING = {
       // Cut-aways look less far ahead so the escort behind the giant is in shot (≥2s of road ahead still enforced).
       { name: 'Wide Side', yawDeg: 35, pitchDeg: 52, distance: 55, fov: 35, lookAheadTime: 0.5 },
       { name: 'Long Lens', yawDeg: 15, pitchDeg: 40, distance: 70, fov: 22, lookAheadTime: 0.7 },
+      // Mike: head-on as a cut-away, from higher up (44° vs the 18° experiment). Far and telephoto so ≥2s of road ahead fits below him.
+      { name: 'Head-On', yawDeg: 12, pitchDeg: 44, distance: 100, fov: 16, headOn: true },
     ] as CameraAngle[],
+    /** Which away angles each trigger prefers (first that isn't the last away angle). */
+    cutAngles: { rampage: [3, 1], heavy: [3, 2], merge: [1, 2] } as Record<'rampage' | 'heavy' | 'merge', number[]>,
     /**
-     * EXPERIMENT (Phase 0c): head-on camera, he runs down the screen at you. The
-     * road ahead is between him and the lens, so ≥2s of it needs a far camera; a
-     * low telephoto (lower pitch, narrower lens, further back) keeps him big
-     * anyway, like real long-lens chase footage. Not the LOCKED default.
+     * Phase 0c: leaving Head-On is a swoop, not a cut: the chopper orbits round his
+     * shoulder and cranes up into Chase High. Travel can't stay within ±35° of either
+     * screen-up or screen-down mid-orbit; the swoop is the only exception and it's
+     * bounded by `time` (soak-checked).
      */
-    headOn: { pitchAddDeg: -30, minPitchDeg: 15, distanceScale: 1.8, fovScale: 0.38 },
+    swoop: { time: 1.4, apexPitchDeg: 70 },
     /** LOCKED (v0.3): direction of travel points up the screen within this many degrees. */
     screenUpMaxDeg: 35,
     /** Yaw is clamped this far inside the law, for lag on curves and wobble. */

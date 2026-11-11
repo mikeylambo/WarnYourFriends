@@ -22,26 +22,42 @@ const page = await browser.newPage({ viewport: { width: 1280, height: 720 }, dev
 const errors = [];
 page.on('pageerror', (e) => errors.push(e.message));
 const seed = Number(process.env.SEED ?? 5);
-await page.goto(`${URL}?seed=${seed}&bot=1&debug=${process.env.DEBUG ?? 0}&reducedmotion=1&cuts=0&at=${process.env.AT ?? 34}${process.env.HEADON ? '&headon=1' : ''}`);
+await page.goto(`${URL}?seed=${seed}&bot=1&debug=${process.env.DEBUG ?? 0}&reducedmotion=1&cuts=0&at=${process.env.AT ?? 34}`);
 await page.waitForFunction(() => window.__GAME?.started);
 await page.waitForFunction(() => window.__GAME.state().tier === 2 && window.__GAME.state().time > Number(new URLSearchParams(location.search).get('at') ?? 34), null, { timeout: 90000 });
 const shots = [];
-const names = ['chase-high', 'wide-side', 'long-lens'];
+const names = ['chase-high', 'wide-side', 'long-lens', 'head-on'];
 for (const look of (process.env.LOOKS ?? 'night,dusk,day').split(',')) {
   await page.evaluate((l) => window.__GAME.setLook(l), look);
-  for (let a = 0; a < 3; a++) {
+  for (let a = 0; a < names.length; a++) {
     if (look !== 'night' && a > 0 && !process.env.ALL) continue;
     await page.evaluate((i) => window.__GAME.setAngle(i, 1), a);
     await page.waitForTimeout(700);
     const sil = await page.evaluate(() => window.__GAME.silhouette());
     const st = await page.evaluate(() => ({ ...window.__GAME.state(), cam: window.__GAME.camera(), chyron: window.__GAME.chyron() }));
-    const file = `${process.env.HEADON ? 'headon-' : ''}${look}-${a + 1}-${names[a]}.png`;
+    const file = `${look}-${a + 1}-${names[a]}.png`;
     await page.screenshot({ path: `${OUT}/${file}` });
     shots.push({ file, look, angle: st.cam.angle, tier: st.tier, speed: +st.speed.toFixed(2), screenUp: +st.cam.screenUpDeg.toFixed(2), giantY: +st.cam.giantScreenY.toFixed(3), silhouette: Object.fromEntries(Object.entries(sil).map(([k, v]) => [k, typeof v === 'number' ? +v.toFixed(3) : v])), chyron: st.chyron });
     console.log(file, JSON.stringify(shots.at(-1).silhouette), st.chyron.kicker, '|', st.chyron.text);
   }
 }
-writeFileSync(`${OUT}/${process.env.HEADON ? 'headon-' : ''}shots.json`, JSON.stringify(shots, null, 2));
+// The swoop out of Head-On, as a filmstrip (real time; software GL frames are ~0.1s apart).
+if (!process.env.NOSWOOP) {
+  await page.evaluate(() => window.__GAME.setLook('night'));
+  await page.evaluate(() => window.__GAME.setAngle(3, 1));
+  await page.waitForTimeout(800);
+  // 1/15 speed so screenshots (~0.5s each in software GL) can keep up with a 1.4s swoop.
+  await page.evaluate(() => window.__GAME.setTimescale(1 / 15));
+  await page.evaluate(() => window.__GAME.toggleHeadOn());
+  const t0 = Date.now();
+  for (const at of [0, 350, 700, 1050, 1600]) {
+    await page.waitForTimeout(Math.max(0, at * 15 - (Date.now() - t0)));
+    const c = await page.evaluate(() => window.__GAME.camera());
+    await page.screenshot({ path: `${OUT}/swoop-${String(at).padStart(4, '0')}ms.png` });
+    console.log(`swoop ${at}ms: ${c.angle} transition=${c.transition} travelDown=${c.travelDown} pitch ${c.pitchDeg.toFixed(0)}°`);
+  }
+}
+writeFileSync(`${OUT}/shots.json`, JSON.stringify(shots, null, 2));
 if (errors.length) console.log('PAGE ERRORS', errors);
 await browser.close();
 server?.kill();

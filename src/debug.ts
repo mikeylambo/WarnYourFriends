@@ -18,14 +18,12 @@ export interface Flags {
   nodecay: boolean;
   god: boolean;
   tune: boolean;
-  /** Start on a camera angle (0 Chase High, 1 Wide Side, 2 Long Lens). Dev/screenshots. */
+  /** Hold a camera angle (0 Chase High, 1 Wide Side, 2 Long Lens, 3 Head-On). Dev/screenshots. */
   angle: number | null;
   /** Phase 0c: override the Camera cuts setting (?cuts=0). */
   cuts: boolean | null;
   /** Phase 0c: force a look (?time=night|dusk|day), overriding LIVE TIME. */
   time: 'night' | 'dusk' | 'day' | null;
-  /** EXPERIMENT: head-on camera (?headon=1 / ?headon=0). */
-  headOn: boolean | null;
 }
 
 function bool(q: URLSearchParams, k: string): boolean | null {
@@ -61,7 +59,6 @@ export function readFlags(search: string): Flags {
     tune: bool(q, 'tune') ?? false,
     angle: num(q, 'angle'),
     cuts: bool(q, 'cuts'),
-    headOn: bool(q, 'headon'),
     time: ((v) => (v === 'night' || v === 'dusk' || v === 'day' ? v : null))(q.get('time')),
   };
 }

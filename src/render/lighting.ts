@@ -168,7 +168,13 @@ export class Lighting {
     const fz = Math.sin(o.travel);
     const sideX = -fz;
     const sideZ = fx;
-    this.spot.position.set(cam.x + sideX * 16 - fx * 4, cam.y + 14, cam.z + sideZ * 16 - fz * 4);
+    if ((o.facing ?? 1) > 0) {
+      this.spot.position.set(cam.x + sideX * 16 - fx * 4, cam.y + 14, cam.z + sideZ * 16 - fz * 4);
+    } else {
+      // Head-On: backlight. The beam comes from beyond him (over the convoy), so the faces the
+      // camera sees fall into shadow and he reads as a silhouette on the lit pool.
+      this.spot.position.set(o.giantX - fx * 40 + sideX * 10, 45, o.giantZ - fz * 40 + sideZ * 10);
+    }
     const w = T.spotWander;
     // Centre the pool just past him as the camera sees it (ahead when behind him, behind him head-on),
     // so on screen he is always a dark shape on the lit pool.

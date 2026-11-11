@@ -196,10 +196,10 @@ try {
     await page.evaluate(() => window.__GAME.pause());
     for (const look of ['night', 'dusk', 'day']) {
       await page.evaluate((l) => window.__GAME.setLook(l), look);
-      for (let a = 0; a < 3; a++) {
+      for (let a = 0; a < 4; a++) {
         await page.evaluate((i) => window.__GAME.setAngle(i, 1), a);
         const r = await page.evaluate(() => window.__GAME.silhouette());
-        const line = `${look}/${['Chase High', 'Wide Side', 'Long Lens'][a]}: ${r.heightPx.toFixed(0)}px tall, contrast ${r.contrast.toFixed(2)}:1 (${r.polarity}), edge ${(r.edgeShare * 100).toFixed(0)}%`;
+        const line = `${look}/${['Chase High', 'Wide Side', 'Long Lens', 'Head-On'][a]}: ${r.heightPx.toFixed(0)}px tall, contrast ${r.contrast.toFixed(2)}:1 (${r.polarity}), edge ${(r.edgeShare * 100).toFixed(0)}%`;
         if (!r.pass) fail(`silhouette ${line}`);
         else ok(`silhouette ${line}`);
       }
@@ -223,31 +223,39 @@ try {
     if (problems.length) fail(`bot run problems:\n    ${problems.join('\n    ')}`);
     await ctx.close();
   }
-  // 6. EXPERIMENT head-on camera: lane input stays screen-relative (A = screen-left = his right),
-  //    and the mirrored camera rules hold in the running build.
+  // 6. Head-On cut-away: lane input follows the screen (A = screen-left = his right while he runs
+  //    down the screen), and the swoop home lands in Chase High with normal lanes again.
   {
     const ctx = await browser.newContext({ viewport: { width: 1280, height: 720 } });
     const page = await ctx.newPage();
     const problems = watch(page);
-    await page.goto(`${URL}?seed=5&headon=1`);
+    await page.goto(`${URL}?seed=5`);
     await page.waitForFunction(() => document.documentElement.dataset.boot === 'ok', null, { timeout: 15000 });
     await page.click('#start');
     await page.waitForFunction(() => window.__GAME.state().time > 0.5, null, { timeout: 5000 });
-    const lane0 = await page.evaluate(() => window.__GAME.state().lane);
-    await page.keyboard.press('KeyA');
-    await page.waitForFunction((l) => window.__GAME.state().lane !== l, lane0, { timeout: 2000 }).catch(() => {});
-    const lane1 = await page.evaluate(() => window.__GAME.state().lane);
-    if (lane1 !== lane0 + 1) fail(`head-on: A should move him screen-left (his right, lane ${lane0 + 1} → ${lane0 + 2}), got lane ${lane1 + 1}`);
-    else ok(`head-on: A moves him screen-left (lane ${lane0 + 1} → ${lane1 + 1}, his right)`);
-    await page.evaluate(() => window.__GAME.setBot(true));
-    await page.waitForFunction(() => window.__GAME.state().time > 20, null, { timeout: 60000 });
-    const c = await page.evaluate(() => ({ ...window.__GAME.camera(), facing: window.__GAME.facing() }));
-    if (c.facing !== -1) fail('head-on flag did not set the camera');
-    if (c.maxScreenUp > 35) fail(`head-on: travel ${c.maxScreenUp.toFixed(2)}° off screen-down`);
-    if (c.maxGiantY > 0.855) fail(`head-on: giant above 15% of the frame (${c.maxGiantY.toFixed(3)})`);
-    if (c.minAhead < 2) fail(`head-on: under 2s of road ahead (${c.minAhead.toFixed(2)}s)`);
-    if (!(c.maxScreenUp > 35) && !(c.maxGiantY > 0.855) && !(c.minAhead < 2)) ok(`head-on: travel ≤${c.maxScreenUp.toFixed(1)}° off screen-down, giant ≥${(1 - c.maxGiantY).toFixed(2)} from the top, road ahead ≥${c.minAhead.toFixed(2)}s`);
-    if (problems.length) fail(`head-on problems:\n    ${problems.join('\n    ')}`);
+    await page.evaluate(() => window.__GAME.setAngle(3, 1));
+    await page.waitForFunction(() => window.__GAME.camera().travelDown, null, { timeout: 2000 }).catch(() => {});
+    const press = async (key) => {
+      const l0 = await page.evaluate(() => window.__GAME.state().lane);
+      await page.keyboard.press(key);
+      await page.waitForFunction((l) => window.__GAME.state().lane !== l, l0, { timeout: 2000 }).catch(() => {});
+      await page.waitForFunction(() => !window.__GAME.state().laneBusy, null, { timeout: 2000 }).catch(() => {});
+      return [l0, await page.evaluate(() => window.__GAME.state().lane)];
+    };
+    const [a0, a1] = await press('KeyA');
+    if (a1 !== a0 + 1) fail(`Head-On: A should move him screen-left (his right, lane ${a0 + 1} → ${a0 + 2}), got lane ${a1 + 1}`);
+    else ok(`Head-On: A moves him screen-left (lane ${a0 + 1} → ${a1 + 1}, his right)`);
+    await page.evaluate(() => window.__GAME.toggleHeadOn());
+    const mid = await page.waitForFunction(() => window.__GAME.camera().transition, null, { timeout: 1500 }).then(() => true, () => false);
+    await page.waitForFunction(() => !window.__GAME.camera().transition, null, { timeout: 8000 }).catch(() => {});
+    const c = await page.evaluate(() => window.__GAME.camera());
+    if (!mid) fail('leaving Head-On did not swoop');
+    if (c.angle !== 'Chase High' || c.transition || c.travelDown) fail(`swoop did not land in Chase High (${c.angle}, transition ${c.transition})`);
+    else ok(`swoop out of Head-On lands in Chase High (travel ${c.screenUpDeg.toFixed(1)}° off screen-up)`);
+    const [d0, d1] = await press('KeyA');
+    if (d1 !== d0 - 1) fail(`after the swoop A should be lane-left again (${d0 + 1} → ${d0}), got ${d1 + 1}`);
+    else ok(`after the swoop A is lane-left again (${d0 + 1} → ${d1 + 1})`);
+    if (problems.length) fail(`Head-On problems:\n    ${problems.join('\n    ')}`);
     await ctx.close();
   }
 

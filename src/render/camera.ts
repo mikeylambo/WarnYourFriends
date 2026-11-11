@@ -57,6 +57,10 @@ export interface CameraFrameInfo {
   pitchDeg: number;
   insideBuilding: boolean;
   losBlocked: boolean;
+  /** Travel points down the screen right now (Head-On, or past halfway through a swoop): lane input mirrors. */
+  travelDown: boolean;
+  /** Mid-swoop: camera rules suspended for at most `swoop.time`. */
+  transition: boolean;
 }
 
 const DEG = Math.PI / 180;
@@ -70,7 +74,7 @@ export function maxYawForScreenUp(limitDeg: number, pitchDeg: number): number {
 export class CameraRig {
   readonly camera: THREE.PerspectiveCamera;
   reducedMotion = false;
-  readonly info: CameraFrameInfo = { angle: 'Chase High', screenUpDeg: 0, giantScreenY: 0, aheadMetres: 0, aheadSeconds: 0, lookAhead: 0, yawDeg: 0, raise: 0, pitchDeg: 0, insideBuilding: false, losBlocked: false };
+  readonly info: CameraFrameInfo = { angle: 'Chase High', screenUpDeg: 0, giantScreenY: 0, aheadMetres: 0, aheadSeconds: 0, lookAhead: 0, yawDeg: 0, raise: 0, pitchDeg: 0, insideBuilding: false, losBlocked: false, travelDown: false, transition: false };
 
   private angleIndex = 0;
   /** Which side an off-axis angle sits on (+1 camera left of the road, looking right). */
@@ -96,14 +100,18 @@ export class CameraRig {
   private ground = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
   private ndcTop = new THREE.Vector2(0, 1);
   private ndcBottom = new THREE.Vector2(0, -1);
-  /**
-   * EXPERIMENT (Phase 0c, Mike): +1 = behind the giant (travel points up the
-   * screen, the LOCKED law); −1 = head-on (the camera flies ahead of him and he
-   * runs down the screen at you). Every rule is mirrored, not dropped: travel
-   * points DOWN within ±35°, the giant never sits above 15% of the frame, and
-   * ≥2s of road ahead stays visible (now below him).
-   */
-  facing: 1 | -1 = 1;
+  /** Phase 0c: the swoop out of Head-On (null when not swooping). */
+  private swoop: { t: number; relYaw: number; dYaw: number; pitch: number; dist: number; fov: number; lookOff: THREE.Vector3 } | null = null;
+
+  /** +1 behind him (travel points up the screen), −1 head-on (travel points down). */
+  get facing(): 1 | -1 {
+    return this.angle.headOn ? -1 : 1;
+  }
+
+  /** A swoop between shots is in progress (the camera rules are suspended for its bounded length). */
+  get inTransition(): boolean {
+    return this.swoop !== null;
+  }
 
   constructor() {
     this.camera = new THREE.PerspectiveCamera(TUNING.camera.angles[0].fov, this.w / this.h, 1, 1200);
@@ -142,8 +150,63 @@ export class CameraRig {
     this.shakes.push({ px, t: 0, max: time });
   }
 
+  /**
+   * Phase 0c swoop to an angle: orbit round the giant's shoulder (the side the
+   * current shot is offset to) and crane up over him, landing exactly on the new
+   * angle's framing. Used out of Head-On.
+   */
+  swoopTo(index: number, side: number, t: CameraTarget) {
+    const cam = this.camera;
+    const v = this.tmpA.copy(cam.position).sub(this.look);
+    const hb = Math.hypot(v.x, v.z);
+    const fromYaw = Math.atan2(-v.z, -v.x) / DEG - t.travel / DEG;
+    const relYaw = ((((fromYaw + 180) % 360) + 360) % 360) - 180;
+    const lookOff = new THREE.Vector3(this.look.x - t.x, 0, this.look.z - t.z);
+    const from = { relYaw, pitch: Math.atan2(v.y, hb) / DEG, dist: v.length(), fov: cam.fov };
+    this.angleIndex = index;
+    this.side = side;
+    this.leadCap = this.solveLeadCap(t);
+    let dYaw = this.yaw() - from.relYaw;
+    dYaw = ((((dYaw + 180) % 360) + 360) % 360) - 180;
+    this.swoop = { t: 0, relYaw: from.relYaw, dYaw, pitch: from.pitch, dist: from.dist, fov: from.fov, lookOff };
+    this.raise = 0;
+  }
+
+  private updateSwoop(dt: number, t: CameraTarget) {
+    const sw = this.swoop!;
+    const S = TUNING.camera.swoop;
+    sw.t += dt;
+    const u = Math.min(1, sw.t / S.time);
+    const e = u * u * u * (u * (u * 6 - 15) + 10); // smootherstep: eases in and out like a pilot
+    const d = this.desired(t);
+    const toPitch = this.pitch();
+    const toDist = this.distance();
+    const relYaw = (sw.relYaw + sw.dYaw * e) * DEG;
+    const bump = Math.max(0, S.apexPitchDeg - Math.max(sw.pitch, toPitch));
+    const pitch = (sw.pitch + (toPitch - sw.pitch) * e + bump * Math.sin(Math.PI * e)) * DEG;
+    const dist = sw.dist + (toDist - sw.dist) * e;
+    const toOff = this.tmpB.set(d.look.x - t.x, 0, d.look.z - t.z);
+    this.look.set(t.x + sw.lookOff.x + (toOff.x - sw.lookOff.x) * e, 0, t.z + sw.lookOff.z + (toOff.z - sw.lookOff.z) * e);
+    const yaw = t.travel + relYaw;
+    this.pos.set(this.look.x - Math.cos(yaw) * dist * Math.cos(pitch), dist * Math.sin(pitch), this.look.z - Math.sin(yaw) * dist * Math.cos(pitch));
+    const fov = sw.fov + (this.angle.fov - sw.fov) * e;
+    if (this.camera.fov !== fov) {
+      this.camera.fov = fov;
+      this.camera.updateProjectionMatrix();
+    }
+    this.orient(t, this.look);
+    if (u >= 1) {
+      this.swoop = null;
+      this.pos.copy(d.pos);
+      this.look.copy(d.look);
+      this.applyLens();
+      this.orient(t, this.look);
+    }
+  }
+
   /** Hard cut to an angle (no lag). */
   cut(index: number, side: number, t: CameraTarget) {
+    this.swoop = null;
     this.angleIndex = index;
     this.side = side;
     this.raise = 0;
@@ -194,24 +257,20 @@ export class CameraRig {
     const C = TUNING.camera;
     const a = this.angle;
     const lim = maxYawForScreenUp(C.screenUpMaxDeg - C.screenUpMarginDeg, this.pitch());
-    return Math.max(-lim, Math.min(lim, a.yawDeg)) * this.side + (this.facing < 0 ? 180 : 0);
+    return Math.max(-lim, Math.min(lim, a.yawDeg)) * this.side + (a.headOn ? 180 : 0);
   }
 
   /** Look-ahead time for the current angle (cut-aways frame less ahead, more of the chase behind). */
   private leadTime(): number {
-    // Head-on, the escort is already in shot (behind him = above him), so every angle leads fully.
-    if (this.facing < 0) return TUNING.camera.lookAheadTime;
     return this.angle.lookAheadTime ?? TUNING.camera.lookAheadTime;
   }
 
   private distance(): number {
-    const ho = this.facing < 0 ? TUNING.camera.headOn.distanceScale : 1;
-    return this.angle.distance * ho * this.tierScale + this.pullOut;
+    return this.angle.distance * this.tierScale + this.pullOut;
   }
 
   private pitch(): number {
-    const H = TUNING.camera.headOn;
-    return this.facing < 0 ? Math.max(H.minPitchDeg, this.angle.pitchDeg + H.pitchAddDeg) : this.angle.pitchDeg;
+    return this.angle.pitchDeg;
   }
 
   private desired(t: CameraTarget) {
@@ -228,7 +287,7 @@ export class CameraRig {
   }
 
   private fov(): number {
-    return this.angle.fov * (this.facing < 0 ? TUNING.camera.headOn.fovScale : 1);
+    return this.angle.fov;
   }
 
   private applyLens() {
@@ -330,6 +389,13 @@ export class CameraRig {
     }
     this.pullOut *= Math.exp(-dt / (C.tierUpPullOutTime / 3));
 
+    if (this.swoop) {
+      this.updateSwoop(dt, t);
+      this.applyShake(dt);
+      this.measure(t, 0);
+      return;
+    }
+
     const d = this.desired(t);
     this.pos.lerp(d.pos, approach(dt, C.positionLag));
     this.look.lerp(d.look, approach(dt, C.lookLag));
@@ -407,7 +473,21 @@ export class CameraRig {
       enforceScreenUp();
     }
 
-    // Pixel shake on top (§10, v0.3 footfall pulse).
+    this.applyShake(dt);
+
+    this.measure(t, d.lookAhead);
+
+    // Look-ahead feedback: remember how far ahead framing allowed, so the next frame starts there.
+    if (dt > 0) {
+      const err = C.giantMaxScreenY - 0.01 - yBeforeClamp;
+      const full = t.speed * this.leadTime();
+      if (!Number.isFinite(this.leadCap)) this.leadCap = full;
+      this.leadCap = Math.max(0, Math.min(full + 2, this.leadCap + err * 3 * this.distance() * dt));
+    }
+  }
+
+  /** Pixel shake on top (§10, v0.3 footfall pulse). */
+  private applyShake(dt: number) {
     let ox = 0;
     let oy = 0;
     for (let i = this.shakes.length - 1; i >= 0; i--) {
@@ -424,15 +504,6 @@ export class CameraRig {
     if (ox || oy) this.camera.setViewOffset(this.w, this.h, ox, oy, this.w, this.h);
     else this.camera.clearViewOffset();
 
-    this.measure(t, d.lookAhead);
-
-    // Look-ahead feedback: remember how far ahead framing allowed, so the next frame starts there.
-    if (dt > 0) {
-      const err = C.giantMaxScreenY - 0.01 - yBeforeClamp;
-      const full = t.speed * this.leadTime();
-      if (!Number.isFinite(this.leadCap)) this.leadCap = full;
-      this.leadCap = Math.max(0, Math.min(full + 2, this.leadCap + err * 3 * this.distance() * dt));
-    }
   }
 
   private measure(t: CameraTarget, lookAhead: number) {
@@ -440,6 +511,9 @@ export class CameraRig {
     const info = this.info;
     info.angle = this.angle.name;
     info.screenUpDeg = this.lawDeg(t);
+    const raw = this.measureScreenUp(t);
+    info.travelDown = Math.abs(raw) > 90;
+    info.transition = this.swoop !== null;
     info.giantScreenY = this.frameY(t);
     // Road ahead runs to the top edge behind him, to the bottom edge head-on.
     this.ray.setFromCamera(this.facing > 0 ? this.ndcTop : this.ndcBottom, cam);
@@ -545,11 +619,11 @@ export class Director {
     }
     const kind = this.pending.kind;
     this.pending = null;
-    // Alternate the away angles so two cut-aways in a row look different.
+    // Each trigger has preferred angles (Rampage → Head-On); never the same away angle twice running.
+    const prefs = C.cutAngles[kind].filter((i) => i !== this.lastAwayAngle && i !== C.homeAngle && i < C.angles.length);
     const away: number[] = [];
-    for (let i = 0; i < C.angles.length; i++) if (i !== C.homeAngle) away.push(i);
-    const pool = away.length > 1 ? away.filter((i) => i !== this.lastAwayAngle) : away;
-    this.current = pool[this.rng.int(0, pool.length - 1)];
+    for (let i = 0; i < C.angles.length; i++) if (i !== C.homeAngle && i !== this.lastAwayAngle) away.push(i);
+    this.current = prefs.length ? prefs[0] : away[this.rng.int(0, away.length - 1)];
     this.lastAwayAngle = this.current;
     this.side = this.rng.chance(0.5) ? 1 : -1;
     this.hold = this.rng.range(C.awayHold[0], C.awayHold[1]);

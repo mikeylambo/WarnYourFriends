@@ -47,6 +47,7 @@ const esc = { joins: 0, minJoinBehind: Infinity, joinsOnCamera: 0, minGap: Infin
 const ndc = new THREE.Vector3();
 // A few seeds with cuts switched off: Chase High must hold the whole run.
 const OFF_SEEDS = new Set([7, 77, 177]);
+const swoop = { n: 0, frames: 0, maxLen: 0 };
 const stepSamples: number[] = [];
 let maxStepMs = 0;
 const t0 = performance.now();
@@ -69,6 +70,7 @@ for (let seed = 1; seed <= seeds; seed++) {
   let lastFoot = -1;
   let lastCut = -Infinity;
   let lastAway = -Infinity;
+  let swoopRun = 0;
   let lastAwayTrigger: CutTrigger | null = null;
   const lastSeen: Record<CutTrigger, number> = { rampage: -Infinity, heavy: -Infinity, merge: -Infinity };
   const cutsOff = OFF_SEEDS.has(seed);
@@ -151,10 +153,22 @@ for (let seed = 1; seed <= seeds; seed++) {
         lastAwayTrigger = cutTo.reason;
       }
       lastCut = sim.time;
-      rig.cut(cutTo.index, cutTo.side, tg);
+      if (cutTo.reason === 'home' && rig.angle.headOn) {
+        rig.swoopTo(cutTo.index, cutTo.side, tg);
+        swoop.n++;
+      } else rig.cut(cutTo.index, cutTo.side, tg);
     }
     rig.update(dt, tg);
     const info = rig.info;
+    // A swoop out of Head-On suspends the camera rules; it must be short and land in the home shot.
+    const inSwoop = info.transition;
+    if (inSwoop) {
+      swoopRun += dt;
+      swoop.frames++;
+      swoop.maxLen = Math.max(swoop.maxLen, swoopRun);
+      if (swoopRun > TUNING.camera.swoop.time + dt * 1.5) fail(`seed ${seed}: swoop running ${swoopRun.toFixed(2)}s`);
+    } else swoopRun = 0;
+    if (!inSwoop) {
     cam.frames++;
     cam.perAngle[info.angle] = (cam.perAngle[info.angle] ?? 0) + 1;
     cam.maxScreenUp = Math.max(cam.maxScreenUp, Math.abs(info.screenUpDeg));
@@ -164,6 +178,7 @@ for (let seed = 1; seed <= seeds; seed++) {
       cam.aheadUnder2++;
       const key = `${info.angle}/${TUNING.tiers[g.tier].name}${sim.laneBusy ? '/lane' : ''}`;
       aheadBy[key] = Math.min(aheadBy[key] ?? Infinity, info.aheadSeconds);
+    }
     }
     // Escort: joined ≥40m back and off camera; never closer than the gap floor.
     for (const e of events) {
@@ -193,8 +208,8 @@ for (let seed = 1; seed <= seeds; seed++) {
         fail(`seed ${seed}: cruiser ${c.id} within ${gap.toFixed(2)}m at tick ${i}`);
       }
     }
-    if (Math.abs(info.screenUpDeg) > TUNING.camera.screenUpMaxDeg) fail(`seed ${seed}: screen-up law broken (${info.screenUpDeg.toFixed(1)}°, ${info.angle}) at tick ${i}`);
-    if (info.giantScreenY > TUNING.camera.giantMaxScreenY + 0.005) fail(`seed ${seed}: giant at ${info.giantScreenY.toFixed(3)} of screen (${info.angle}) at tick ${i}`);
+    if (!inSwoop && Math.abs(info.screenUpDeg) > TUNING.camera.screenUpMaxDeg) fail(`seed ${seed}: screen-up law broken (${info.screenUpDeg.toFixed(1)}°, ${info.angle}) at tick ${i}`);
+    if (!inSwoop && info.giantScreenY > TUNING.camera.giantMaxScreenY + 0.005) fail(`seed ${seed}: giant at ${info.giantScreenY.toFixed(3)} of screen (${info.angle}) at tick ${i}`);
   }
 
   for (const r of gait.records) {
@@ -236,6 +251,7 @@ console.log(
     `${cuts.home} returns home; min gap between cut-aways ${cuts.minAwayGap.toFixed(2)}s; away held ${cuts.minAwayHold.toFixed(2)}–${cuts.maxAwayHold.toFixed(2)}s; ` +
     `cuts with the setting off ${cuts.offCuts} (${OFF_SEEDS.size} seeds)`,
 );
+console.log(`  swoops out of Head-On: ${swoop.n}, longest ${swoop.maxLen.toFixed(2)}s (limit ${TUNING.camera.swoop.time}s), ${((swoop.frames / (cam.frames + swoop.frames)) * 100).toFixed(2)}% of frames`);
 console.log(`  escort: ${esc.joins} joins, nearest join ${esc.minJoinBehind.toFixed(1)}m back, ${esc.joinsOnCamera} on camera; closest gap ever ${esc.minGap.toFixed(2)}m (floor ${TUNING.escort.minGap}m)`);
 if (Object.keys(aheadBy).length) console.log('  road-ahead shortfalls (min s by angle/tier):', JSON.stringify(Object.fromEntries(Object.entries(aheadBy).map(([k, v]) => [k, +v.toFixed(2)]))));
 for (let t = 0; t < 3; t++) {
@@ -249,71 +265,13 @@ if (cuts.away < seeds) fail(`too few cut-aways to test (${cuts.away})`);
 for (const k of ['rampage', 'heavy', 'merge'] as CutTrigger[]) if (cuts.byTrigger[k] === 0) fail(`no cut-away on '${k}' in ${seeds} seeds`);
 if (cuts.minAwayHold < TUNING.camera.awayHold[0] - 1e-6) fail(`returned home after only ${cuts.minAwayHold.toFixed(2)}s`);
 if (cuts.maxAwayHold > TUNING.camera.awayHold[1] + 2) fail(`stayed away ${cuts.maxAwayHold.toFixed(2)}s`);
+if (swoop.n < seeds / 4) fail(`too few swoops to test (${swoop.n})`);
 if (cuts.offCuts > 0) fail(`${cuts.offCuts} cuts with Camera cuts: Off`);
 if (esc.joins < seeds) fail(`too few escort joins (${esc.joins})`);
 if (cam.aheadUnder2 > 0) fail(`road ahead under 2s in ${cam.aheadUnder2} frames (min ${cam.minAhead.toFixed(2)}s)`);
 if (p99 > 2) fail(`sim step p99 ${p99.toFixed(2)}ms exceeds the 2ms budget`);
 if (agg.reachedRampage < seeds * 0.5) fail(`bot reached Rampage in only ${agg.reachedRampage}/${seeds} seeds`);
 if (agg.merges < seeds) fail(`a run had no merge`);
-
-// EXPERIMENT: head-on camera (he runs down the screen at you). Same seeds, same director;
-// every camera rule mirrored: travel within ±35° of screen-DOWN, giant never above 15% of
-// the frame, ≥2s of road ahead (now between him and the lens).
-{
-  const ho = { frames: 0, maxLaw: 0, maxFrameY: 0, minAhead: Infinity, under2: 0, joins: 0, joinsOnCamera: 0 };
-  for (let seed = 1; seed <= seeds; seed++) {
-    const sim = new Sim({ seed });
-    const bot = new Bot(sim);
-    const rig = new CameraRig();
-    rig.resize(1280, 720);
-    rig.facing = -1;
-    const director = new Director(seed);
-    const pos = { x: 0, z: 0 };
-    const target = () => {
-      const g = sim.giant;
-      sim.track.posAt(g.s, g.d, pos);
-      return { x: pos.x, z: pos.z, travel: sim.track.headingAt(g.s), speed: g.speed, tier: g.tier };
-    };
-    rig.snap(target());
-    for (let i = 0; i < ticks; i++) {
-      const braking = i % 720 > 560 && i % 720 < 650;
-      const events = sim.step({ ...bot.input(), brake: braking });
-      for (const e of events) {
-        const trig = cutTriggerFor(e);
-        if (trig) director.trigger(trig);
-      }
-      const tg = target();
-      const cutTo = director.update(sim.dt, sim.laneBusy);
-      if (cutTo) rig.cut(cutTo.index, cutTo.side, tg);
-      rig.update(sim.dt, tg);
-      const info = rig.info;
-      // LOCKED: cruisers never join on camera. Head-on looks back past him, so this matters more here.
-      for (const e of events) {
-        if (e.type !== 'escortJoin') continue;
-        const c = sim.escort.cruisers[e.id];
-        sim.track.posAt(c.s, c.d, pos);
-        for (const [ox, oy, oz] of [[0, 0, 0], [3, 0, 3], [-3, 0, -3], [3, 2, -3], [-3, 2, 3], [0, 3, 0]]) {
-          ndc.set(pos.x + ox, oy, pos.z + oz).project(rig.camera);
-          if (ndc.z > -1 && ndc.z < 1 && Math.abs(ndc.x) <= 1 && Math.abs(ndc.y) <= 1) {
-            ho.joinsOnCamera++;
-            fail(`head-on seed ${seed}: cruiser ${e.id} joined on camera (${info.angle})`);
-            break;
-          }
-        }
-        ho.joins++;
-      }
-      ho.frames++;
-      ho.maxLaw = Math.max(ho.maxLaw, Math.abs(info.screenUpDeg));
-      ho.maxFrameY = Math.max(ho.maxFrameY, info.giantScreenY);
-      ho.minAhead = Math.min(ho.minAhead, info.aheadSeconds);
-      if (info.aheadSeconds < TUNING.camera.minRoadAheadSeconds) ho.under2++;
-      if (Math.abs(info.screenUpDeg) > TUNING.camera.screenUpMaxDeg) fail(`head-on seed ${seed}: travel ${info.screenUpDeg.toFixed(1)}° off screen-down (${info.angle}) at tick ${i}`);
-      if (info.giantScreenY > TUNING.camera.giantMaxScreenY + 0.005) fail(`head-on seed ${seed}: giant at ${info.giantScreenY.toFixed(3)} from the near edge (${info.angle}) at tick ${i}`);
-    }
-  }
-  console.log(`  head-on (experiment): ${ho.frames} frames; |travel vs screen-down| max ${ho.maxLaw.toFixed(2)}°; giant nearest the top ${(1 - ho.maxFrameY).toFixed(3)}; road ahead min ${ho.minAhead.toFixed(2)}s (${ho.under2} frames under 2s); escort joins ${ho.joins}, on camera ${ho.joinsOnCamera}`);
-  if (ho.under2 > 0) fail(`head-on: road ahead under 2s in ${ho.under2} frames (min ${ho.minAhead.toFixed(2)}s)`);
-}
 
 if (failures.length) {
   console.error(`soak FAILED (${failures.length}${failures.length >= 40 ? '+' : ''}):\n  ` + failures.slice(0, 25).join('\n  '));
