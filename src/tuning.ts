@@ -173,6 +173,27 @@ export const TUNING = {
     wallHeight: 1.0,
   },
 
+  /**
+   * Phase 2 road variety (v0.3 §16, §7–9): zones with their own lane counts,
+   * reached through telegraphed merges. Names are invented (headline places).
+   */
+  zones: {
+    lanes: { highway: 4, avenue: 3, bridge: 2, tunnel: 2 },
+    /** Zone length in 40m segments. */
+    length: { highway: [5, 9], avenue: [4, 7], bridge: [3, 5], tunnel: [3, 5] } as Record<'highway' | 'avenue' | 'bridge' | 'tunnel', [number, number]>,
+    weight: { highway: 2, avenue: 1.5, bridge: 1, tunnel: 1 },
+    /** Extra row filter per zone (on top of props.rowChance): bridges and tunnels are a breather. */
+    rowChance: { highway: 1, avenue: 1, bridge: 0.7, tunnel: 0.65 },
+    /** Share of Medium props per zone: avenues are carts and sawhorses; tunnels are traffic. */
+    mediumWeight: { highway: 0.55, avenue: 0.75, bridge: 0.5, tunnel: 0.3 },
+    /** Chance a highway segment has an overpass crossing it. */
+    overpassChance: 0.18,
+    names: {
+      first: ['Harbor', 'Quarry', 'Ninth', 'Kessler', 'Orchard', 'Lantern', 'Millbrook', 'Ashgrove', 'Redline', 'Copper', 'Dunmore', 'Saltmarsh'],
+      suffix: { highway: 'Expressway', avenue: 'Avenue', bridge: 'Bridge', tunnel: 'Tunnel' },
+    },
+  },
+
   /** v0.3 props in lanes: Medium and Heavy only, densities tunable. */
   props: {
     /** No props before this distance (runway). */
@@ -314,6 +335,91 @@ export const TUNING = {
     sideSpeed: 3,
   },
 
+  /**
+   * Phase 2 segment (§4, LOCKED shape): 150s broadcast + 15s grace. v0.3: the
+   * sign-off is an exit ramp that opens at 130s; take it before 165s.
+   */
+  segment: {
+    /** LOCKED (§4): segment length and grace. */
+    length: 150,
+    grace: 15,
+    /** v0.3 §4: the exit ramp opens at 130s. */
+    exitOpensAt: 130,
+    /** §4: the sign-off spawns 150–250m away. */
+    exitDistance: [150, 250] as [number, number],
+    /** If no eligible segment sits inside that window, search up to this far. */
+    exitSearchMax: 330,
+    /** The ramp splits from the right edge this far into its segment (the gore point). */
+    goreAt: 26,
+    /** Keep the exit lane clear of props this far before the gore (m). */
+    exitClear: 40,
+  },
+
+  /** §12 Ratings / Heat / Pin. */
+  show: {
+    /** §4/§12: Ratings start at 20 each segment; 0..100. */
+    startRatings: 20,
+    max: 100,
+    /** §12 gains. Sustained Rampage is per second. */
+    gain: { medium: 2, heavy: 5, nearMiss: 3, lostTrack: 6, rampage: 1 },
+    /** §12 decay: after 3s with no gain; segment 1 rate (2.0/2.75/3.5/4.25/5.0 by segment). */
+    decayAfter: 3,
+    decayRate: [2.0, 2.75, 3.5, 4.25, 5.0],
+    /** §12 variety: repeats within 10s pay ×0.5 then ×0.25; a type unseen this segment pays ×1.5. */
+    repeatWindow: 10,
+    repeatMult: [1, 0.5, 0.25],
+    freshMult: 1.5,
+    /** §12 outnumbered: 6+ pursuers chasing → ×1.25 all gains. */
+    outnumberedAt: 6,
+    outnumberedMult: 1.25,
+    /** §12 banking: each second banks Ratings × tier multiplier. */
+    bankMult: [1, 1.5, 2],
+    /** §12 Heat: rises at these Ratings, and +1 every 45s; never falls in a segment. */
+    heatAt: [30, 50, 70, 90],
+    heatEvery: 45,
+    /** v0.3 §11 box-in (Pin): fills when both adjacent lanes are blocked and a unit is within 8m ahead below 4 m/s. */
+    pinFill: 25,
+    pinDrain: 30,
+    pinBelow: 4,
+    pinDrainAbove: 8,
+    pinUnitAhead: 8,
+    /** §21 headline tiers by Ratings: SPOTTED / AT LARGE / RAMPAGE / CITY IN CHAOS. */
+    tiers: [0, 30, 60, 90],
+  },
+
+  /**
+   * Phase 2 pursuit, lane-runner version (v0.3 §11 tells). Units spawn ≥40m away
+   * (LOCKED) and off camera, one tell at a time, and always leave a way through.
+   */
+  pursuit: {
+    /** §19: nothing spawns before this (cold open), then cadence/cap/kinds by Heat. */
+    firstAt: 12,
+    byHeat: [
+      { cadence: 8, cap: 2, kinds: ['cruiser'] },
+      { cadence: 6, cap: 3, kinds: ['cruiser', 'spike', 'rolling'] },
+      { cadence: 5, cap: 4, kinds: ['cruiser', 'spike', 'rolling', 'roadblock'] },
+      { cadence: 4, cap: 5, kinds: ['cruiser', 'spike', 'rolling', 'roadblock'] },
+      { cadence: 4, cap: 5, kinds: ['cruiser', 'spike', 'rolling', 'roadblock'] },
+    ] as { cadence: number; cap: number; kinds: ('cruiser' | 'spike' | 'rolling' | 'roadblock')[] }[],
+    weights: { cruiser: 3, spike: 2, rolling: 1.5, roadblock: 1.5 },
+    /** LOCKED (§1): never spawn within 40m. Behind spawns also sit behind every camera. */
+    spawnBehind: 100,
+    spawnAheadMin: 110,
+    /** Cruiser ram (v0.3: blinker + 0.6s drift, then swerve into your lane). */
+    cruiser: { closeSpeed: 7, tell: 0.6, drift: 0.6, swerve: 0.35, fallBack: 6, sideSpeed: 5 },
+    /** Rolling roadblock (v0.3: brake lights 1.5s, 2–3 cruisers abreast slowing). */
+    rolling: { cruiseFactor: 0.55, tellAt: 45, tell: 1.5, decel: 6, crawl: 3, actMax: 12 },
+    /** Spike strip (v0.3: officer kneels, 1.2s, covers one lane). Crossing it: −1 tier, keep 70% speed, stumble. */
+    spike: { aheadTime: 4.5, aheadMin: 60, tell: 1.2, speedKeep: 0.7 },
+    /** Static roadblock (v0.3: cars slide in 2.0s, all lanes but one; the gap glows). */
+    roadblock: { aheadTime: 7.5, slideLead: 4, tell: 2.0 },
+    /** Near-miss (§12): a pursuer passes within 1.5m without contact. */
+    nearMiss: 1.5,
+    /** A unit this far behind the giant has lost track (§12) and leaves. */
+    lostBehind: 30,
+    removeBehind: 60,
+  },
+
   /** Phase 0c traffic reactions (presentation): cars ahead brake, swerve and honk as he approaches. */
   traffic: {
     /** Brake lights and hazards come on when the giant is this close behind (m). */
@@ -345,6 +451,18 @@ export const TUNING = {
     tallyWindow: 4,
     /** Opening headline after this long. */
     openAt: 1.2,
+  },
+
+  /** Phase 2 broadcast escalation (presentation). */
+  coverage: {
+    /** §4 cold open: the traffic cam holds this long before the chopper finds him. */
+    coldOpen: 2.2,
+    /** The anchor desk split screen holds this long when a higher tier hits. */
+    deskTime: 4.5,
+    /** Viewer video (picture-in-picture): length, minimum gap, minimum Ratings tier. */
+    pipTime: 3.2,
+    pipGap: 12,
+    pipTier: 1,
   },
 
   /** Phase 0c look: night by default; LIVE TIME follows the local clock. */

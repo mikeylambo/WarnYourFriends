@@ -3,7 +3,9 @@ import { clamp } from './math';
 import { Rng } from './rng';
 import { Track } from './track';
 import { Escort } from './escort';
-import type { GiantState, Prop, SimEvent, SimInput, TierDropReason } from './types';
+import { Show } from './show';
+import { Pursuit } from './pursuit';
+import type { GainType, GiantState, Prop, SimEvent, SimInput, TierDropReason, Unit } from './types';
 
 export const CLASS_RANK: Record<MassClass, number> = { light: 0, medium: 1, heavy: 2, immovable: 3 };
 
@@ -63,6 +65,11 @@ export class Sim {
   readonly rng: Rng;
   /** Phase 0c: cosmetic police escort (never touches the giant or props). */
   readonly escort: Escort;
+  /** Phase 2: Ratings, Heat, Pin and how the segment ends (§12). */
+  readonly show = new Show();
+  readonly pursuit: Pursuit;
+  /** Phase 2: the sign-off exit ramp, once open (v0.3 §4). */
+  exit: { s: number; gore: number; segment: number; lane: number } | null = null;
   tick = 0;
   time = 0;
   stats: SimStats = { timeAtTier: [0, 0, 0], smashes: 0, smashesAcross: 0, bounces: 0, wallBumps: 0, laneChanges: 0, tierUps: 0, tierDowns: 0, footfalls: 0, merges: 0, minSpeed: Infinity };
@@ -75,6 +82,7 @@ export class Sim {
     this.rng = new Rng(opts.seed ^ 0x51ed);
     this.track = new Track(opts.seed);
     this.escort = new Escort(opts.seed, this.track);
+    this.pursuit = new Pursuit(opts.seed, this);
     const lane = Math.floor(TUNING.lanes.start / 2);
     const d = this.track.laneCenter(lane);
     const speed = TUNING.giant.startSpeed;
@@ -117,9 +125,24 @@ export class Sim {
     return this.giant.move !== null;
   }
 
+  /** The broadcast is still on air (the sim freezes once the segment ends). */
+  get live(): boolean {
+    return this.show.state === 'live';
+  }
+
+  /** A threat is winding up (v0.3 §15: no camera cut during a tell). */
+  get tellActive(): boolean {
+    return this.pursuit.tellActive;
+  }
+
   step(input: SimInput): SimEvent[] {
     this.events = [];
     const dt = this.dt;
+    if (!this.live) {
+      // Signed off: he keeps running, up the ramp and out of the shot (presentation fades to the recap).
+      if (this.show.state === 'cleared') this.runOffRamp(dt);
+      return this.events;
+    }
     this.stepShoulder(input, dt);
     this.stepLanes(input);
     this.stepSpeed(input, dt);
@@ -129,6 +152,12 @@ export class Sim {
     this.collide();
     const seg = this.track.segmentAt(this.giant.s);
     if (seg.index !== segBefore && seg.kind === 'merge') this.emit({ type: 'merge', from: seg.lanes0, to: seg.lanes1, s: seg.s0 });
+    if (seg.index !== segBefore && seg.zoneStart) this.emit({ type: 'zone', zone: seg.zone, name: seg.zoneName });
+    this.pursuit.step(dt);
+    this.stepExit();
+    const outnumbered = this.pursuit.chasing >= TUNING.show.outnumberedAt;
+    this.show.stepPin(dt, this.boxedIn(), this.giant.speed, this.events);
+    this.show.step(dt, this.time + dt, this.giant.tier, outnumbered, this.events);
     for (const id of this.escort.step(dt, this.time, this.giant)) {
       const c = this.escort.cruisers[id];
       this.emit({ type: 'escortJoin', id, behind: this.giant.s - c.s });
@@ -143,6 +172,101 @@ export class Sim {
     return this.events;
   }
 
+  private runOffRamp(dt: number) {
+    const g = this.giant;
+    this.stepSpeed({ lane: 0, brake: false, shoulder: false }, dt);
+    this.advance(dt);
+    g.move = null;
+    const seg = this.track.segments.find((sg) => sg.exit);
+    if (seg) {
+      const target = this.track.widthAt(g.s) + this.track.exitOffset(seg, g.s);
+      g.d += clamp(target - g.d, -6 * dt, 6 * dt);
+    }
+    this.track.ensure(g.s + TUNING.track.aheadDistance);
+    this.tick++;
+    this.time += dt;
+  }
+
+  /** For the pursuit system (same event stream). */
+  emitPublic(e: SimEvent) {
+    this.emit(e);
+  }
+
+  /** §12 gain, with "outnumbered" applied. */
+  award(type: GainType) {
+    this.show.gain(type, this.time, this.pursuit.chasing >= TUNING.show.outnumberedAt, this.events);
+  }
+
+  /** Another unit is already winding up (one tell at a time). */
+  tellBusy(except: Unit): boolean {
+    return this.pursuit.units.some((u) => u !== except && u.alive && u.phase === 'tell') || this.pursuit.tellActive;
+  }
+
+  /** Spike strip (v0.3): −1 tier, keep 70% speed, a stumble. No knock-back. */
+  spikeHit(u: Unit) {
+    const g = this.giant;
+    g.speed = Math.max(TUNING.giant.speedFloor, g.speed * TUNING.pursuit.spike.speedKeep);
+    g.stumble = TUNING.tierDrop.stumbleTime;
+    g.tierTimer = 0;
+    if (g.tier > 0) this.setTier(g.tier - 1, 'impact');
+    this.emit({ type: 'spiked', id: u.id });
+  }
+
+  /** v0.3 box-in: both neighbouring lanes blocked and a unit within 8m ahead in yours. */
+  boxedIn(): boolean {
+    const g = this.giant;
+    const S = TUNING.show;
+    const units = this.pursuit.solidBetween(g.s - 6, g.s + S.pinUnitAhead + 3);
+    const inLane = (lane: number, u: Prop) => Math.abs(u.d - this.track.laneCenter(lane)) < u.hw + 1.0;
+    const ahead = units.some((u) => u.s - u.hl - g.s <= S.pinUnitAhead && u.s > g.s && inLane(g.lane, u));
+    if (!ahead) return false;
+    const rank = this.smashRank();
+    const blocked = (lane: number) => {
+      if (!this.track.laneUsable(lane, g.s)) return true;
+      if (units.some((u) => Math.abs(u.s - g.s) < u.hl + 4 && inLane(lane, u))) return true;
+      return this.track.propsBetween(g.s - 3, g.s + 4).some((p) => CLASS_RANK[p.cls] > rank && inLane(lane, p));
+    };
+    return blocked(g.lane - 1) && blocked(g.lane + 1);
+  }
+
+  /** v0.3 §4: the exit ramp opens at 130s; be in the rightmost lane at the gore to sign off. */
+  private stepExit() {
+    const X = TUNING.segment;
+    const g = this.giant;
+    const now = this.time + this.dt;
+    if (!this.exit && now >= X.exitOpensAt && now < X.length + X.grace) this.openExit();
+    if (this.exit && g.s >= this.exit.gore) {
+      const lanes = this.track.lanesAt(this.exit.gore);
+      if (g.lane === lanes - 1 && g.move !== 'wallBump') {
+        this.show.clear(this.events);
+        return;
+      }
+      this.emit({ type: 'exitMissed', s: this.exit.gore });
+      this.exit = null;
+    }
+    if (now >= X.length + X.grace) this.show.bust('missed', this.events);
+  }
+
+  private openExit() {
+    const X = TUNING.segment;
+    const g = this.giant;
+    // Reachable even at Jog: 12s of running, within the §4 150–250m window.
+    const want = clamp(g.speed * 12, X.exitDistance[0], X.exitDistance[1]);
+    this.track.ensure(g.s + X.exitSearchMax + 60);
+    // §4 window first; if a tunnel fills it, the nearest eligible segment after it.
+    const seg =
+      this.track.segments.find((sg) => sg.s0 >= g.s + want && sg.s0 <= g.s + X.exitSearchMax && this.track.exitEligible(sg)) ??
+      this.track.segments.find((sg) => sg.s0 >= g.s + X.exitDistance[0] && this.track.exitEligible(sg));
+    if (!seg) return;
+    seg.exit = true;
+    const gore = seg.s0 + X.goreAt;
+    const lane = this.track.lanesAt(gore) - 1;
+    const c = this.track.laneCenter(lane);
+    for (const p of this.track.propsBetween(gore - X.exitClear, gore + 6)) if (Math.abs(p.d - c) < p.hw + 1.2) p.alive = false;
+    this.exit = { s: seg.s0, gore, segment: seg.index, lane };
+    this.emit({ type: 'exitOpen', s: gore, segment: seg.index, lane });
+  }
+
   private emit(e: SimEvent) {
     this.events.push(e);
     const st = this.stats;
@@ -150,6 +274,7 @@ export class Sim {
       case 'smash':
         st.smashes++;
         if (e.across) st.smashesAcross++;
+        if (e.cls === 'medium' || e.cls === 'heavy') this.award(e.cls);
         break;
       case 'bounce': st.bounces++; break;
       case 'wallBump': st.wallBumps++; break;
@@ -158,6 +283,7 @@ export class Sim {
       case 'tierDown': st.tierDowns++; break;
       case 'footfall': st.footfalls++; break;
       case 'merge': st.merges++; break;
+      case 'smash': break;
     }
   }
 
@@ -357,7 +483,7 @@ export class Sim {
   }
 
   /** Is `lane` free of things the giant can't smash over [s0, s1]? */
-  laneClear(lane: number, s0: number, s1: number): boolean {
+  laneClear(lane: number, s0: number, s1: number, moving = true): boolean {
     if (!this.track.laneUsable(lane, s0) || !this.track.laneUsable(lane, s1)) return false;
     const c = this.track.laneCenter(lane);
     const r = TUNING.giant.radius;
@@ -366,6 +492,12 @@ export class Sim {
       if (CLASS_RANK[p.cls] <= rank) continue;
       if (Math.abs(p.d - c) < p.hw + r) return false;
     }
+    for (const u of this.pursuit.solidBetween(s0, s1)) {
+      if (CLASS_RANK[u.cls] <= rank) continue;
+      // Knock-backs ignore moving police cars: he shoves past them, so a lane is never sealed by traffic.
+      if (!moving && (u.unit === 'cruiser' || u.unit === 'rolling')) continue;
+      if (Math.abs(u.d - c) < u.hw + r) return false;
+    }
     return true;
   }
 
@@ -373,8 +505,10 @@ export class Sim {
     const g = this.giant;
     const r = TUNING.giant.radius;
     const rank = this.smashRank();
-    const near = this.track.propsBetween(g.s - r - 4, g.s + r + 4, this.near);
+    const near: Prop[] = this.track.propsBetween(g.s - r - 4, g.s + r + 4, this.near);
+    for (const u of this.pursuit.solidBetween(g.s - r - 6, g.s + r + 6)) near.push(u);
     for (const p of near) {
+      if (!p.alive) continue;
       const cs = clamp(g.s, p.s - p.hl, p.s + p.hl);
       const cd = clamp(g.d, p.d - p.hw, p.d + p.hw);
       const ds = g.s - cs;
@@ -390,8 +524,12 @@ export class Sim {
         continue;
       }
 
-      // Can't smash it. Clear the overlap along the road (never through it).
-      if (g.s < p.s) g.s = Math.min(g.s, p.s - p.hl - Math.sqrt(Math.max(0, r * r - dd * dd)) - 0.01);
+      // Can't smash it. Clear the overlap along the road (never through it). A moving unit
+      // that swerved into him shoves him sideways instead (knock-back below), no jump back.
+      const unit = (p as Unit).unit;
+      const moving = unit === 'cruiser' || unit === 'rolling';
+      if (!moving && g.s < p.s) g.s = Math.min(g.s, p.s - p.hl - Math.sqrt(Math.max(0, r * r - dd * dd)) - 0.01);
+      if (unit) (p as Unit).hit = true;
       if (g.stumble > 0 || g.move === 'knock') continue; // already reeling: no double penalty
 
       // −1 tier, 0.3s stumble, knocked back to the previous lane (v0.3).
@@ -418,7 +556,7 @@ export class Sim {
     for (let k = 1; k <= TUNING.lanes.max; k++) candidates.push(here - k, here + k);
     for (const lane of candidates) {
       if (lane === here && g.move !== 'change') continue;
-      if (this.laneClear(lane, s0, s1)) return lane;
+      if (this.laneClear(lane, s0, s1, false)) return lane;
     }
     // Nowhere clear (rows always leave a lane, so rare): fall back to the previous lane.
     return this.track.laneUsable(g.prevLane, g.s) ? g.prevLane : here;

@@ -12,7 +12,8 @@ function run(seed: number, seconds: number) {
   const kinds = new Map<number, PropKind>();
   const log = new Set<SimEvent>();
   const out: { h: Headline; ctx: NewsContext }[] = [];
-  for (let i = 0; i < seconds * 60; i++) {
+  const tiers: { t: number; tier: number }[] = [];
+  for (let i = 0; i < seconds * 60 && sim.live; i++) {
     for (const p of sim.track.props) kinds.set(p.id, p.kind);
     const braking = i % 900 > 700 && i % 900 < 760;
     const events = sim.step({ ...bot.input(), brake: braking });
@@ -21,11 +22,12 @@ function run(seed: number, seconds: number) {
       news.observe(e, sim.time);
     }
     const g = sim.giant;
-    const ctx: NewsContext = { time: sim.time, tier: g.tier, lane: g.lane, lanes: sim.track.lanesAt(g.s), heading: sim.track.headingAt(g.s), s: g.s };
+    const ctx: NewsContext = { time: sim.time, tier: g.tier, lane: g.lane, lanes: sim.track.lanesAt(g.s), heading: sim.track.headingAt(g.s), s: g.s, ratingsTier: sim.show.tier, heat: sim.show.heat };
+    tiers.push({ t: sim.time, tier: sim.show.tier });
     const h = news.update(ctx, (id) => kinds.get(id));
     if (h) out.push({ h, ctx });
   }
-  return { out, log };
+  return { out, log, tiers };
 }
 
 describe('headlines (§21)', () => {
@@ -38,7 +40,7 @@ describe('headlines (§21)', () => {
 
   for (const seed of [1, 2, 3, 4, 5, 6, 7, 8]) {
     it(`seed ${seed}: cadence, anti-repeat and the chyron never lies`, () => {
-      const { out, log } = run(seed, 120);
+      const { out, log, tiers } = run(seed, 170);
       expect(out.length).toBeGreaterThan(10);
       expect(out[0].h.text).toMatch(/Spotted/);
       let last = -Infinity;
@@ -59,15 +61,19 @@ describe('headlines (§21)', () => {
         if (lane) expect(ctx.lane + 1).toBe(Number(lane[1]));
         if (h.place === 'In The Fast Lane') expect(ctx.lane).toBe(0);
         if (h.place?.endsWith('bound')) expect(h.place).toBe(`${compass(ctx.heading)}bound`);
-        if (h.breaking) expect(h.sources[0].type).toBe('tierUp');
+        if (h.breaking) expect(['ratings', 'exitOpen', 'busted', 'signOff']).toContain(h.sources[0].type);
       });
-      // Tier changes break in on the same tick.
-      for (const e of log) {
-        if (e.type !== 'tierUp') continue;
-        expect(out.some(({ h }) => h.breaking && h.sources[0] === e)).toBe(true);
+      // §21: a Ratings tier rise breaks in on the same tick.
+      let prev = 0;
+      for (const x of tiers) {
+        if (x.tier > prev) expect(out.some(({ h }) => h.breaking && Math.abs(h.t - x.t) < 1e-9 && h.sources[0].type === 'ratings')).toBe(true);
+        prev = Math.max(prev, x.tier);
       }
+      // The broadcast ends with a sign-off or busted line, from the event that ended it.
+      const final = out[out.length - 1].h;
+      expect(["SIGN-OFF", "BUSTED"]).toContain(final.kicker);
       // "Giant At Large. Warn Your Friends." fires once, on the first Stride.
-      expect(out.filter(({ h }) => h.text === 'Giant At Large. Warn Your Friends.').length).toBe(1);
+      expect(out.filter(({ h }) => h.text === 'Giant At Large. Warn Your Friends.').length).toBe(tiers.some((x) => x.tier >= 1) ? 1 : 0);
     });
   }
 });

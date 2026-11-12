@@ -5,13 +5,39 @@ import type { Segment } from '../sim/track';
 import type { Prop, PropKind } from '../sim/types';
 import { Rng } from '../sim/rng';
 import { KIND_COLORS, MATERIAL_DEBRIS, PALETTE } from './palette';
-import { crackTexture, toon } from './toon';
-import { GLOW } from './glow';
+import { crackTexture, toon, toonRamp } from './toon';
+import { GLOW, facade } from './glow';
 import type { LampPos } from './lighting';
 
 const LENS = new THREE.MeshBasicMaterial({ color: 0xffc27a });
 const TAIL = new THREE.MeshBasicMaterial({ color: 0xd01818 });
 const HEAD = new THREE.MeshBasicMaterial({ color: 0xfff2d8 });
+
+let signTex: THREE.Texture | null = null;
+/** "SIGN-OFF" exit sign face, drawn once. */
+function signTexture(): THREE.Texture {
+  if (signTex) return signTex;
+  const c = document.createElement('canvas');
+  c.width = 256;
+  c.height = 176;
+  const g = c.getContext('2d')!;
+  g.fillStyle = '#1e6b3a';
+  g.fillRect(0, 0, 256, 176);
+  g.strokeStyle = '#f4f4ee';
+  g.lineWidth = 6;
+  g.strokeRect(8, 8, 240, 160);
+  g.fillStyle = '#f4f4ee';
+  g.textAlign = 'center';
+  g.font = '800 30px system-ui, sans-serif';
+  g.fillText('EXIT 6', 128, 52);
+  g.font = '900 40px system-ui, sans-serif';
+  g.fillText('SIGN-OFF', 128, 104);
+  g.font = '800 44px system-ui, sans-serif';
+  g.fillText('\u2198', 128, 156);
+  signTex = new THREE.CanvasTexture(c);
+  signTex.colorSpace = THREE.SRGBColorSpace;
+  return signTex;
+}
 
 /** Road paint is retroreflective: a little self-light so lanes read at night outside the pools. */
 const PAINT_GLOW = 0x303030;
@@ -38,10 +64,10 @@ interface CarFx {
  * pooled debris, dust rings and Rampage crack decals. Reads sim state only.
  */
 
-type Part = [x: number, y: number, z: number, w: number, h: number, d: number, color: number | 'kind'];
+export type Part = [x: number, y: number, z: number, w: number, h: number, d: number, color: number | 'kind'];
 
 /** Box parts per prop kind, in prop-local space: x along the road, z across it. */
-function partsFor(p: Prop): Part[] {
+export function partsFor(p: Prop): Part[] {
   const L = p.hl * 2;
   const W = p.hw * 2;
   switch (p.kind as PropKind) {
@@ -59,6 +85,10 @@ function partsFor(p: Prop): Part[] {
       return [[0, 1.25, 0, L, 1.9, W, 'kind'], [L * 0.42, 1.55, 0, L * 0.18, 0.6, W * 0.9, 0xa9cfe0], [0, 1.0, 0, L * 1.01, 0.2, W * 1.01, 0xd94f4f]];
     case 'barricade':
       return [[0, 0.38, 0, L, 0.75, W, 'kind'], [0, 0.86, 0, L * 0.8, 0.2, W, 0xf08a24]];
+    case 'cruiser':
+    case 'compact':
+      // Black-and-white police car (white doors and roof read from the chopper).
+      return [[0, 0.62, 0, L, 0.72, W, 'kind'], [0.1, 0.66, 0, L * 0.42, 0.5, W * 1.01, 0xf1f1ee], [-0.25, 1.28, 0, L * 0.5, 0.55, W * 0.86, 0x1d2633], [-0.25, 1.58, 0, L * 0.48, 0.06, W * 0.88, 0xf1f1ee]];
   }
 }
 
@@ -95,6 +125,7 @@ export class HighwayView {
   private pos = { x: 0, z: 0 };
   private cars = new Map<number, CarFx>();
   private lampList: LampPos[] = [];
+  private overpasses: { s: number; mat: THREE.MeshToonMaterial }[] = [];
   private lampsDirty = true;
   private fxTime = 0;
   private honkCd = 0;
@@ -214,15 +245,33 @@ export class HighwayView {
       group.add(m);
       return m;
     };
-    // Verges, road, edge lines.
-    add(this.sweep(seg, () => [[-8, 0], [-0.9, 0.01]]), PALETTE.verge);
-    add(this.sweep(seg, (_i, _s, w) => [[w + 0.9, 0.01], [w + 8, 0]]), PALETTE.verge);
+    // Ground either side, by zone (Phase 2 road variety).
+    const zone = seg.zone;
+    if (zone === 'highway') {
+      add(this.sweep(seg, () => [[-8, 0], [-0.9, 0.01]]), PALETTE.verge);
+      add(this.sweep(seg, (_i, _s, w) => [[w + 0.9, 0.01], [w + 8, 0]]), PALETTE.verge);
+    } else if (zone === 'avenue') {
+      // Sidewalks with a curb face.
+      add(this.sweep(seg, () => [[-6, 0.16], [-0.9, 0.16], [-0.9, 0]]), PALETTE.sidewalk);
+      add(this.sweep(seg, (_i, _s, w) => [[w + 0.9, 0], [w + 0.9, 0.16], [w + 6, 0.16]]), PALETTE.sidewalk);
+    } else if (zone === 'bridge') {
+      // Open water under a deck slab.
+      add(this.sweep(seg, (_i, _s, w) => [[-160, -0.03], [w + 160, -0.03]]), PALETTE.water);
+      add(this.sweep(seg, (_i, _s, w) => [[-1.4, 0.02], [-1.4, -1.6], [w + 1.4, -1.6], [w + 1.4, 0.02]]), PALETTE.deck);
+    } else {
+      add(this.sweep(seg, (_i, _s, w) => [[-1.6, 0.01], [w + 1.6, 0.01]]), PALETTE.deck);
+    }
     add(this.sweep(seg, (_i, _s, w) => [[-0.9, 0.02], [w + 0.9, 0.02]]), PALETTE.road);
     add(this.sweep(seg, () => [[0.15, 0.035], [0.35, 0.035]]), PALETTE.edgeLineLeft, false, true);
     add(this.sweep(seg, (_i, _s, w) => [[w - 0.35, 0.035], [w - 0.15, 0.035]]), PALETTE.edgeLineRight, false, true);
-    // Concrete walls (barriers) on both edges.
-    add(this.sweep(seg, () => [[-0.4, 0], [-0.4, wallH], [-0.9, wallH], [-0.9, 0]]), PALETTE.wall);
-    add(this.sweep(seg, (_i, _s, w) => [[w + 0.4, 0], [w + 0.4, wallH], [w + 0.9, wallH], [w + 0.9, 0]]), PALETTE.wall);
+    // Edge barriers (the sim's walls): concrete on the highway, a curb on the avenue,
+    // a parapet on the bridge, the tunnel's own tiled walls.
+    const [eh, ec] = zone === 'avenue' ? [0.3, PALETTE.curb] : zone === 'bridge' ? [0.9, PALETTE.deck] : zone === 'tunnel' ? [5.5, PALETTE.tunnelWall] : [wallH, PALETTE.wall];
+    add(this.sweep(seg, () => [[-0.4, 0], [-0.4, eh], [-0.9, eh], [-0.9, 0]]), ec);
+    const exitSeg = this.exitFor(seg);
+    if (exitSeg) this.buildRamp(seg, exitSeg, group);
+    else add(this.sweep(seg, (_i, _s, w) => [[w + 0.4, 0], [w + 0.4, eh], [w + 0.9, eh], [w + 0.9, 0]]), ec);
+    if (this.sim.track.segments.some((x) => x.exit && x.index === seg.index + 1)) this.signGantry(seg, seg.s0 + 6, group);
 
     // Dashed lane lines (3m dash, 6m gap), only where both lanes exist.
     const dashGeo = new THREE.PlaneGeometry(1, 1);
@@ -290,7 +339,11 @@ export class HighwayView {
     const s = seg.s0 + 20;
     const w = this.sim.track.widthAt(s);
     const h = this.sim.track.headingAt(s);
-    group.userData.lamps = this.buildLamps(seg, group);
+    group.userData.lamps = zone === 'tunnel' ? this.buildTunnel(seg, group) : this.buildLamps(seg, group);
+    if (zone === 'avenue') this.buildStorefronts(seg, group, rng);
+    if (zone === 'bridge') this.buildBridge(seg, group);
+    if (seg.overpass) this.buildOverpass(seg, group);
+    if (zone === 'highway') {
     for (let t = 0; t < 7; t++) {
       const left = rng.chance(0.5);
       const off = rng.range(12, 40);
@@ -344,7 +397,150 @@ export class HighwayView {
       }
       group.add(g);
     }
+    }
     return group;
+  }
+
+  /** Phase 2 avenue: storefronts shoulder to shoulder, lit windows at night, awnings at street level. */
+  private buildStorefronts(seg: Segment, group: THREE.Group, rng: Rng) {
+    const track = this.sim.track;
+    for (const left of [true, false]) {
+      let a = 0;
+      while (a < seg.length) {
+        const wid = rng.range(9, 15);
+        const sMid = seg.s0 + a + wid / 2;
+        if (sMid > seg.s0 + seg.length) break;
+        const w = track.widthAt(sMid);
+        const depth = rng.range(10, 16);
+        const ht = rng.range(8, 20);
+        const d = left ? -6 - depth / 2 : w + 6 + depth / 2;
+        track.posAt(sMid, d, this.pos);
+        const b = new THREE.Mesh(this.box, facade(rng.pick(PALETTE.storefronts), toonRamp()));
+        b.scale.set(wid - 0.6, ht, depth);
+        b.position.set(this.pos.x, ht / 2, this.pos.z);
+        b.rotation.y = -track.headingAt(sMid);
+        const aw = new THREE.Mesh(this.box, toon(rng.pick(PALETTE.awnings)));
+        track.posAt(sMid, left ? -6.6 : w + 6.6, this.pos);
+        aw.scale.set(wid - 1.5, 0.25, 1.6);
+        aw.position.set(this.pos.x, 3.2, this.pos.z);
+        aw.rotation.y = b.rotation.y;
+        group.add(b, aw);
+        a += wid;
+      }
+    }
+  }
+
+  /** Phase 2 bridge: suspension towers at the start of the span and cables running along it. */
+  private buildBridge(seg: Segment, group: THREE.Group) {
+    const track = this.sim.track;
+    const H = 38;
+    const tower = (s: number) => {
+      const w = track.widthAt(s);
+      for (const d of [-2.4, w + 2.4]) {
+        const p = track.posAt(s, d, { x: 0, z: 0 });
+        const m = new THREE.Mesh(this.box, toon(0x8a6f62));
+        m.scale.set(2, H, 2);
+        m.position.set(p.x, H / 2 - 1.6, p.z);
+        group.add(m);
+      }
+      const mid = track.posAt(s, w / 2, { x: 0, z: 0 });
+      const beam = new THREE.Mesh(this.box, toon(0x8a6f62));
+      beam.scale.set(1.6, 1.6, w + 6.8);
+      beam.position.set(mid.x, H - 3, mid.z);
+      beam.rotation.y = -track.headingAt(s);
+      group.add(beam);
+    };
+    if (seg.zoneStart) tower(seg.s0 + 6);
+    // Main cables sagging along the span, one per side.
+    for (const side of [0, 1]) {
+      const pts: THREE.Vector3[] = [];
+      for (let i = 0; i <= seg.length; i += 4) {
+        const s = seg.s0 + i;
+        const w = track.widthAt(s);
+        const p = track.posAt(s, side ? w + 2.4 : -2.4, { x: 0, z: 0 });
+        const k = (i / seg.length) * Math.PI;
+        pts.push(new THREE.Vector3(p.x, H - 4 - Math.sin(k) * 26 * (seg.zoneStart ? 0.5 : 1), p.z));
+      }
+      const geo = new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 16, 0.18, 4);
+      group.add(new THREE.Mesh(geo, toon(0xb7a89a)));
+    }
+  }
+
+  /** Phase 2 tunnel (cutaway: the chopper sees in): roof beams, orange wall lights, portals. Returns its lights as lamps. */
+  private buildTunnel(seg: Segment, group: THREE.Group): LampPos[] {
+    const track = this.sim.track;
+    const lamps: LampPos[] = [];
+    for (let i = 4; i < seg.length; i += 10) {
+      const s = seg.s0 + i;
+      const w = track.widthAt(s);
+      const h = track.headingAt(s);
+      const mid = track.posAt(s, w / 2, { x: 0, z: 0 });
+      const beam = new THREE.Mesh(this.box, toon(PALETTE.tunnelWall));
+      beam.scale.set(0.5, 0.6, w + 1.8);
+      beam.position.set(mid.x, 5.6, mid.z);
+      beam.rotation.y = -h;
+      group.add(beam);
+      for (const d of [-0.35, w + 0.35]) {
+        const p = track.posAt(s, d, { x: 0, z: 0 });
+        const strip = new THREE.Mesh(this.box, LENS);
+        strip.scale.set(2.4, 0.18, 0.12);
+        strip.position.set(p.x, 4.4, p.z);
+        strip.rotation.y = -h;
+        const halo = new THREE.Sprite(GLOW.lampHalo);
+        halo.position.set(p.x, 4.4, p.z);
+        halo.scale.set(3, 2, 1);
+        group.add(strip, halo);
+      }
+      lamps.push({ x: mid.x, y: 5.2, z: mid.z });
+    }
+    // Portals: a roofed mouth where the tunnel starts and ends.
+    const next = track.segments.find((x) => x.index === seg.index + 1);
+    const portal = (s: number) => {
+      const w = track.widthAt(s);
+      const mid = track.posAt(s, w / 2, { x: 0, z: 0 });
+      const roofMat = new THREE.MeshToonMaterial({ color: PALETTE.tunnelWall, gradientMap: toonRamp(), transparent: true });
+      this.overpasses.push({ s, mat: roofMat }); // fades like an overpass while he passes under
+      const roof = new THREE.Mesh(this.box, roofMat);
+      roof.scale.set(4, 2.2, w + 6);
+      roof.position.set(mid.x, 6.6, mid.z);
+      roof.rotation.y = -track.headingAt(s);
+      const trim = new THREE.Mesh(this.box, toon(PALETTE.tunnelTrim, { emissive: 0x3a2a08 }));
+      trim.scale.set(4.2, 0.35, w + 6.2);
+      trim.position.set(mid.x, 5.55, mid.z);
+      trim.rotation.y = roof.rotation.y;
+      group.add(roof, trim);
+    };
+    if (seg.zoneStart) portal(seg.s0 + 2);
+    if (next && next.zone !== 'tunnel') portal(seg.s0 + seg.length - 2);
+    return lamps;
+  }
+
+  /** Phase 2 overpass: a road bridge crossing overhead. Its deck fades when the giant passes under (never hides him). */
+  private buildOverpass(seg: Segment, group: THREE.Group) {
+    const track = this.sim.track;
+    const s = seg.s0 + 20;
+    const w = track.widthAt(s);
+    const h = track.headingAt(s);
+    const mat = new THREE.MeshToonMaterial({ color: 0x9a948a, gradientMap: toonRamp(), transparent: true, opacity: 1 });
+    const mid = track.posAt(s, w / 2, { x: 0, z: 0 });
+    const deck = new THREE.Mesh(this.box, mat);
+    deck.scale.set(11, 1.3, w + 40);
+    deck.position.set(mid.x, 8, mid.z);
+    deck.rotation.y = -h;
+    const rail = new THREE.Mesh(this.box, mat);
+    rail.scale.set(0.4, 1, w + 40);
+    rail.position.set(mid.x, 9.1, mid.z);
+    rail.rotation.y = -h;
+    group.add(deck, rail);
+    for (const d of [-3, w + 3]) {
+      const p = track.posAt(s, d, { x: 0, z: 0 });
+      const pier = new THREE.Mesh(this.box, mat);
+      pier.scale.set(3, 7.4, 2.2);
+      pier.position.set(p.x, 3.7, p.z);
+      pier.rotation.y = -h;
+      group.add(pier);
+    }
+    this.overpasses.push({ s, mat });
   }
 
   /**
@@ -361,6 +557,7 @@ export class HighwayView {
       const w = track.widthAt(s);
       const h = track.headingAt(s);
       const left = Math.round(s / sp) % 2 === 0;
+      if (!left && this.exitFor(seg)) continue; // the ramp peels off on the right
       const baseD = left ? -1.6 : w + 1.6;
       const headD = left ? 2.0 : w - 2.0;
       const H = 9;
@@ -395,6 +592,94 @@ export class HighwayView {
       lamps.push({ x: head.x, y: H, z: head.z });
     }
     return lamps;
+  }
+
+  /** The sign-off exit segment this segment's ramp belongs to (the exit segment itself or the one after it). */
+  private exitFor(seg: Segment): Segment | null {
+    return this.sim.track.segments.find((x) => x.exit && (x.index === seg.index || x.index === seg.index - 1)) ?? null;
+  }
+
+  /** Rebuild segment views (the exit opens on segments already built ahead). */
+  rebuild(indices: number[]) {
+    for (const i of indices) {
+      const g = this.segViews.get(i);
+      if (!g) continue;
+      this.group.remove(g);
+      this.segViews.delete(i);
+    }
+    this.lampsDirty = true;
+    this.sync();
+  }
+
+  /** Phase 2 sign-off ramp: a lane peeling away right, its outer barrier, a gore barrier and chevrons. */
+  private buildRamp(seg: Segment, ex: Segment, group: THREE.Group) {
+    const track = this.sim.track;
+    const wallH = TUNING.track.wallHeight;
+    const c = (s: number, w: number) => w + track.exitOffset(ex, s);
+    const mat = (color: number) => toon(color, { side: THREE.DoubleSide });
+    group.add(new THREE.Mesh(this.sweep(seg, (_i, s, w) => [[c(s, w) - 2.4, 0.022], [c(s, w) + 2.4, 0.022]]), mat(PALETTE.road)));
+    group.add(new THREE.Mesh(this.sweep(seg, (_i, s, w) => [[c(s, w) + 2.6, 0], [c(s, w) + 2.6, wallH], [c(s, w) + 3.1, wallH], [c(s, w) + 3.1, 0]]), mat(PALETTE.wall)));
+    group.add(new THREE.Mesh(this.sweep(seg, (_i, s, w) => [[c(s, w) + 2.0, 0.036], [c(s, w) + 2.2, 0.036]]), toon(PALETTE.edgeLineRight, { side: THREE.DoubleSide, emissive: 0x303030 })));
+    // Gore barrier once the ramp has pulled clear of the road.
+    let i0 = -1;
+    for (let i = 0; i <= seg.length; i++) {
+      const s = seg.s0 + i;
+      if (c(s, track.widthAt(s)) - 2.6 > track.widthAt(s) + 0.4) {
+        i0 = i;
+        break;
+      }
+    }
+    if (i0 >= 0 && i0 < seg.length) {
+      group.add(new THREE.Mesh(this.sweep(seg, (_i, _s, w) => [[w + 0.4, 0], [w + 0.4, wallH], [w + 0.9, wallH], [w + 0.9, 0]], i0), mat(PALETTE.wall)));
+      group.add(new THREE.Mesh(this.sweep(seg, (_i, s, w) => [[c(s, w) - 2.9, 0], [c(s, w) - 2.9, wallH], [c(s, w) - 2.4, wallH], [c(s, w) - 2.4, 0]], i0), mat(PALETTE.wall)));
+    }
+    // Gore chevrons where the ramp splits.
+    if (seg === ex) {
+      const dash = new THREE.PlaneGeometry(1, 1);
+      dash.rotateX(-Math.PI / 2);
+      for (let k = 0; k < 4; k++) {
+        const s = seg.s0 + TUNING.segment.goreAt - 6 + k * 3;
+        const w = track.widthAt(s);
+        track.posAt(s, (w + c(s, w) - 2.4) / 2, this.pos);
+        const chev = new THREE.Mesh(dash, toon(0xf0c64a, { emissive: 0x806010 }));
+        chev.position.set(this.pos.x, 0.04, this.pos.z);
+        chev.rotation.y = -track.headingAt(s) + 0.6;
+        chev.scale.set(2.4, 1, 0.35);
+        group.add(chev);
+      }
+      this.signGantry(seg, seg.s0 + 4, group);
+    }
+  }
+
+  /** Green overhead sign over the rightmost lane: "SIGN-OFF / EXIT 6". */
+  private signGantry(seg: Segment, s: number, group: THREE.Group) {
+    const track = this.sim.track;
+    const w = track.widthAt(s);
+    const h = track.headingAt(s);
+    const lane = track.lanesAt(s) - 1;
+    const post = track.posAt(s, w + 1.6, { x: 0, z: 0 });
+    const p = new THREE.Mesh(this.box, toon(PALETTE.pole));
+    p.scale.set(0.35, 7.5, 0.35);
+    p.position.set(post.x, 3.75, post.z);
+    const mid = track.posAt(s, track.laneCenter(lane), { x: 0, z: 0 });
+    const arm = new THREE.Mesh(this.box, toon(PALETTE.pole));
+    const armMid = track.posAt(s, (track.laneCenter(lane) + w + 1.6) / 2, { x: 0, z: 0 });
+    arm.scale.set(0.3, 0.3, w + 1.6 - track.laneCenter(lane) + 1.6);
+    arm.position.set(armMid.x, 7.4, armMid.z);
+    arm.rotation.y = -h;
+    const face = new THREE.MeshBasicMaterial({ map: signTexture() });
+    const board = new THREE.Mesh(this.box, [toon(0x1e6b3a), face, toon(0x1e6b3a), toon(0x1e6b3a), toon(0x1e6b3a), toon(0x1e6b3a)]);
+    board.scale.set(0.2, 2.6, 3.8);
+    board.position.set(mid.x, 6.3, mid.z);
+    // The sign face (box −X side, material 1) faces back down the road toward the giant and the chopper.
+    board.rotation.y = -h;
+    group.add(p, arm, board);
+    const top = new THREE.Mesh(this.box, new THREE.MeshBasicMaterial({ map: signTexture() }));
+    top.scale.set(3.8, 0.05, 2.6);
+    top.position.set(mid.x, 7.62, mid.z);
+    top.rotation.y = -h + Math.PI / 2;
+    group.add(top);
+    void seg;
   }
 
   /** Every streetlight head currently built (for the real lights in the rig). */
@@ -600,6 +885,13 @@ export class HighwayView {
     this.ground.position.x = focusX;
     this.ground.position.z = focusZ;
     if (dt > 0) this.updateTraffic(dt, giantS, giantD);
+    // Overpasses fade while the giant is near them so the chopper never loses him.
+    for (const o of this.overpasses) {
+      const near = Math.abs(o.s - giantS) < 16;
+      o.mat.opacity += ((near ? 0.1 : 1) - o.mat.opacity) * Math.min(1, dt * 8);
+      o.mat.depthWrite = o.mat.opacity > 0.95;
+    }
+    if (this.overpasses.length > 24) this.overpasses.splice(0, this.overpasses.length - 24);
     const g = 30;
     for (let i = 0; i < MAX_DEBRIS; i++) {
       const d = this.debris[i];

@@ -23,14 +23,16 @@ html, body {
 #flash { position: absolute; inset: 0; background: #fff; opacity: 0; pointer-events: none; }
 
 #debug {
-  position: absolute; top: 52px; left: 8px;
+  position: absolute; top: 96px; left: 8px;
   font: 12px/1.35 ui-monospace, SFMono-Regular, Menlo, monospace;
   background: rgba(20, 8, 36, 0.72); color: #f6f1e4;
   padding: 6px 8px; border-radius: 4px; white-space: pre; pointer-events: none;
 }
 
 /* Phase 0 tier readout: greybox stand-in until the broadcast HUD (§21). */
-#tierbar {
+/* Phase 2: the broadcast HUD replaces the Phase 0 tier readout (§21 budget); it stays in the debug overlay. */
+#tierbar { display: none !important; }
+#tierbar-old {
   position: absolute; right: 58px; top: calc(56px + env(safe-area-inset-top));
   display: flex; align-items: center; gap: 10px;
   background: rgba(20, 8, 36, 0.8); padding: 6px 12px; border-radius: 3px;
@@ -153,7 +155,8 @@ html.touch #chyron { right: 128px; }
 #chyron .text span.in { animation: chyin 0.35s cubic-bezier(.2,.8,.2,1); }
 @keyframes chyin { from { transform: translateY(100%); opacity: 0; } to { transform: none; opacity: 1; } }
 #breaking {
-  position: absolute; left: 0; right: 0; bottom: calc(66px + env(safe-area-inset-bottom)); height: 34px;
+  /* Top of frame: never over the giant (he sits in the lower part of the shot). */
+  position: absolute; left: 0; right: 0; top: calc(96px + env(safe-area-inset-top)); height: 34px;
   background: var(--red); color: #fff; display: grid; place-items: center; transform: translateX(-102%);
   font: 900 18px/1 ui-sans-serif, system-ui, sans-serif; letter-spacing: 0.3em; box-shadow: 0 0 30px rgba(215, 38, 61, 0.6);
 }
@@ -161,3 +164,101 @@ html.touch #chyron { right: 128px; }
 #breaking.soft.go { animation: wipesoft 1.5s ease forwards; }
 @keyframes wipe { 0% { transform: translateX(-102%); } 14% { transform: none; } 80% { transform: none; opacity: 1; } 100% { transform: none; opacity: 0; } }
 @keyframes wipesoft { 0% { transform: none; opacity: 0; } 20% { opacity: 0.9; } 80% { opacity: 0.9; } 100% { opacity: 0; transform: none; } }
+
+/* --- Phase 2 HUD: Ratings (viewer count), Heat stars, sign-off arrow (§21) ------- */
+#ratings {
+  position: absolute; top: calc(42px + env(safe-area-inset-top)); left: 10px;
+  display: grid; grid-template-columns: auto auto auto auto; align-items: center; gap: 2px 6px;
+  font: 800 13px/1 ui-sans-serif, system-ui, sans-serif; color: #fff; letter-spacing: 0.06em;
+  background: rgba(10, 8, 20, 0.7); padding: 6px 9px 7px;
+}
+#ratings .eye { width: 10px; height: 10px; border-radius: 50%; border: 2px solid #fff; box-shadow: inset 0 0 0 2px #0a0814; background: #fff; }
+#ratings b { font-size: 16px; font-variant-numeric: tabular-nums; min-width: 4.2ch; }
+#ratings .lbl { font-size: 10px; opacity: 0.75; letter-spacing: 0.18em; }
+#ratings .trend { font-size: 11px; color: #ff8a96; min-width: 1ch; }
+#ratings .bar { grid-column: 1 / -1; height: 4px; background: rgba(255,255,255,0.15); position: relative; margin-top: 3px; }
+#ratings .bar i { position: absolute; inset: 0 auto 0 0; width: 20%; background: #fff; transition: width 0.2s linear; }
+#ratings.t1 .bar i { background: #f2cc8f; }
+#ratings.t2 .bar i { background: #ff7a5a; }
+#ratings.t3 .bar i { background: #ff3b4e; box-shadow: 0 0 10px #ff3b4e; }
+#ratings.danger { animation: danger 0.6s steps(2) infinite; }
+@keyframes danger { 50% { background: rgba(215, 38, 61, 0.85); } }
+#heat { display: block; margin-top: 3px; font-style: normal; letter-spacing: 0.05em; }
+#heat em { font-style: normal; font-size: 10px; color: rgba(255,255,255,0.22); }
+#heat em.on { color: #ffcf4a; text-shadow: 0 0 6px rgba(255, 190, 60, 0.8); }
+#signoff {
+  position: absolute; left: 0; top: 0; transform: translate(-50%, -50%);
+  display: flex; align-items: center; gap: 6px; pointer-events: none;
+  background: #1e6b3a; color: #f4f4ee; padding: 6px 10px; border: 2px solid #f4f4ee;
+  font: 900 13px/1 ui-sans-serif, system-ui, sans-serif; letter-spacing: 0.12em;
+  box-shadow: 0 0 18px rgba(80, 255, 150, 0.45);
+}
+#signoff[hidden] { display: none; }
+#signoff .arrow { display: inline-block; font-size: 16px; }
+#signoff #exitdist { font-variant-numeric: tabular-nums; opacity: 0.9; }
+#live #clock.count { background: #1e6b3a; }
+html.ended #view { filter: saturate(0.25) contrast(1.1); transition: filter 0.6s; }
+
+/* --- Phase 2 broadcast escalation ----------------------------------------------- */
+#live #coverage { background: rgba(10, 8, 20, 0.55); padding: 5px 7px 4px; font-size: 10px; letter-spacing: 0.16em; opacity: 0.9; }
+#rivals { position: absolute; top: calc(10px + env(safe-area-inset-top)); right: 196px; display: none; gap: 6px; }
+#hud.cov3 #rivals { display: flex; }
+#rivals span { background: rgba(255,255,255,0.9); color: #222; font: 900 11px/1 ui-sans-serif, system-ui, sans-serif; padding: 6px 7px; letter-spacing: 0.08em; opacity: 0.85; }
+#hud.cov3::after { content: ''; position: absolute; inset: 0; border: 4px solid rgba(215, 38, 61, 0.65); animation: chaos 1.2s ease-in-out infinite; pointer-events: none; }
+@keyframes chaos { 50% { border-color: rgba(215, 38, 61, 0.2); } }
+
+#desk { position: absolute; top: calc(96px + env(safe-area-inset-top)); right: 10px; width: 210px; height: 118px; border: 2px solid #fff; overflow: hidden; box-shadow: 0 6px 24px rgba(0,0,0,0.5); background: linear-gradient(#1b2a52, #0d1530); animation: slidein 0.35s cubic-bezier(.2,.8,.2,1); }
+#desk[hidden] { display: none; }
+#desk .set { position: absolute; inset: 0; }
+#desk .set i { position: absolute; bottom: 30px; width: 46px; height: 54px; border-radius: 23px 23px 6px 6px; background: #2a1d33; }
+#desk .set i::before { content: ''; position: absolute; left: 11px; top: -24px; width: 24px; height: 26px; border-radius: 50%; background: #c9a184; }
+#desk .set .a1 { left: 46px; }
+#desk .set .a2 { left: 120px; background: #3a3f55; }
+#desk .counter { position: absolute; left: 0; right: 0; bottom: 0; height: 34px; background: #d7263d; color: #fff; font: 900 12px/34px ui-sans-serif, system-ui, sans-serif; letter-spacing: 0.2em; text-align: center; }
+#desk .counter b { background: #fff; color: #d7263d; padding: 1px 5px; }
+#desk .tag, #pip .tag { position: absolute; left: 0; top: 0; background: rgba(10, 8, 20, 0.8); color: #fff; font: 800 9px/1 ui-sans-serif, system-ui, sans-serif; letter-spacing: 0.18em; padding: 4px 6px; }
+@keyframes slidein { from { transform: translateX(110%); } }
+
+#pip { position: absolute; right: 12px; bottom: calc(110px + env(safe-area-inset-bottom)); width: 128px; height: 220px; border: 2px solid #fff; box-shadow: 0 6px 24px rgba(0,0,0,0.5); animation: slidein 0.3s cubic-bezier(.2,.8,.2,1); }
+#pip[hidden] { display: none; }
+#pip .tag { background: #d7263d; }
+html.touch #pip { bottom: calc(200px + env(safe-area-inset-bottom)); }
+
+#ticker { position: absolute; left: 12px; right: 12px; max-width: 980px; margin: 0 auto; bottom: calc(env(safe-area-inset-bottom)); height: 16px; overflow: hidden; background: rgba(10, 8, 20, 0.85); }
+#ticker[hidden] { display: none; }
+#ticker span { display: inline-block; white-space: nowrap; padding-left: 100%; color: #f6f1e4; font: 700 11px/16px ui-sans-serif, system-ui, sans-serif; letter-spacing: 0.06em; animation: crawl 22s linear infinite; }
+@keyframes crawl { to { transform: translateX(-100%); } }
+html.touch #ticker { right: 128px; }
+#hud.cov1 #chyron, #hud.cov2 #chyron, #hud.cov3 #chyron { bottom: calc(20px + env(safe-area-inset-bottom)); }
+
+#coldopen { position: absolute; inset: 0; pointer-events: none; background:
+  repeating-linear-gradient(0deg, rgba(0,0,0,0.25) 0 2px, transparent 2px 4px), radial-gradient(ellipse at center, transparent 40%, rgba(0,0,0,0.75)); }
+/* Traffic-cam look on the canvas itself: greyscale, hard contrast (no blur: backdrop blur is costly on low-end GPUs). */
+html.coldopen #view { filter: grayscale(1) contrast(1.3); }
+#coldopen[hidden] { display: none; }
+#coldopen .cam, #coldopen .ts { position: absolute; color: #e8ffe8; font: 700 14px/1 ui-monospace, Menlo, monospace; text-shadow: 0 0 4px #000; letter-spacing: 0.08em; }
+#coldopen .cam { left: 18px; top: 18px; }
+#coldopen .ts { right: 18px; top: 18px; }
+#coldopen.found { animation: found 0.45s steps(3) forwards; }
+@keyframes found { 0% { opacity: 1; } 40% { opacity: 0.2; background: #fff; } 100% { opacity: 0; } }
+
+/* The 11 O'Clock Recap: results as the evening news (§20). */
+#recap { background: radial-gradient(ellipse at 50% 30%, rgba(30, 20, 60, 0.75), rgba(5, 3, 12, 0.92)); }
+#recap .card { max-width: 560px; border-left-color: #d7263d; }
+#recap .kicker { background: #0d1530; }
+#recap h2 { font-size: clamp(20px, 4.4vw, 28px); letter-spacing: 0.01em; line-height: 1.1; margin: 10px 0 4px; text-transform: uppercase; }
+#recap .outcome { display: inline-block; font-weight: 900; letter-spacing: 0.14em; font-size: 12px; padding: 3px 7px; color: #fff; background: #d7263d; }
+#recap .outcome.cleared { background: #1e6b3a; }
+#recap .best { margin: 12px 0; padding: 8px 10px; background: #fff; border-left: 6px solid #d7263d; font-weight: 800; text-transform: uppercase; font-size: 15px; }
+#recap .best small { display: block; font-size: 10px; letter-spacing: 0.16em; color: #d7263d; margin-bottom: 3px; }
+#recap .stats { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 14px; margin: 10px 0; font-size: 14px; }
+#recap .stats b { float: right; font-variant-numeric: tabular-nums; }
+#recap .anchor { font-style: italic; opacity: 0.85; margin: 8px 0 4px; font-size: 14px; }
+#recap .row { display: flex; gap: 8px; }
+#recap .row .go { flex: 1; }
+#recap .go.alt { background: transparent; color: var(--ink); border: 2px solid var(--ink); }
+
+/* §4 cold open: no HUD on the traffic cam; LIVE slams in when the chopper finds him. */
+html.coldopen #hud { opacity: 0; transition: none; }
+html:not(.coldopen).playing #hud { animation: slam 0.35s cubic-bezier(.2,1.4,.4,1); }
+@keyframes slam { from { transform: scale(1.06); opacity: 0; } }

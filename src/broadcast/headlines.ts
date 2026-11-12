@@ -24,6 +24,12 @@ export interface NewsContext {
   heading: number;
   /** Distance along the road (m). */
   s: number;
+  /** §21 headline tier from Ratings (0 SPOTTED … 3 CITY IN CHAOS). */
+  ratingsTier: number;
+  heat: number;
+  /** Phase 2: the stretch of road he's on (a fact: zone kind and its name). */
+  zone?: 'highway' | 'avenue' | 'bridge' | 'tunnel';
+  zoneName?: string;
 }
 
 export interface Headline {
@@ -37,9 +43,12 @@ export interface Headline {
   sources: SimEvent[];
 }
 
-type Item = { kind: 'spotted' | 'tierUp' | 'tierDown' | 'smash' | 'bounce' | 'wall' | 'merge' | 'escort'; t: number; prio: number; events: SimEvent[] };
+type Kind = 'zone' | 'spotted' | 'ratingsTier' | 'tierUp' | 'tierDown' | 'smash' | 'bounce' | 'wall' | 'merge' | 'escort' | 'ramHit' | 'ramMiss' | 'lostTrack' | 'spiked' | 'heat' | 'tell' | 'exitOpen' | 'end';
+type Item = { kind: Kind; t: number; prio: number; events: SimEvent[] };
 
-const PRIO = { spotted: 70, tierUp: 100, escort: 60, merge: 55, bounce: 45, tierDown: 40, wall: 10 } as const;
+const PRIO: Partial<Record<Kind, number>> = { zone: 66, spotted: 70, ratingsTier: 100, end: 200, exitOpen: 90, tell: 75, ramHit: 65, ramMiss: 58, lostTrack: 57, spiked: 62, heat: 52, escort: 60, merge: 55, tierUp: 50, bounce: 45, tierDown: 40, wall: 10 };
+/** These break in immediately, ignoring the 4s cadence (§21: tier changes; and the end of the broadcast). */
+const IMMEDIATE: Kind[] = ['ratingsTier', 'end', 'exitOpen'];
 
 /** Compass direction of travel: −Z is north, +X is east. */
 export function compass(heading: number): 'North' | 'East' | 'South' | 'West' {
@@ -58,6 +67,8 @@ export class Newsroom {
   private atLargeDone = false;
   private spottedDone = false;
   private escortCount = 0;
+  private lastTier = 0;
+  private lastRatings: SimEvent | null = null;
   private rampages = 0;
 
   constructor(seed: number) {
@@ -66,30 +77,34 @@ export class Newsroom {
 
   /** Feed every sim event. */
   observe(e: SimEvent, time: number) {
+    const add = (kind: Kind) => this.queue.push({ kind, t: time, prio: PRIO[kind] ?? 0, events: [e] });
     switch (e.type) {
-      case 'tierUp':
-        this.queue.push({ kind: 'tierUp', t: time, prio: PRIO.tierUp, events: [e] });
+      case 'ratings':
+        this.lastRatings = e;
         break;
-      case 'tierDown':
-        this.queue.push({ kind: 'tierDown', t: time, prio: PRIO.tierDown, events: [e] });
-        break;
+      case 'tierUp': add('tierUp'); break;
+      case 'tierDown': add('tierDown'); break;
       case 'smash': {
         const open = this.queue.find((q) => q.kind === 'smash' && time - q.t <= TUNING.broadcast.tallyWindow);
         if (open) open.events.push(e);
         else this.queue.push({ kind: 'smash', t: time, prio: 0, events: [e] });
         break;
       }
-      case 'bounce':
-        this.queue.push({ kind: 'bounce', t: time, prio: PRIO.bounce, events: [e] });
-        break;
-      case 'wallBump':
-        if (!e.forced) this.queue.push({ kind: 'wall', t: time, prio: PRIO.wall, events: [e] });
-        break;
-      case 'merge':
-        this.queue.push({ kind: 'merge', t: time, prio: PRIO.merge, events: [e] });
-        break;
-      case 'escortJoin':
-        this.queue.push({ kind: 'escort', t: time, prio: PRIO.escort, events: [e] });
+      case 'bounce': add('bounce'); break;
+      case 'wallBump': if (!e.forced) add('wall'); break;
+      case 'merge': add('merge'); break;
+      case 'escortJoin': add('escort'); break;
+      case 'ram': add(e.hit ? 'ramHit' : 'ramMiss'); break;
+      case 'lostTrack': add('lostTrack'); break;
+      case 'spiked': add('spiked'); break;
+      case 'heat': add('heat'); break;
+      case 'tell': if (e.kind !== 'cruiser') add('tell'); break;
+      case 'exitOpen': add('exitOpen'); break;
+      case 'zone': add('zone'); break;
+      case 'signOff':
+      case 'busted':
+        this.queue = [];
+        add('end');
         break;
     }
   }
@@ -100,14 +115,16 @@ export class Newsroom {
     const now = ctx.time;
     if (!this.spottedDone && now >= B.openAt) {
       this.spottedDone = true;
-      this.queue.push({ kind: 'spotted', t: now, prio: PRIO.spotted, events: [] });
+      this.queue.push({ kind: 'spotted', t: now, prio: PRIO.spotted ?? 0, events: [] });
     }
+    // §21: a Ratings tier change breaks in, sourced from the Ratings event that crossed it.
+    if (ctx.ratingsTier > this.lastTier && this.lastRatings) this.queue.push({ kind: 'ratingsTier', t: now, prio: PRIO.ratingsTier!, events: [this.lastRatings] });
+    this.lastTier = Math.max(this.lastTier, ctx.ratingsTier);
     // Stale news is dropped, not shown late.
-    this.queue = this.queue.filter((q) => now - q.t <= 6 || q.kind === 'tierUp');
+    this.queue = this.queue.filter((q) => now - q.t <= 6 || IMMEDIATE.includes(q.kind));
     if (!this.queue.length) return null;
 
-    // Tier changes interrupt immediately (BREAKING); everything else waits for the 4s cadence.
-    const tierUp = this.queue.find((q) => q.kind === 'tierUp');
+    const tierUp = this.queue.filter((q) => IMMEDIATE.includes(q.kind)).sort((a, b) => b.prio - a.prio)[0];
     if (!tierUp && now - this.lastPublish < B.headlineEvery) return null;
     // Smash tallies keep counting until their window closes or the slot would otherwise go empty.
     const ready = this.queue.filter((q) => q.kind !== 'smash' || now - q.t >= B.tallyWindow || this.queue.length === 1 || now - q.t >= 1.5);
@@ -150,6 +167,7 @@ export class Newsroom {
   private freshPlace(ctx: NewsContext): string | null {
     const P = BANK.places;
     const all = [...P.road, P.bound.replace('{dir}', compass(ctx.heading)), P.lane.replace('{n}', String(ctx.lane + 1)), P.mile.replace('{m}', (ctx.s / 1609.344).toFixed(1))];
+    if (ctx.zone && ctx.zoneName) all.push(P.zone[ctx.zone].replace('{name}', ctx.zoneName));
     if (ctx.lanes > 1 && ctx.lane === 0) all.push(P.fast);
     if (ctx.lanes > 1 && ctx.lane === ctx.lanes - 1) all.push(P.slow);
     const used = new Set(this.recent().map((h) => h.place));
@@ -172,27 +190,68 @@ export class Newsroom {
   private compose(q: Item, ctx: NewsContext, propKind: (id: number) => PropKind | undefined): Headline | null {
     const L = BANK.lines;
     const V = BANK.verbs;
-    const kicker = BANK.kicker[Math.min(ctx.tier, BANK.kicker.length - 1)];
+    const kicker = BANK.kicker[Math.min(ctx.ratingsTier, BANK.kicker.length - 1)];
     const mk = (text: string, verb: string | null, place: string | null, breaking = false): Headline => ({ t: ctx.time, kicker: breaking ? 'BREAKING' : kicker, text, breaking, verb, place, sources: q.events });
     switch (q.kind) {
       case 'spotted': {
         const place = this.freshPlace(ctx);
         return mk(this.fill(L.spotted, { subject: this.subject(0), place }), 'Spotted', place);
       }
-      case 'tierUp': {
-        const e = q.events[0] as Extract<SimEvent, { type: 'tierUp' }>;
-        if (e.tier === 1 && !this.atLargeDone) {
+      case 'ratingsTier': {
+        // §21: "Giant At Large. Warn Your Friends." the first time a run reaches AT LARGE.
+        if (ctx.ratingsTier === 1 && !this.atLargeDone) {
           this.atLargeDone = true;
           return mk(L.atLarge, 'At Large', null, true);
         }
-        // Tier changes always break in; with every phrasing used recently, a verbless line keeps anti-repeat true.
         const place = this.freshPlace(ctx);
-        // "Returns"/"Resumes" only once Rampage has actually happened before.
+        const line = this.freshLine(L.ratingsTier[Math.min(ctx.ratingsTier, L.ratingsTier.length - 1)]);
+        if (!line) return mk(`Giant: ${BANK.kicker[ctx.ratingsTier]}`, null, null, true);
+        return mk(this.fill(line[1], { place, dir: compass(ctx.heading) + 'bound' }), line[0], place, true);
+      }
+      case 'tierUp': {
+        // Momentum tier-ups are news, not BREAKING (Ratings tiers are).
+        const e = q.events[0] as Extract<SimEvent, { type: 'tierUp' }>;
         const pool = e.tier >= 2 ? L.rampage.filter((l) => this.rampages > 0 || !['Returns', 'Resumes'].includes(l[0])) : L.stride;
         if (e.tier >= 2) this.rampages++;
         const line = this.freshLine(pool);
-        if (!line) return mk(e.tier >= 2 ? L.rampageFallback : `${this.subject(e.tier)}: ${BANK.kicker[1]}`, null, null, true);
-        return mk(this.fill(line[1], { subject: this.subject(e.tier), place }), line[0], place, true);
+        if (!line) return null;
+        const place = this.freshPlace(ctx);
+        return mk(this.fill(line[1], { subject: this.subject(e.tier), place }), line[0], place);
+      }
+      case 'ramHit':
+      case 'ramMiss':
+      case 'lostTrack':
+      case 'spiked':
+      case 'heat': {
+        const line = this.freshLine(L[q.kind]);
+        if (!line) return null;
+        const place = line[1].includes('{place}') ? this.freshPlace(ctx) : null;
+        return mk(this.fill(line[1], { place, heat: String(ctx.heat) }), line[0], place);
+      }
+      case 'tell': {
+        const e = q.events[0] as Extract<SimEvent, { type: 'tell' }>;
+        const pool = e.kind === 'roadblock' ? L.tellRoadblock : e.kind === 'rolling' ? L.tellRolling : L.tellSpike;
+        const line = this.freshLine(pool);
+        if (!line) return null;
+        const place = line[1].includes('{place}') ? this.freshPlace(ctx) : null;
+        return mk(this.fill(line[1], { place }), line[0], place);
+      }
+      case 'zone': {
+        const e = q.events[0] as Extract<SimEvent, { type: 'zone' }>;
+        const line = this.freshLine(L.zone[e.zone]);
+        if (!line) return null;
+        return mk(this.fill(line[1], { name: e.name }), line[0], null);
+      }
+      case 'exitOpen': {
+        const h = mk(L.exitOpen, null, null, true);
+        h.kicker = 'SIGN-OFF';
+        return h;
+      }
+      case 'end': {
+        const e = q.events[0];
+        const h = mk(e.type === 'busted' ? L.busted[e.reason] : L.signOff, null, null, true);
+        h.kicker = e.type === 'busted' ? 'BUSTED' : 'SIGN-OFF';
+        return h;
       }
       case 'tierDown': {
         const verb = this.freshVerb(V.slow);

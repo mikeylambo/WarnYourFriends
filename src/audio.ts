@@ -339,6 +339,45 @@ export class Audio {
     this.tone(t, 0.6, 70, 40, 0.5);
   }
 
+  /** §19: a siren whoop announces each pursuer before it arrives. */
+  whoop() {
+    if (!this.ready) return;
+    const t = this.ctx!.currentTime;
+    this.tone(t, 0.5, 500, 1300, 0.07, 'sawtooth');
+    this.tone(t + 0.5, 0.35, 1300, 600, 0.05, 'sawtooth');
+  }
+
+  /** §11 tells: engine rev (cruiser ram), tyre screech (roadblock), metallic rattle (spikes), brakes (rolling). */
+  tell(kind: 'cruiser' | 'roadblock' | 'spike' | 'rolling') {
+    if (!this.ready) return;
+    const t = this.ctx!.currentTime;
+    switch (kind) {
+      case 'cruiser':
+        this.tone(t, 0.6, 70, 190, 0.18, 'sawtooth');
+        this.noise(t, 0.6, 'lowpass', 300, 1, 0.15, 900);
+        break;
+      case 'roadblock':
+        this.noise(t, 1.2, 'bandpass', 2600, 6, 0.22, 1800);
+        this.noise(t + 0.3, 1.0, 'bandpass', 3100, 7, 0.16, 2000);
+        break;
+      case 'spike':
+        for (let k = 0; k < 8; k++) this.noise(t + k * 0.09, 0.05, 'highpass', 4500, 2, 0.12);
+        break;
+      case 'rolling':
+        this.noise(t, 1.0, 'bandpass', 3400, 9, 0.12, 2400);
+        break;
+    }
+  }
+
+  /** End of the broadcast: a falling sting for busted, a rising one for the sign-off. */
+  ending(cleared: boolean) {
+    if (!this.ready) return;
+    const t = this.ctx!.currentTime;
+    const chord = cleared ? [293.66, 369.99, 440, 587.33] : [293.66, 349.23, 415.3, 220];
+    chord.forEach((f, i) => this.tone(t + i * 0.12, 0.9, f, cleared ? f : f * 0.94, 0.05, 'sawtooth'));
+    this.tone(t, 1.2, 60, 35, 0.6);
+  }
+
   setRotor(level: number) {
     if (this.rotor && this.ctx) this.rotor.gain.gain.setTargetAtTime(0.08 + level * 0.06, this.ctx.currentTime, 0.3);
   }

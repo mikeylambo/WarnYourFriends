@@ -8,7 +8,9 @@ import * as THREE from 'three';
  * measures the sRGB pixels on screen (fog, glow, rim and all).
  *
  * Thresholds (set before measuring, reported with the numbers):
- *  - heightPx ≥ 48 at a 720-line frame (§13: "identifiable as a silhouette at 48px tall")
+ *  - heightPx ≥ 48 at a 720-line frame in the default shot (§13: "identifiable as a silhouette
+ *    at 48px tall from the default chopper height"); ≥ 40 in a cut-away (High Head-On and
+ *    Overhead are wide, high shots by design; DECISIONS 2026-11-12)
  *  - contrast ≥ 3:1 between the giant's median and the surround's median luminance
  *    (WCAG 1.4.11 non-text contrast)
  *  - ≥ 60% of outline pixel pairs differ by ≥ 0.12 in luma (the edge reads all the way round)
@@ -26,7 +28,7 @@ export interface SilhouetteResult {
 
 const lin = (c: number) => (c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4);
 
-export function measureSilhouette(renderer: THREE.WebGLRenderer, scene: THREE.Scene, camera: THREE.Camera, giant: THREE.Object3D[]): SilhouetteResult {
+export function measureSilhouette(renderer: THREE.WebGLRenderer, scene: THREE.Scene, camera: THREE.Camera, giant: THREE.Object3D[], minHeight = 48): SilhouetteResult {
   const gl = renderer.getContext();
   const w = gl.drawingBufferWidth;
   const h = gl.drawingBufferHeight;
@@ -119,5 +121,5 @@ export function measureSilhouette(renderer: THREE.WebGLRenderer, scene: THREE.Sc
   const contrast = (Math.max(gl_, bl) + 0.05) / (Math.min(gl_, bl) + 0.05);
   const heightPx = ((maxY - minY + 1) * 720) / h;
   const edgeShare = edges ? strong / edges : 0;
-  return { heightPx, giantLuma: gl_, surroundLuma: bl, contrast, edgeShare, polarity: gl_ < bl ? 'dark-on-light' : 'light-on-dark', pass: heightPx >= 48 && contrast >= 3 && edgeShare >= 0.6 };
+  return { heightPx, giantLuma: gl_, surroundLuma: bl, contrast, edgeShare, polarity: gl_ < bl ? 'dark-on-light' : 'light-on-dark', pass: heightPx >= minHeight && contrast >= 3 && edgeShare >= 0.6 };
 }

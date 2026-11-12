@@ -13,6 +13,8 @@ import type { Material, Prop, PropKind } from './types';
  */
 
 export type SegmentKind = 'straight' | 'curve' | 'merge';
+/** Phase 2 road variety (v0.3 §16): highway 4 lanes, avenue 3, bridge and tunnel 2. */
+export type ZoneKind = 'highway' | 'avenue' | 'bridge' | 'tunnel';
 
 export interface Segment {
   index: number;
@@ -24,6 +26,15 @@ export interface Segment {
   h1: number;
   lanes0: number;
   lanes1: number;
+  /** Phase 2: the sign-off exit ramp leaves from this segment's right edge. */
+  exit?: boolean;
+  /** Phase 2 road variety: which stretch of road this is, and its (invented) name. */
+  zone: ZoneKind;
+  zoneName: string;
+  /** First segment of its zone. */
+  zoneStart: boolean;
+  /** Highway only: a road bridge crosses overhead (presentation). */
+  overpass: boolean;
   /** Centre-reference samples every metre: left-edge position and heading. */
   xs: Float64Array;
   zs: Float64Array;
@@ -48,6 +59,9 @@ export const PROP_DEFS: Record<PropKind, PropDef> = {
   car: { cls: 'heavy', mat: 'metal', hl: 2.2, hw: 0.95, h: 1.5, variants: 5 },
   van: { cls: 'heavy', mat: 'metal', hl: 2.7, hw: 1.1, h: 2.3, variants: 3 },
   barricade: { cls: 'heavy', mat: 'concrete', hl: 0.35, hw: 1.8, h: 0.95, variants: 1 },
+  // Phase 2 police units (never placed as lane props; pursuit spawns them).
+  cruiser: { cls: 'heavy', mat: 'metal', hl: 2.4, hw: 0.98, h: 1.7, variants: 1 },
+  compact: { cls: 'medium', mat: 'metal', hl: 1.8, hw: 0.85, h: 1.4, variants: 1 },
 };
 
 const MEDIUM: PropKind[] = ['sawhorse', 'cart', 'fence', 'scooter'];
@@ -62,6 +76,12 @@ export class Track {
   readonly segments: Segment[] = [];
   readonly props: Prop[] = [];
   private nextMerge: number;
+  private zone: ZoneKind = 'highway';
+  private zoneName = '';
+  private zoneLeft: number;
+  private nextZone: ZoneKind | null = null;
+  private zoneTarget: number = TUNING.lanes.start;
+  private zoneJustStarted = true;
   private nextRowS: number;
   private propId = 0;
   private readonly rng: Rng;
@@ -71,6 +91,8 @@ export class Track {
     const T = TUNING.track;
     this.nextMerge = T.runwaySegments + this.rng.int(T.mergeEvery[0], T.mergeEvery[1]);
     this.nextRowS = TUNING.props.startAt;
+    this.zoneName = this.nameFor('highway');
+    this.zoneLeft = T.runwaySegments + this.rng.int(TUNING.zones.length.highway[0], TUNING.zones.length.highway[1]);
     this.ensure(T.aheadDistance);
   }
 
@@ -108,12 +130,30 @@ export class Track {
     let kind: SegmentKind = 'straight';
     let h1 = h0;
     let lanes1 = lanes0;
+    const Z = TUNING.zones;
+    // Zones: when one runs out, pick the next; merge one lane per segment until its lane count is reached.
+    if (index >= T.runwaySegments && this.zoneLeft <= 0 && !this.nextZone) {
+      const options = (Object.keys(Z.lanes) as ZoneKind[]).filter((z) => z !== this.zone);
+      this.nextZone = this.pickZone(options);
+      this.zoneTarget = this.nextZone === 'highway' ? (rng.chance(0.7) ? 4 : 3) : Z.lanes[this.nextZone];
+    }
+    if (this.nextZone && lanes0 === this.zoneTarget) {
+      this.zone = this.nextZone;
+      this.zoneName = this.nameFor(this.zone);
+      this.nextZone = null;
+      this.zoneLeft = rng.int(Z.length[this.zone][0], Z.length[this.zone][1]);
+      this.zoneJustStarted = true;
+    }
     if (index >= T.runwaySegments) {
-      if (index >= this.nextMerge) {
+      if (this.nextZone && lanes0 !== this.zoneTarget) {
         kind = 'merge';
-        lanes1 = lanes0 <= L.min ? lanes0 + 1 : lanes0 >= L.max ? lanes0 - 1 : lanes0 + (rng.chance(0.5) ? 1 : -1);
+        lanes1 = lanes0 + Math.sign(this.zoneTarget - lanes0);
+      } else if (this.zone === 'highway' && index >= this.nextMerge && this.zoneLeft > 1) {
+        // Highway only: the odd 4↔3 merge within the zone.
+        kind = 'merge';
+        lanes1 = lanes0 >= 4 ? 3 : 4;
         this.nextMerge = index + rng.int(T.mergeEvery[0], T.mergeEvery[1]);
-      } else if (rng.chance(T.curveChance)) {
+      } else if (this.zone !== 'bridge' && rng.chance(T.curveChance)) {
         kind = 'curve';
         // Bias curves back toward the starting heading so the road meanders, not spirals.
         const drift = h0 + Math.PI / 2;
@@ -121,7 +161,11 @@ export class Track {
         h1 = h0 + sign * rng.range(T.minCurveDeg, T.maxCurveDeg) * DEG;
       }
     }
-
+    const zone = this.zone;
+    const zoneStart = this.zoneJustStarted;
+    this.zoneJustStarted = false;
+    this.zoneLeft--;
+    const overpass = zone === 'highway' && kind !== 'merge' && index >= T.runwaySegments && rng.chance(Z.overpassChance);
     const n = T.segmentLength;
     const xs = new Float64Array(n + 1);
     const zs = new Float64Array(n + 1);
@@ -137,9 +181,43 @@ export class Track {
       zs[i] = zs[i - 1] + Math.sin(hm);
       hs[i] = hNow;
     }
-    const seg: Segment = { index, kind, s0, length: n, h0, h1, lanes0, lanes1, xs, zs, hs };
+    const seg: Segment = { index, kind, s0, length: n, h0, h1, lanes0, lanes1, xs, zs, hs, zone, zoneName: this.zoneName, zoneStart, overpass };
     this.segments.push(seg);
     this.addProps(seg);
+  }
+
+  /**
+   * Phase 2 sign-off ramp: how far right of the road's right edge the ramp's centre
+   * sits at `s` (it peels away from the rightmost lane on a gentle curve).
+   */
+  exitOffset(seg: Segment, s: number): number {
+    const u = Math.max(0, (s - seg.s0) / seg.length);
+    return -TUNING.lanes.width / 2 + 16 * u * u;
+  }
+
+  /** Can the sign-off ramp leave from this segment? (Not a merge; not into or out of a tunnel.) */
+  exitEligible(seg: Segment): boolean {
+    const next = this.segments.find((x) => x.index === seg.index + 1);
+    return seg.kind !== 'merge' && seg.lanes0 === seg.lanes1 && seg.zone !== 'tunnel' && (!next || next.zone !== 'tunnel');
+  }
+
+  private pickZone(options: ZoneKind[]): ZoneKind {
+    const W = TUNING.zones.weight;
+    let total = 0;
+    for (const z of options) total += W[z];
+    let r = this.rng.next() * total;
+    for (const z of options) if ((r -= W[z]) < 0) return z;
+    return options[0];
+  }
+
+  private nameFor(zone: ZoneKind): string {
+    const N = TUNING.zones.names;
+    return `${this.rng.pick(N.first)} ${N.suffix[zone]}`;
+  }
+
+  /** The zone at distance s. */
+  zoneAt(s: number): Segment {
+    return this.segmentAt(s);
   }
 
   segmentAt(s: number): Segment {
@@ -210,6 +288,7 @@ export class Track {
       this.nextRowS += rng.range(P.rowGap[0], P.rowGap[1]);
       if (rowS < seg.s0 || !rng.chance(P.rowChance)) continue;
       // Only lanes usable through the whole row, so nothing sits in a closing merge lane.
+      if (!rng.chance(TUNING.zones.rowChance[seg.zone])) continue;
       const lanes = Math.min(this.lanesAt(rowS - 6), this.lanesAt(rowS), this.lanesAt(Math.min(rowS + 6, end - 0.01)));
       if (lanes < 2) continue;
       const maxBlocked = Math.max(1, Math.min(lanes - 1, Math.floor(lanes * P.maxBlockedShare)));
@@ -220,7 +299,8 @@ export class Track {
         [order[i], order[j]] = [order[j], order[i]];
       }
       for (const lane of order.slice(0, k)) {
-        const heavy = rng.next() * (P.mediumWeight + P.heavyWeight) >= P.mediumWeight;
+        const mw = TUNING.zones.mediumWeight[seg.zone];
+        const heavy = rng.next() >= mw;
         const kind = rng.pick(heavy ? HEAVY : MEDIUM);
         const def = PROP_DEFS[kind];
         this.props.push({

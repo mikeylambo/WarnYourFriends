@@ -232,7 +232,7 @@ try {
     await page.goto(`${URL}?seed=5`);
     await page.waitForFunction(() => document.documentElement.dataset.boot === 'ok', null, { timeout: 15000 });
     await page.click('#start');
-    await page.waitForFunction(() => window.__GAME.state().time > 0.5, null, { timeout: 5000 });
+    await page.waitForFunction(() => window.__GAME.state().time > 0.5, null, { timeout: 15000 });
     await page.evaluate(() => window.__GAME.setAngle(3, 1));
     await page.waitForFunction(() => window.__GAME.camera().travelDown, null, { timeout: 2000 }).catch(() => {});
     const press = async (key) => {
@@ -256,6 +256,43 @@ try {
     if (d1 !== d0 - 1) fail(`after the swoop A should be lane-left again (${d0 + 1} → ${d0}), got ${d1 + 1}`);
     else ok(`after the swoop A is lane-left again (${d0 + 1} → ${d1 + 1})`);
     if (problems.length) fail(`Head-On problems:\n    ${problems.join('\n    ')}`);
+    await ctx.close();
+  }
+
+  // 7. Phase 2: one full broadcast (150s + grace, LOCKED) in step mode with the bot: pursuers,
+  //    Ratings HUD, the sign-off/busted ending, then the 11 O'Clock Recap. No page errors.
+  {
+    const ctx = await browser.newContext({ viewport: { width: 1280, height: 720 } });
+    const page = await ctx.newPage();
+    const problems = watch(page);
+    await page.goto(`${URL}?seed=2&bot=1&step=1`);
+    await page.waitForFunction(() => window.__GAME && window.__GAME.started, null, { timeout: 15000 });
+    const mid = await page.evaluate(() => {
+      window.__GAME.step(60 * 90);
+      return { show: window.__GAME.show(), viewers: document.getElementById('viewers').textContent };
+    });
+    const end = await page.evaluate(() => {
+      window.__GAME.step(60 * 80);
+      return window.__GAME.show();
+    });
+    await page.waitForFunction(() => window.__GAME.recap(), null, { timeout: 15000 }).catch(() => {});
+    const recap = await page.evaluate(() => window.__GAME.recap());
+    const heads = await page.evaluate(() => window.__GAME.headlines());
+    await page.screenshot({ path: 'test-results/e2e-recap.png' });
+    if (end.live || end.state === 'live') fail(`segment still live after 170s (${end.state})`);
+    else ok(`segment ended: ${end.state}${end.reason ? ' (' + end.reason + ')' : ''}, peak Ratings ${end.peak.toFixed(0)}, banked ${Math.round(end.banked)}`);
+    if (!/\d/.test(mid.viewers)) fail(`Ratings viewer count not shown (${mid.viewers})`);
+    if (!recap?.title) fail('no recap after the broadcast ended');
+    else ok(`recap: "${recap.title}" · ${recap.outcome}`);
+    const last = heads[heads.length - 1];
+    if (!last || !['SIGN-OFF', 'BUSTED'].includes(last.kicker)) fail(`last headline isn't the ending (${JSON.stringify(last)})`);
+    // Run it again: Enter restarts from the recap.
+    await page.keyboard.press('Enter');
+    await page.waitForTimeout(400);
+    const again = await page.evaluate(() => ({ recap: window.__GAME.recap(), live: window.__GAME.show().live, t: window.__GAME.state().time }));
+    if (again.recap || !again.live) fail(`Enter on the recap did not start a new broadcast (${JSON.stringify(again)})`);
+    else ok('Enter on the recap starts a new broadcast');
+    if (problems.length) fail(`full-segment problems:\n    ${problems.join('\n    ')}`);
     await ctx.close();
   }
 

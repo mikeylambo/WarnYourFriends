@@ -8,7 +8,8 @@
   "kicker": [
     "SPOTTED",
     "AT LARGE",
-    "RAMPAGE"
+    "RAMPAGE",
+    "CITY IN CHAOS"
   ],
   "subject": [
     [
@@ -55,6 +56,14 @@
     "barricade": [
       "Jersey Barrier",
       "Jersey Barriers"
+    ],
+    "cruiser": [
+      "Police Cruiser",
+      "Police Cruisers"
+    ],
+    "compact": [
+      "Police Compact",
+      "Police Compacts"
     ]
   },
   "verbs": {
@@ -103,7 +112,13 @@
     "lane": "In Lane {n}",
     "fast": "In The Fast Lane",
     "slow": "In The Slow Lane",
-    "mile": "Near Mile {m}"
+    "mile": "Near Mile {m}",
+    "zone": {
+      "highway": "On {name}",
+      "avenue": "On {name}",
+      "bridge": "On {name}",
+      "tunnel": "In {name}"
+    }
   },
   "lines": {
     "spotted": "{subject} Spotted {place}",
@@ -196,6 +211,188 @@
       ]
     ],
     "rampageFallback": "Giant: Full Rampage",
-    "mergeFallback": "{lanes} Lanes Ahead"
+    "mergeFallback": "{lanes} Lanes Ahead",
+    "ratingsTier": [
+      [],
+      [
+        [
+          "Remains",
+          "Giant Remains At Large {place}"
+        ],
+        [
+          "Still",
+          "Giant Still At Large {place}"
+        ]
+      ],
+      [
+        [
+          "Rampaging",
+          "Giant Rampaging {place}"
+        ],
+        [
+          "Tears Up",
+          "Giant Tears Up The Interstate"
+        ],
+        [
+          "Goes Off",
+          "Giant Goes Off {place}"
+        ]
+      ],
+      [
+        [
+          "Chaos",
+          "City In Chaos As Giant Heads {dir}"
+        ],
+        [
+          "Erupts",
+          "City Erupts; Giant Unbothered"
+        ]
+      ]
+    ],
+    "ramHit": [
+      [
+        "Sideswipes",
+        "Police Cruiser Sideswipes Giant {place}"
+      ],
+      [
+        "Nudges",
+        "Cruiser Nudges Giant; Giant Notices"
+      ],
+      [
+        "Bumps",
+        "Cruiser Bumps Giant, Regrets It"
+      ]
+    ],
+    "ramMiss": [
+      [
+        "Misses",
+        "Cruiser Misses Giant By Inches"
+      ],
+      [
+        "Catches Only Air",
+        "Cruiser Swerves, Catches Only Air"
+      ],
+      [
+        "Whiffs",
+        "Cruiser Whiffs {place}"
+      ]
+    ],
+    "lostTrack": [
+      [
+        "Lose",
+        "Police Lose Large Man {place}"
+      ],
+      [
+        "Loses Sight",
+        "Cruiser Loses Sight Of Giant {place}"
+      ],
+      [
+        "Falls Behind",
+        "Pursuit Car Falls Behind {place}"
+      ]
+    ],
+    "spiked": [
+      [
+        "Steps On",
+        "Giant Steps On Spike Strip, Seems Annoyed"
+      ],
+      [
+        "Finds",
+        "Giant Finds Spike Strip The Hard Way"
+      ]
+    ],
+    "heat": [
+      [
+        "Request",
+        "Police Request Backup {place}"
+      ],
+      [
+        "Escalates",
+        "Police Response Escalates"
+      ],
+      [
+        "Scrambles",
+        "City Scrambles More Units"
+      ]
+    ],
+    "tellRoadblock": [
+      [
+        "Set Up",
+        "Police Set Up Roadblock {place}"
+      ],
+      [
+        "Block",
+        "Police Block The Road Ahead"
+      ]
+    ],
+    "tellRolling": [
+      [
+        "Attempt",
+        "Police Attempt Rolling Roadblock"
+      ],
+      [
+        "Form",
+        "Cruisers Form Line Ahead Of Giant"
+      ]
+    ],
+    "tellSpike": [
+      [
+        "Deploy",
+        "Officers Deploy Spike Strip {place}"
+      ],
+      [
+        "Lay",
+        "Officers Lay Spikes Ahead Of Giant"
+      ]
+    ],
+    "exitOpen": "Chopper Fuel Low; Coverage Ends At The Next Exit",
+    "signOff": "Giant Takes The Exit; Whereabouts Unknown",
+    "busted": {
+      "pin": "Suspect In Custody",
+      "ratings": "We Now Return To Regular Programming",
+      "missed": "Chopper Out Of Fuel; Giant Gets Away From Us"
+    },
+    "zone": {
+      "tunnel": [
+        [
+          "Enters",
+          "Giant Enters {name}; Chopper Waits At Other End"
+        ],
+        [
+          "Disappears",
+          "Giant Disappears Into {name}"
+        ]
+      ],
+      "bridge": [
+        [
+          "Crosses",
+          "Giant Crosses {name}"
+        ],
+        [
+          "Tests",
+          "Giant Tests Load Limit Of {name}"
+        ]
+      ],
+      "avenue": [
+        [
+          "Leaves",
+          "Giant Leaves Highway For {name}"
+        ],
+        [
+          "Turns Onto",
+          "Giant Turns Onto {name}; Shops Close Early"
+        ]
+      ],
+      "highway": [
+        [
+          "Rejoins",
+          "Giant Rejoins {name}"
+        ],
+        [
+          "Back On",
+          "Giant Back On {name}"
+        ]
+      ]
+    }
   }
 }

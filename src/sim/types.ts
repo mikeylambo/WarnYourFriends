@@ -2,7 +2,7 @@ import type { MassClass } from '../tuning';
 
 export type Material = 'wood' | 'glass' | 'metal' | 'fruit' | 'concrete' | 'paper';
 
-export type PropKind = 'sawhorse' | 'cart' | 'fence' | 'scooter' | 'car' | 'van' | 'barricade';
+export type PropKind = 'sawhorse' | 'cart' | 'fence' | 'scooter' | 'car' | 'van' | 'barricade' | 'cruiser' | 'compact';
 
 /** A prop in a lane, in track space: `s` along the road, `d` across it from the left edge. */
 export interface Prop {
@@ -93,4 +93,49 @@ export type SimEvent =
   /** Phase 0c: the giant enters a merge segment (lane count changes from `from` to `to`). */
   | { type: 'merge'; from: number; to: number; s: number }
   /** Phase 0c: an escort cruiser joins the chase, `behind` metres back. */
-  | { type: 'escortJoin'; id: number; behind: number };
+  | { type: 'escortJoin'; id: number; behind: number }
+  // --- Phase 2 (core playable) ---
+  /** A pursuer enters (spawned ≥40m away, off camera). `eta` = seconds until it reaches the giant's frame. */
+  | { type: 'unitSpawn'; id: number; kind: UnitKind; s: number; d: number; lanes: number[] }
+  /** A threat starts its tell (windup). */
+  | { type: 'tell'; id: number; kind: UnitKind; lane: number; time: number }
+  /** A cruiser swerves into the giant's lane. */
+  | { type: 'ram'; id: number; hit: boolean }
+  | { type: 'nearMiss'; id: number }
+  | { type: 'lostTrack'; id: number; kind: UnitKind }
+  | { type: 'spiked'; id: number }
+  | { type: 'ratings'; delta: number; cause: GainType; ratings: number }
+  | { type: 'heat'; heat: number }
+  | { type: 'exitOpen'; s: number; segment: number; lane: number }
+  | { type: 'exitMissed'; s: number }
+  | { type: 'signOff'; ratings: number; banked: number }
+  | { type: 'busted'; reason: BustReason }
+  /** Phase 2 road variety: the giant enters a new stretch of road. */
+  | { type: 'zone'; zone: 'highway' | 'avenue' | 'bridge' | 'tunnel'; name: string };
+
+export type UnitKind = 'cruiser' | 'rolling' | 'roadblock' | 'spike';
+/** §12 gain sources. */
+export type GainType = 'medium' | 'heavy' | 'nearMiss' | 'lostTrack' | 'rampage';
+export type BustReason = 'ratings' | 'pin' | 'missed';
+export type ShowState = 'live' | 'cleared' | 'busted';
+
+/** A pursuer or police hazard. Solid units collide like props (same class rules). */
+export interface Unit extends Prop {
+  unit: UnitKind;
+  /** approach → tell (windup) → act → leave. */
+  phase: 'approach' | 'tell' | 'act' | 'leave';
+  phaseT: number;
+  speed: number;
+  /** Lane it occupies or moves toward; for spikes and roadblocks, the lane it covers. */
+  lane: number;
+  fromD: number;
+  toD: number;
+  /** Rolling/static roadblock row this car belongs to. */
+  group: number;
+  solid: boolean;
+  /** Rams: the lane it will swerve into. */
+  target: number;
+  hit: boolean;
+  nearMissed: boolean;
+  lost: boolean;
+}

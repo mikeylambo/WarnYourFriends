@@ -9,6 +9,10 @@ import { CameraRig, Director, cutTriggerFor, type CameraTarget, type CutDecision
 import { PALETTE, type TimeOfDay } from './render/palette';
 import { Lighting, timeOfDayAt } from './render/lighting';
 import { CruiserView } from './render/cruisers';
+import { UnitViews } from './render/units';
+import { ViewerVideo } from './render/pip';
+import { Coverage } from './broadcast/coverage';
+import VIEWERS from './broadcast/viewers.json';
 import { measureSilhouette } from './render/silhouette';
 import { Newsroom, type Headline } from './broadcast/headlines';
 import type { PropKind } from './sim/types';
@@ -43,6 +47,14 @@ const clockEl = $('clock');
 const chyKicker = document.querySelector('#chyron .kicker') as HTMLElement;
 const chyText = document.querySelector('#chyron .text') as HTMLElement;
 const breakingEl = $('breaking');
+const viewersEl = $('viewers');
+const ratingsEl = $('ratings');
+const ratingsBar = $('ratingsbar');
+const trendEl = $('trend');
+const heatStars = [...document.querySelectorAll('#heat em')] as HTMLElement[];
+const signoffEl = $('signoff');
+const exitDistEl = $('exitdist');
+const signoffArrow = signoffEl.querySelector('.arrow') as HTMLElement;
 
 // --- Renderer ---------------------------------------------------------------
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
@@ -78,6 +90,25 @@ let giant: GiantView;
 let gait: Gait;
 let director: Director;
 let cruisers: CruiserView;
+let units: UnitViews;
+/** Phase 2: the broadcast has ended (busted or signed off); the recap follows. */
+let endedAt = -1;
+let recapShown = false;
+/** Phase 2 Pin meter: a red ring on the ground around the giant, only above 0 (§21). */
+const pinRing = (() => {
+  const g = new THREE.RingGeometry(2.0, 2.45, 64, 1);
+  g.rotateX(-Math.PI / 2);
+  const m = new THREE.Mesh(g, new THREE.MeshBasicMaterial({ color: 0xff2a3a, transparent: true, opacity: 0.9, depthWrite: false }));
+  m.renderOrder = 3;
+  m.visible = false;
+  return m;
+})();
+scene.add(pinRing);
+const recapEl = $('recap');
+const coverage = new Coverage();
+const pip = new ViewerVideo($('pip'));
+/** Run stats for the recap, counted from sim events. */
+const runStats = { heavy: 0, units: 0, lost: 0, dodged: 0, nearMiss: 0, best: null as Headline | null, bestRatings: -1 };
 let news: Newsroom;
 /** Prop kinds by id, recorded when a smash/bounce happens (the prop may be pruned before the headline). */
 const propKinds = new Map<number, PropKind>();
@@ -123,6 +154,15 @@ function newRun(seed: number) {
   if (highway) scene.remove(highway.group);
   if (giant) for (const o of giant.objects) scene.remove(o);
   if (cruisers) scene.remove(cruisers.group);
+  if (units) scene.remove(units.group);
+  endedAt = -1;
+  recapShown = false;
+  document.documentElement.classList.remove('ended');
+  hideRecap();
+  coverage.reset();
+  pip.reset();
+  Object.assign(runStats, { heavy: 0, units: 0, lost: 0, dodged: 0, nearMiss: 0, best: null, bestRatings: -1 });
+  $('coldts').textContent = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
   sim = new Sim({ seed });
   highway = new HighwayView(sim);
   highway.onHonk = (v) => audio.honk(v);
@@ -132,13 +172,15 @@ function newRun(seed: number) {
   director.enabled = settings.cameraCuts;
   cruisers = new CruiserView(sim);
   cruisers.reduceFlashes = settings.reduceFlashes;
+  units = new UnitViews(sim, highway);
+  units.reduceFlashes = settings.reduceFlashes;
   news = new Newsroom(seed);
   propKinds.clear();
   cutLog.length = 0;
   triggerLog.length = 0;
   chyKicker.textContent = 'SPOTTED';
   chyText.innerHTML = '<span>&nbsp;</span>';
-  scene.add(highway.group, cruisers.group, ...giant.objects);
+  scene.add(highway.group, cruisers.group, units.group, ...giant.objects);
   giant.reset();
   const g = sim.giant;
   prev.s = g.s;
@@ -206,6 +248,47 @@ function showCamTag() {
   camTagT = 1.6;
 }
 
+function hideRecap() {
+  recapEl.hidden = true;
+}
+/** The 11 O'Clock Recap (§20: results as the evening news). */
+function showRecap() {
+  const sh = sim.show;
+  const cleared = sh.state === 'cleared';
+  const reason = cleared ? 'cleared' : (sh.reason ?? 'ratings');
+  const lines = (VIEWERS.signoff as Record<string, string[]>)[reason];
+  const anchorLine = lines[Math.floor(Math.random() * lines.length)];
+  const last = news.history[news.history.length - 1];
+  const best = runStats.best;
+  const viewers = (r: number) => (r * 18_500 >= 1e6 ? `${((r * 18_500) / 1e6).toFixed(2)}M` : `${Math.round((r * 18_500) / 1000)}K`);
+  const t = Math.floor(sim.time);
+  const esc = (x: string) => x.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
+  recapEl.innerHTML = `<div class="card">
+    <div class="kicker">THE 11 O'CLOCK RECAP · WYF 6</div>
+    <h2>${esc(last?.text ?? (cleared ? 'Giant Takes The Exit' : 'Suspect In Custody'))}</h2>
+    <span class="outcome ${cleared ? 'cleared' : ''}">${cleared ? 'SIGNED OFF' : reason === 'pin' ? 'BUSTED · BOXED IN' : reason === 'ratings' ? 'BUSTED · CUT TO COMMERCIAL' : 'BUSTED · MISSED THE EXIT'}</span>
+    ${best ? `<div class="best"><small>TONIGHT'S TOP STORY</small>${esc(best.text)}</div>` : ''}
+    <div class="stats">
+      <span>Peak audience <b>${viewers(sh.peak)}</b></span><span>Score banked <b>${Math.round(sh.banked).toLocaleString()}</b></span>
+      <span>On air <b>${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}</b></span><span>Rampage time <b>${Math.round(sim.stats.timeAtTier[2])}s</b></span>
+      <span>Things flattened <b>${sim.stats.smashes}</b></span><span>Police cars smashed <b>${runStats.units}</b></span>
+      <span>Pursuers shaken <b>${runStats.lost}</b></span><span>Heat reached <b>${'★'.repeat(sh.heat)}</b></span>
+    </div>
+    <p class="anchor">${esc(anchorLine)}</p>
+    <div class="row"><button class="go" id="again">Run it again</button><button class="go alt" id="same">Same road</button></div>
+  </div>`;
+  recapEl.hidden = false;
+  ($('again') as HTMLButtonElement).onclick = () => restart(false);
+  ($('same') as HTMLButtonElement).onclick = () => restart(true);
+  ($('again') as HTMLButtonElement).focus();
+}
+
+function restart(sameRoad: boolean) {
+  newRun(sameRoad ? sim.seed : (Math.random() * 1e9) | 0);
+  if (flags.bot) bot = new Bot(sim);
+  menuGuard = 10;
+}
+
 /** §21 chyron: show a headline; tier changes break in with the BREAKING wipe and stinger. */
 function showHeadline(h: Headline) {
   chyKicker.textContent = h.kicker;
@@ -227,7 +310,7 @@ function present(e: SimEvent) {
   recentEvents.push(e);
   if (recentEvents.length > 64) recentEvents.shift();
   if (e.type === 'smash' || e.type === 'bounce') {
-    const p = sim.track.props.find((q) => q.id === e.propId);
+    const p = sim.track.props.find((q) => q.id === e.propId) ?? sim.pursuit.units.find((q) => q.id === e.propId);
     if (p) propKinds.set(p.id, p.kind);
   }
   news.observe(e, sim.time);
@@ -258,7 +341,15 @@ function present(e: SimEvent) {
       const lat = e.across ? Math.sign(e.d - g.d || 1) * 0.9 : 0;
       const dirX = Math.cos(h) - Math.sin(h) * lat;
       const dirZ = Math.sin(h) + Math.cos(h) * lat;
-      highway.smash(e.propId, dirX, dirZ, e.speed);
+      if (e.cls === 'heavy') {
+        runStats.heavy++;
+        pip.trigger(sim, sim.show.tier);
+      }
+      if (e.propId >= 1_000_000) {
+        runStats.units++;
+        units.smash(e.propId, dirX, dirZ, e.speed);
+      }
+      else highway.smash(e.propId, dirX, dirZ, e.speed);
       audio.smash(e.cls);
       hitstop = Math.max(hitstop, k.hitstop);
       rig.jolt(k.shake, e.cls === 'heavy' ? TUNING.camera.joltTime : 0.08);
@@ -284,6 +375,40 @@ function present(e: SimEvent) {
       haptic(k.haptic, k.hapticStrength);
       break;
     }
+    case 'unitSpawn':
+      audio.whoop();
+      break;
+    case 'lostTrack':
+      runStats.lost++;
+      break;
+    case 'nearMiss':
+      runStats.nearMiss++;
+      pip.trigger(sim, sim.show.tier);
+      break;
+    case 'ram':
+      if (!e.hit) runStats.dodged++;
+      pip.trigger(sim, sim.show.tier);
+      break;
+    case 'tell':
+      audio.tell(e.kind);
+      break;
+    case 'spiked':
+      audio.bounce();
+      giant.onBounce();
+      rig.jolt(3, 0.15);
+      haptic(110, 0.6);
+      break;
+    case 'exitOpen':
+      highway.rebuild([e.segment - 1, e.segment, e.segment + 1]);
+      break;
+    case 'busted':
+    case 'signOff':
+      endedAt = performance.now();
+      coverage.end();
+      audio.ending(e.type === 'signOff');
+      if (e.type === 'busted') document.documentElement.classList.add('ended');
+      bot = null;
+      break;
     case 'laneChange':
       audio.capeWhip(0.5 + g.tier * 0.25);
       break;
@@ -321,7 +446,8 @@ function stepSim(inp: SimInput) {
   perf.simMs = performance.now() - t0;
   for (const e of events) present(e);
   // Phase 0c director: event-driven cut-aways, home after 6–10s, never during a lane change.
-  const cut = director.update(sim.dt, sim.laneBusy);
+  // Never cut during a lane change or a tell (v0.3 §15).
+  const cut = director.update(sim.dt, sim.laneBusy || sim.tellActive);
   if (cut) {
     measure.cuts++;
     if (sim.laneBusy) measure.cutsDuringLane++;
@@ -338,8 +464,15 @@ function stepSim(inp: SimInput) {
     }
     showCamTag();
   }
-  const h = news.update({ time: sim.time, tier: g.tier, lane: g.lane, lanes: sim.track.lanesAt(g.s), heading: sim.track.headingAt(g.s), s: g.s }, (id) => propKinds.get(id));
-  if (h) showHeadline(h);
+  const h = news.update({ time: sim.time, tier: g.tier, lane: g.lane, lanes: sim.track.lanesAt(g.s), heading: sim.track.headingAt(g.s), s: g.s, ratingsTier: sim.show.tier, heat: sim.show.heat, zone: sim.track.segmentAt(g.s).zone, zoneName: sim.track.segmentAt(g.s).zoneName }, (id) => propKinds.get(id));
+  if (h) {
+    showHeadline(h);
+    // Tonight's top story: the biggest headline that wasn't the ending itself.
+    if (!['BUSTED', 'SIGN-OFF'].includes(h.kicker) && sim.show.ratings >= runStats.bestRatings) {
+      runStats.best = h;
+      runStats.bestRatings = sim.show.ratings;
+    }
+  }
 }
 
 // --- Pause, focus, start ------------------------------------------------------
@@ -408,7 +541,7 @@ optReduced.addEventListener('change', () => {
   saveSettings(settings);
 });
 optFlashes.addEventListener('change', () => {
-  settings.reduceFlashes = lighting.reduceFlashes = cruisers.reduceFlashes = optFlashes.checked;
+  settings.reduceFlashes = lighting.reduceFlashes = cruisers.reduceFlashes = units.reduceFlashes = optFlashes.checked;
   saveSettings(settings);
 });
 optDebug.addEventListener('change', () => {
@@ -425,6 +558,11 @@ window.addEventListener('keydown', (e) => {
     e.preventDefault();
   }
   if (e.code === 'KeyT') tunePanel.toggle();
+  if (!recapEl.hidden && (e.code === 'Enter' || e.code === 'Space')) {
+    e.preventDefault();
+    restart(false);
+    return;
+  }
   if (e.code === 'KeyH' && started && !paused) toggleHeadOn(); // dev: preview Head-On and the swoop home
   if (e.code === 'KeyC' && started && !paused) setAngle(director.current + 1, director.side); // dev: next angle (held until C comes back to Chase High)
   if (e.code === 'KeyR' && started && !paused) newRun(flags.seedFixed ? flags.seed : (Math.random() * 1e9) | 0);
@@ -513,6 +651,21 @@ function frame(now: number) {
   }
   highway.update(animDt, t.x, t.z, s, d);
   cruisers.update(animDt);
+  units.update(animDt);
+  // Broadcast graphics run on wall-clock time (a slow frame must not stretch the cold open).
+  coverage.update(paused ? 0 : (now - lastCoverage) / 1000, sim.show.tier, started);
+  lastCoverage = now;
+  pip.update(animDt, t);
+  // Pin ring (only above 0).
+  pinRing.visible = sim.show.pin > 0.5 && sim.live;
+  if (pinRing.visible) {
+    pinRing.position.set(t.x, 0.1, t.z);
+    pinRing.geometry.setDrawRange(0, Math.ceil((sim.show.pin / 100) * 64) * 6);
+  }
+  if (endedAt >= 0 && !recapShown && performance.now() - endedAt > (sim.show.state === 'cleared' ? 2600 : 2200)) {
+    recapShown = true;
+    showRecap();
+  }
   rig.update(paused ? 0 : realDt * flags.timescale, t);
   lighting.update(animDt, { giantX: t.x, giantZ: t.z, travel: t.travel, speed: g.speed, camera: rig.camera, lamps: highway.lamps, sirens: cruisers.sirens, facing: rig.facing });
   audio.setSirens(sim.escort.cruisers.map((c) => (c.active ? Math.max(0.25, Math.min(1, 1 - (g.s - c.s - 8) / 60)) : 0)));
@@ -535,19 +688,62 @@ function frame(now: number) {
   if (camTagT === 0) camTag.classList.remove('show');
 
   renderer.render(scene, rig.camera);
+  pip.render(renderer, scene);
   updateHud(realDt);
 }
 
 /** Render one frame now and measure the giant's silhouette (E2E / evidence). */
 function silhouette() {
   renderer.render(scene, rig.camera);
-  return measureSilhouette(renderer, scene, rig.camera, giant.bodyObjects);
+  return measureSilhouette(renderer, scene, rig.camera, giant.bodyObjects, rig.angle.name === TUNING.camera.angles[TUNING.camera.homeAngle].name ? 48 : 40);
+}
+
+let lastRatings = 0;
+let lastCoverage = performance.now();
+
+/** Edge arrow to the sign-off ramp (§21), pointing at the gore from wherever it is. */
+function updateSignOff() {
+  const ex = sim.exit;
+  signoffEl.hidden = !ex || !sim.live;
+  if (!ex || !sim.live) return;
+  const gp = sim.track.posAt(ex.gore, sim.track.laneCenter(ex.lane), { x: 0, z: 0 });
+  const v = new THREE.Vector3(gp.x, 1, gp.z).project(rig.camera);
+  const behind = v.z > 1;
+  let nx = behind ? -v.x : v.x;
+  let ny = behind ? -v.y : v.y;
+  const onScreen = !behind && Math.abs(nx) < 0.9 && Math.abs(ny) < 0.8;
+  const k = onScreen ? 1 : 0.86 / Math.max(Math.abs(nx), Math.abs(ny) / 0.9, 1e-6);
+  nx = Math.max(-0.86, Math.min(0.86, nx * k));
+  ny = Math.max(-0.72, Math.min(0.78, ny * k));
+  const w = window.innerWidth;
+  const h = window.innerHeight;
+  signoffEl.style.left = `${((nx + 1) / 2) * w}px`;
+  signoffEl.style.top = `${((1 - ny) / 2) * h - (onScreen ? 40 : 0)}px`;
+  const ang = Math.atan2(-(v.y - ny) || -v.y, (v.x - nx) || v.x);
+  signoffArrow.style.transform = onScreen ? 'rotate(90deg)' : `rotate(${ang}rad)`;
+  exitDistEl.textContent = `${Math.max(0, Math.round(ex.gore - sim.giant.s))}m`;
 }
 
 function updateHud(dt: number) {
   const g = sim.giant;
-  const secs = Math.floor(sim.time);
+  // LIVE clock; once the exit is open it counts down to the end of the grace period.
+  const X = TUNING.segment;
+  const counting = sim.time >= X.exitOpensAt && sim.live;
+  const secs = counting ? Math.max(0, Math.ceil(X.length + X.grace - sim.time)) : Math.floor(sim.time);
   clockEl.textContent = `${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')}`;
+  clockEl.classList.toggle('count', counting);
+  // Ratings as a viewer count (§21), with its tier colour, decay arrow and danger pulse.
+  const sh = sim.show;
+  const viewers = Math.round(sh.ratings * 18_500);
+  viewersEl.textContent = viewers >= 1e6 ? `${(viewers / 1e6).toFixed(2)}M` : `${Math.round(viewers / 1000)}K`;
+  ratingsBar.style.width = `${sh.ratings.toFixed(1)}%`;
+  for (let k = 1; k <= 3; k++) ratingsEl.classList.toggle(`t${k}`, sh.tier === k);
+  ratingsEl.classList.toggle('danger', sh.ratings < 8 && sim.live);
+  const falling = sim.live && sh.ratings < lastRatings - 1e-6;
+  trendEl.textContent = falling ? '▼' : '';
+  lastRatings = sh.ratings;
+  heatStars.forEach((el, i) => el.classList.toggle('on', i < sh.heat));
+  updateSignOff();
   const T = TUNING.tiers[g.tier];
   tierName.textContent = T.name.toUpperCase();
   tierbar.classList.toggle('t1', g.tier === 1);
@@ -573,6 +769,7 @@ function updateHud(dt: number) {
       `tier-up ${Number.isFinite(T.tierUpAfter) ? `${g.tierTimer.toFixed(2)}/${T.tierUpAfter}s` : '—'}  shoulder cd ${g.shoulderCd.toFixed(1)}\n` +
       `smash ${sim.stats.smashes} (across ${sim.stats.smashesAcross})  bounce ${sim.stats.bounces}  wall ${sim.stats.wallBumps}\n` +
       `cam ${info.angle}  up ${info.screenUpDeg.toFixed(1)}°  yaw ${info.yawDeg.toFixed(1)}°  ahead ${info.aheadSeconds.toFixed(1)}s  giant y ${info.giantScreenY.toFixed(2)}  cuts ${measure.cuts}${director.enabled ? '' : ' (OFF)'}${cutLog.length ? `  last: ${cutLog[cutLog.length - 1].reason}` : ''}\n` +
+      `ratings ${sim.show.ratings.toFixed(1)} (peak ${sim.show.peak.toFixed(0)})  banked ${sim.show.banked.toFixed(0)}  heat ${sim.show.heat}  pin ${sim.show.pin.toFixed(0)}  ${sim.show.state}${sim.show.reason ? ':' + sim.show.reason : ''}  units ${sim.pursuit.units.length}${sim.tellActive ? ' TELL' : ''}\n` +
       `look ${lighting.mode}${settings.liveTime ? ' (LIVE TIME)' : ''}  cruisers ${sim.escort.cruisers.filter((c) => c.active).map((c) => (g.s - c.s).toFixed(0) + 'm').join(' ') || '-'}\n` +
       `slide max ${worst.map((w) => (w * 100).toFixed(1)).join('/')}cm  input ${input.device}${bot ? ' (BOT)' : ''}  timescale ${flags.timescale}`;
   }
@@ -609,6 +806,8 @@ window.__GAME = {
   /** Step mode: advance N ticks with a fixed input (or the bot). */
   step(n: number, inp?: SimInput) {
     for (let i = 0; i < n; i++) stepSim(inp ?? (bot ? bot.input() : NO_INPUT));
+    // A dev step jumps the sim ahead: put the camera where it would be, not where it was.
+    rig.cut(director.current, director.side, targetAt(sim.giant.s, sim.giant.d));
   },
   /** Phase 0c: force a look ('night' | 'dusk' | 'day'), or null to follow the setting. */
   setLook(m: TimeOfDay | null) {
@@ -625,6 +824,11 @@ window.__GAME = {
   director: () => ({ enabled: director.enabled, current: director.current, pinned: director.pinned, awayCuts: director.awayCuts }),
   toggleHeadOn,
   /** Dev: slow motion (camera included), for filmstrips. */
+  recap: () => (recapEl.hidden ? null : { title: recapEl.querySelector('h2')?.textContent, outcome: recapEl.querySelector('.outcome')?.textContent }),
+  show: () => ({ ...sim.show, tier: sim.show.tier, exit: sim.exit, live: sim.live, units: sim.pursuit.units.map((u) => ({ id: u.id, unit: u.unit, phase: u.phase, gap: u.s - sim.giant.s, lane: u.lane })) }),
+  coverage: () => ({ cls: document.getElementById('hud')!.className, desk: !document.getElementById('desk')!.hidden, ticker: !document.getElementById('ticker')!.hidden, pip: pip.active, cold: !document.getElementById('coldopen')!.hidden }),
+  /** Dev: roll viewer video now. */
+  viewerVideo: () => pip.trigger(sim, 3, true),
   setTimescale(v: number) {
     flags.timescale = v;
   },

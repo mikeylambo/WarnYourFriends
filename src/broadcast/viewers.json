@@ -1,0 +1,31 @@
+{
+  "_doc": "Viewer texts for the ticker (Phase 2). Opinions, attributed, deadpan, never mean; no real brands or people. The chyron never lies; viewers are another matter.",
+  "texts": [
+    ["he waved at me. I think. — Dana, Eastside", 1],
+    ["my dog has been barking at the TV for 20 minutes — Priya", 1],
+    ["is he ok?? he looks like he's late for something — Mo", 1],
+    ["I was GOING to drive to work — Kelsey", 1],
+    ["that's the third fence this week honestly — Raj", 1],
+    ["anyone know where he got the cape — Tomasz", 1],
+    ["my grandma says he's 'very determined' — Inez", 2],
+    ["he ran past the bakery and the bread didn't even rise — Jules", 2],
+    ["we can hear him from the 9th floor — Office 9B", 2],
+    ["switched from the game to watch this. no regrets — Big Lou", 2],
+    ["the cruisers look tired — Sam", 2],
+    ["I'm not saying I'm rooting for him. I'm just watching — Marisol", 2],
+    ["the floor is shaking and I live on a boat — Ade", 3],
+    ["every channel is showing this. even the cooking one — Wren", 3],
+    ["who's going to fix the road. asking for a friend — City Works", 3],
+    ["my kids have stopped asking for dinosaurs — Hannah", 3],
+    ["WARN YOUR FRIENDS — everyone", 3],
+    ["this is the most I have ever cared about the interstate — Glen", 3]
+  ],
+  "rivals": ["KBRT 12", "METRO 3", "WZEN 8", "CH 44"],
+  "anchors": ["Gail Penrose", "Dale Ostrow"],
+  "signoff": {
+    "cleared": ["Gail Penrose: \"He took the exit. We do not know where it goes.\"", "Dale Ostrow: \"Lock your doors. Or don't. He seems busy.\""],
+    "pin": ["Gail Penrose: \"Officers report the suspect was 'surprisingly polite about it'.\"", "Dale Ostrow: \"Traffic is expected to resume sometime next year.\""],
+    "ratings": ["Dale Ostrow: \"And with that, viewers have changed the channel.\"", "Gail Penrose: \"We now return to a cooking show already in progress.\""],
+    "missed": ["Gail Penrose: \"Our chopper is out of fuel. The giant, apparently, is not.\"", "Dale Ostrow: \"If you see him, warn your friends.\""]
+  }
+}

@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { TUNING } from '../tuning';
 import { LOOKS, type Look, type TimeOfDay } from './palette';
-import { GLOW, chopperTexture, rotorTexture, setGlow } from './glow';
+import { GLOW, chopperTexture, rotorTexture, setGlow, setWindows } from './glow';
 import { RIM } from './toon';
 
 /**
@@ -40,6 +40,7 @@ export function timeOfDayAt(hour: number): TimeOfDay {
 
 export class Lighting {
   mode: TimeOfDay = 'night';
+  windows = 1;
   look: Look = LOOKS.night;
   reduceFlashes = false;
   private hemi = new THREE.HemisphereLight();
@@ -126,6 +127,8 @@ export class Lighting {
     this.sun.position.set(...L.sunPos);
     RIM.strength.value = L.rim;
     setGlow(L.glow);
+    setWindows(L.windows);
+    this.windows = L.windows;
     this.beamMat.opacity = 0.035 * L.glow;
     this.beam.visible = L.glow > 0;
     for (const m of this.shadowMats) m.opacity = L.shadow;

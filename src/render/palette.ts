@@ -24,6 +24,15 @@ export const PALETTE = {
   trunk: 0x8a6a4e,
   buildings: [0xf0e6d2, 0xdfe6e3, 0xf2d9c9, 0xe5e0ee, 0xf3ecc9, 0xd7e3d0],
   dust: 0xd8cfbd,
+  /** Phase 2 zones. */
+  sidewalk: 0xc9c3b6,
+  curb: 0xe2ddd2,
+  water: 0x1d3550,
+  deck: 0x6f6a64,
+  tunnelWall: 0x8f8c86,
+  tunnelTrim: 0xc7a24a,
+  storefronts: [0xd9c2a3, 0xb7c4c9, 0xc9a9a0, 0xa9b39a, 0xd6cfb8, 0xb3a6c4],
+  awnings: [0xd7263d, 0x2f6f8f, 0xe8a33a, 0x3f7f5a],
   crack: 0x2e2a33,
 
   giantBody: 0x2b1446,
@@ -45,6 +54,8 @@ export const KIND_COLORS: Record<PropKind, number[]> = {
   car: [0xcf4b3e, 0x3b8ea5, 0xd9a43b, 0x6b8f5a, 0x4a5d8c],
   van: [0xf2efe8, 0xd3dbe0, 0xe9d7a8],
   barricade: [0xd3cec4],
+  cruiser: [0x15151b],
+  compact: [0x1c2a4a],
 };
 
 export const MATERIAL_DEBRIS: Record<Material, number[]> = {

@@ -142,3 +142,37 @@ export function setGlow(k: number) {
     m.visible = m.opacity > 0.001;
   }
 }
+
+/** Lit-window facade texture for storefronts (Phase 2 avenue). White = lit (emissive map). */
+const windowTexture = (() => {
+  let t: THREE.Texture | null = null;
+  return () =>
+    (t ??= canvasTexture(128, 128, (g) => {
+      g.fillStyle = '#000';
+      g.fillRect(0, 0, 128, 128);
+      let seed = 11;
+      const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+      for (let y = 8; y < 120; y += 22)
+        for (let x = 8; x < 120; x += 20) {
+          if (rnd() < 0.35) continue;
+          g.fillStyle = `rgba(255,${200 + Math.floor(rnd() * 50)},${120 + Math.floor(rnd() * 80)},1)`;
+          g.fillRect(x, y, 12, 13);
+        }
+    }));
+})();
+
+const facades = new Map<number, THREE.MeshToonMaterial>();
+/** Storefront facade material: lit windows glow by night (intensity set per look). */
+export function facade(color: number, ramp: THREE.Texture): THREE.MeshToonMaterial {
+  let m = facades.get(color);
+  if (!m) {
+    m = new THREE.MeshToonMaterial({ color, gradientMap: ramp, emissive: 0xffd9a0, emissiveMap: windowTexture(), emissiveIntensity: 1 });
+    facades.set(color, m);
+  }
+  return m;
+}
+
+/** Window glow per look (night 1, dusk 0.6, day 0). */
+export function setWindows(k: number) {
+  for (const m of facades.values()) m.emissiveIntensity = k;
+}

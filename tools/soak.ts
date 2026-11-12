@@ -26,7 +26,8 @@ import * as THREE from 'three';
 import { TUNING } from '../src/tuning';
 
 const seeds = Number(process.argv[2] ?? 200);
-const seconds = Number(process.argv[3] ?? 60);
+// Phase 2: one full segment (150s + 15s grace, LOCKED) per seed.
+const seconds = Number(process.argv[3] ?? 165);
 const ticks = Math.round(seconds * TUNING.sim.hz);
 const failures: string[] = [];
 const fail = (m: string) => failures.length < 40 && failures.push(m);
@@ -48,6 +49,7 @@ const ndc = new THREE.Vector3();
 // A few seeds with cuts switched off: Chase High must hold the whole run.
 const OFF_SEEDS = new Set([7, 77, 177]);
 const swoop = { n: 0, frames: 0, maxLen: 0 };
+const p2 = { spawns: {} as Record<string, number>, tells: {} as Record<string, number>, minSpawnDist: Infinity, spawnOnCamera: 0, maxTells: 0, ramHits: 0, ramMisses: 0, spiked: 0, nearMiss: 0, lostTrack: 0, maxPin: 0, ends: {} as Record<string, number>, endTime: 0, peak: 0, banked: 0 };
 const stepSamples: number[] = [];
 let maxStepMs = 0;
 const t0 = performance.now();
@@ -77,7 +79,10 @@ for (let seed = 1; seed <= seeds; seed++) {
   director.enabled = !cutsOff;
   const dt = sim.dt;
 
+  const seenUnits = new Set<number>();
+  let lastHeat = 1;
   for (let i = 0; i < ticks; i++) {
+    if (!sim.live) break;
     // Brake now and then so every tier is sampled.
     const braking = i % 720 > 560 && i % 720 < 650;
     const input = { ...bot.input(), brake: braking };
@@ -129,7 +134,8 @@ for (let seed = 1; seed <= seeds; seed++) {
     gait.update({ x: tg.x, z: tg.z, fx: Math.cos(tg.travel), fz: Math.sin(tg.travel), speed: g.speed, stepPos: g.stepPos, stepLen: g.stepLen, tier: g.tier, dt });
 
     // Camera + director.
-    const cutTo = director.update(dt, sim.laneBusy);
+    const cutTo = director.update(dt, sim.laneBusy || sim.tellActive);
+    if (cutTo && sim.tellActive) fail(`seed ${seed}: camera cut during a tell at t=${sim.time.toFixed(2)}`);
     if (cutTo) {
       if (sim.laneBusy) cam.cutsDuringLane++;
       if (cutsOff) cuts.offCuts++;
@@ -208,10 +214,60 @@ for (let seed = 1; seed <= seeds; seed++) {
         fail(`seed ${seed}: cruiser ${c.id} within ${gap.toFixed(2)}m at tick ${i}`);
       }
     }
+    // Phase 2: pursuers spawn ≥40m away (LOCKED) and off camera; one tell at a time; meters in range.
+    for (const u of sim.pursuit.units) {
+      if (seenUnits.has(u.id)) continue;
+      seenUnits.add(u.id);
+      p2.spawns[u.unit] = (p2.spawns[u.unit] ?? 0) + 1;
+      const dist = Math.abs(u.s - g.s);
+      p2.minSpawnDist = Math.min(p2.minSpawnDist, dist);
+      if (dist < 40) fail(`seed ${seed}: ${u.unit} spawned ${dist.toFixed(1)}m away (LOCKED ≥40m)`);
+      sim.track.posAt(u.s, u.d, pos);
+      for (const [ox, oy, oz] of [[0, 0, 0], [3, 0, 3], [-3, 0, -3], [3, 2, -3], [-3, 2, 3]]) {
+        ndc.set(pos.x + ox, oy, pos.z + oz).project(rig.camera);
+        if (ndc.z > -1 && ndc.z < 1 && Math.abs(ndc.x) <= 1 && Math.abs(ndc.y) <= 1) {
+          p2.spawnOnCamera++;
+          fail(`seed ${seed}: ${u.unit} spawned on camera (${info.angle}) at t=${sim.time.toFixed(1)}`);
+          break;
+        }
+      }
+    }
+    const tells = new Set<number>();
+    for (const u of sim.pursuit.units) {
+      if (!u.alive) continue;
+      const sliding = u.unit === 'roadblock' && u.phase === 'act' && u.phaseT < TUNING.pursuit.roadblock.tell;
+      if (u.phase === 'tell' || sliding) tells.add(u.group >= 0 ? -1 - u.group : u.id);
+    }
+    p2.maxTells = Math.max(p2.maxTells, tells.size);
+    if (tells.size > 1) fail(`seed ${seed}: ${tells.size} tells at once at t=${sim.time.toFixed(2)}`);
+    for (const e of events) {
+      if (e.type === 'tell') p2.tells[e.kind] = (p2.tells[e.kind] ?? 0) + 1;
+      if (e.type === 'ram') p2[e.hit ? 'ramHits' : 'ramMisses']++;
+      if (e.type === 'spiked') p2.spiked++;
+      if (e.type === 'nearMiss') p2.nearMiss++;
+      if (e.type === 'lostTrack') p2.lostTrack++;
+      if (e.type === 'tell' && e.kind === 'roadblock') {
+        const L = sim.track.lanesAt(sim.pursuit.units.find((u) => u.id === e.id)!.s);
+        const cars = sim.pursuit.units.filter((u) => u.alive && u.unit === 'roadblock' && u.group === sim.pursuit.units.find((x) => x.id === e.id)!.group).length;
+        if (cars > L - 1) fail(`seed ${seed}: roadblock with no gap (${cars} cars, ${L} lanes)`);
+      }
+    }
+    const sh = sim.show;
+    if (sh.ratings < 0 || sh.ratings > 100 || sh.pin < 0 || sh.pin > 100 || !Number.isFinite(sh.banked)) fail(`seed ${seed}: meter out of range (ratings ${sh.ratings}, pin ${sh.pin})`);
+    if (sh.heat < lastHeat) fail(`seed ${seed}: Heat fell ${lastHeat} → ${sh.heat}`);
+    lastHeat = sh.heat;
+    p2.maxPin = Math.max(p2.maxPin, sh.pin);
     if (!inSwoop && Math.abs(info.screenUpDeg) > TUNING.camera.screenUpMaxDeg) fail(`seed ${seed}: screen-up law broken (${info.screenUpDeg.toFixed(1)}°, ${info.angle}) at tick ${i}`);
     if (!inSwoop && info.giantScreenY > TUNING.camera.giantMaxScreenY + 0.005) fail(`seed ${seed}: giant at ${info.giantScreenY.toFixed(3)} of screen (${info.angle}) at tick ${i}`);
   }
 
+  // LOCKED segment shape: every segment ends by 150s + 15s grace.
+  if (sim.live) fail(`seed ${seed}: segment still live at ${sim.time.toFixed(1)}s`);
+  const endKey = sim.show.state + (sim.show.reason ? `:${sim.show.reason}` : '');
+  p2.ends[endKey] = (p2.ends[endKey] ?? 0) + 1;
+  p2.endTime = Math.max(p2.endTime, sim.time);
+  p2.peak += sim.show.peak;
+  p2.banked += sim.show.banked;
   for (const r of gait.records) {
     slide[r.tier] = Math.max(slide[r.tier], r.slide);
     plants[r.tier]++;
@@ -252,6 +308,11 @@ console.log(
     `cuts with the setting off ${cuts.offCuts} (${OFF_SEEDS.size} seeds)`,
 );
 console.log(`  swoops home: ${swoop.n}, longest ${swoop.maxLen.toFixed(2)}s (limit ${TUNING.camera.swoop.time}s), ${((swoop.frames / (cam.frames + swoop.frames)) * 100).toFixed(2)}% of frames`);
+console.log(
+  `  segment (Phase 2): ends ${JSON.stringify(p2.ends)}, latest end ${p2.endTime.toFixed(1)}s; peak Ratings avg ${(p2.peak / seeds).toFixed(1)}, banked avg ${(p2.banked / seeds).toFixed(0)}; ` +
+    `spawns ${JSON.stringify(p2.spawns)}, nearest spawn ${p2.minSpawnDist.toFixed(1)}m, on camera ${p2.spawnOnCamera}; tells ${JSON.stringify(p2.tells)}, max at once ${p2.maxTells}; ` +
+    `rams hit ${p2.ramHits} / missed ${p2.ramMisses}; spiked ${p2.spiked}; near-misses ${p2.nearMiss}; lost track ${p2.lostTrack}; max Pin ${p2.maxPin.toFixed(0)}`,
+);
 console.log(`  escort: ${esc.joins} joins, nearest join ${esc.minJoinBehind.toFixed(1)}m back, ${esc.joinsOnCamera} on camera; closest gap ever ${esc.minGap.toFixed(2)}m (floor ${TUNING.escort.minGap}m)`);
 if (Object.keys(aheadBy).length) console.log('  road-ahead shortfalls (min s by angle/tier):', JSON.stringify(Object.fromEntries(Object.entries(aheadBy).map(([k, v]) => [k, +v.toFixed(2)]))));
 for (let t = 0; t < 3; t++) {
@@ -266,6 +327,7 @@ for (const k of ['rampage', 'heavy', 'merge'] as CutTrigger[]) if (cuts.byTrigge
 if (cuts.minAwayHold < TUNING.camera.awayHold[0] - 1e-6) fail(`returned home after only ${cuts.minAwayHold.toFixed(2)}s`);
 if (cuts.maxAwayHold > TUNING.camera.awayHold[1] + 2) fail(`stayed away ${cuts.maxAwayHold.toFixed(2)}s`);
 if (swoop.n < seeds / 4) fail(`too few swoops to test (${swoop.n})`);
+for (const k of ['cruiser', 'spike', 'rolling', 'roadblock']) if (!p2.tells[k]) fail(`no ${k} tell in ${seeds} seeds`);
 if (cuts.offCuts > 0) fail(`${cuts.offCuts} cuts with Camera cuts: Off`);
 if (esc.joins < seeds) fail(`too few escort joins (${esc.joins})`);
 if (cam.aheadUnder2 > 0) fail(`road ahead under 2s in ${cam.aheadUnder2} frames (min ${cam.minAhead.toFixed(2)}s)`);
