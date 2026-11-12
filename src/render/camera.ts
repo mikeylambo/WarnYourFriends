@@ -619,11 +619,11 @@ export class Director {
     }
     const kind = this.pending.kind;
     this.pending = null;
-    // Each trigger has preferred angles (Rampage → Head-On); never the same away angle twice running.
+    // Each trigger has preferred angles (picked at random, seeded); never the same away angle twice running.
     const prefs = C.cutAngles[kind].filter((i) => i !== this.lastAwayAngle && i !== C.homeAngle && i < C.angles.length);
     const away: number[] = [];
     for (let i = 0; i < C.angles.length; i++) if (i !== C.homeAngle && i !== this.lastAwayAngle) away.push(i);
-    this.current = prefs.length ? prefs[0] : away[this.rng.int(0, away.length - 1)];
+    this.current = prefs.length ? prefs[this.rng.int(0, prefs.length - 1)] : away[this.rng.int(0, away.length - 1)];
     this.lastAwayAngle = this.current;
     this.side = this.rng.chance(0.5) ? 1 : -1;
     this.hold = this.rng.range(C.awayHold[0], C.awayHold[1]);

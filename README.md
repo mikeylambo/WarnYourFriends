@@ -30,7 +30,7 @@ npm run dev
 
 Dev keys: **H** cut to Head-On / swoop home · **T** tuning panel · **`** debug overlay · **C** next camera angle · **R** new road.
 
-URL flags: `?seed=N` · `?angle=0|1|2|3` (hold Chase High / Wide Side / Long Lens / Head-On) · `?time=night|dusk|day` · `?cuts=0` · `?timescale=0.5` · `?bot` autopilot · `?tune` · `?reducedmotion` · `?reduceflashes` · `?step` (headless, `window.__GAME.step(n)`).
+URL flags: `?seed=N` · `?angle=0..5` (hold Chase High / Wide Side / Long Lens / Head-On / High Head-On / Overhead) · `?time=night|dusk|day` · `?cuts=0` · `?timescale=0.5` · `?bot` autopilot · `?tune` · `?reducedmotion` · `?reduceflashes` · `?step` (headless, `window.__GAME.step(n)`).
 
 ## Feel check (Phase 0c exit)
 

@@ -29,3 +29,7 @@ Cuts 5.9s Rampage → 12.3s home → 26.3s Heavy (≥15s apart, none mid-lane-ch
 `night-4-head-on.png` shows the Head-On cut-away (44°, backlit by the chopper's spotlight from beyond him). `swoop-filmstrip.png` runs left to right: Head-On, then the 1.4s swoop round his shoulder (side-on with the convoy strung out behind him), craning up into Chase High.
 
 Head-On night silhouette, sampled 10× per seed at Rampage: **lit from the camera side 3/30 pass** (median 1.9–2.2:1: from the front you see his bone and skin parts, not the cape). **Backlit, 29/30** (median 4.2–5.0:1). The E2E passes Head-On at night 4.5:1, dusk 4.0:1, day 4.7:1.
+
+## High Head-On and Overhead (2026-11-12)
+
+`night-5-high-head-on.png` (58°, he runs at you, caught mid-smash) and `night-6-overhead.png` (82°, almost straight down). Night silhouette sampled 10× on each of 3 seeds: High Head-On 30/30 (median 3.9–4.4:1), Overhead 30/30 (median 5.7–7.1:1). E2E: both pass at night, dusk and day.

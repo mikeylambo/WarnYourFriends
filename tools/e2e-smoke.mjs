@@ -196,10 +196,10 @@ try {
     await page.evaluate(() => window.__GAME.pause());
     for (const look of ['night', 'dusk', 'day']) {
       await page.evaluate((l) => window.__GAME.setLook(l), look);
-      for (let a = 0; a < 4; a++) {
+      for (let a = 0; a < 6; a++) {
         await page.evaluate((i) => window.__GAME.setAngle(i, 1), a);
         const r = await page.evaluate(() => window.__GAME.silhouette());
-        const line = `${look}/${['Chase High', 'Wide Side', 'Long Lens', 'Head-On'][a]}: ${r.heightPx.toFixed(0)}px tall, contrast ${r.contrast.toFixed(2)}:1 (${r.polarity}), edge ${(r.edgeShare * 100).toFixed(0)}%`;
+        const line = `${look}/${['Chase High', 'Wide Side', 'Long Lens', 'Head-On', 'High Head-On', 'Overhead'][a]}: ${r.heightPx.toFixed(0)}px tall, contrast ${r.contrast.toFixed(2)}:1 (${r.polarity}), edge ${(r.edgeShare * 100).toFixed(0)}%`;
         if (!r.pass) fail(`silhouette ${line}`);
         else ok(`silhouette ${line}`);
       }

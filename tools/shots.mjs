@@ -26,7 +26,7 @@ await page.goto(`${URL}?seed=${seed}&bot=1&debug=${process.env.DEBUG ?? 0}&reduc
 await page.waitForFunction(() => window.__GAME?.started);
 await page.waitForFunction(() => window.__GAME.state().tier === 2 && window.__GAME.state().time > Number(new URLSearchParams(location.search).get('at') ?? 34), null, { timeout: 90000 });
 const shots = [];
-const names = ['chase-high', 'wide-side', 'long-lens', 'head-on'];
+const names = ['chase-high', 'wide-side', 'long-lens', 'head-on', 'high-head-on', 'overhead'];
 for (const look of (process.env.LOOKS ?? 'night,dusk,day').split(',')) {
   await page.evaluate((l) => window.__GAME.setLook(l), look);
   for (let a = 0; a < names.length; a++) {

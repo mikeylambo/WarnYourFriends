@@ -330,7 +330,7 @@ function stepSim(inp: SimInput) {
       measure.lastCutAt = sim.time;
     }
     cutLog.push({ t: sim.time, reason: cut.reason, index: cut.index, laneBusy: sim.laneBusy });
-    if (cut.reason === 'home' && rig.angle.headOn) {
+    if (cut.reason === 'home' && rig.angle.swoopHome) {
       rig.swoopTo(cut.index, cut.side, targetAt(g.s, g.d)); // out of Head-On: a swoop, not a cut
     } else {
       rig.cut(cut.index, cut.side, targetAt(g.s, g.d));

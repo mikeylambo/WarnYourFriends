@@ -47,7 +47,7 @@ export interface TierTuning {
 }
 
 export interface CameraAngle {
-  name: 'Chase High' | 'Wide Side' | 'Long Lens' | 'Head-On';
+  name: 'Chase High' | 'Wide Side' | 'Long Lens' | 'Head-On' | 'High Head-On' | 'Overhead';
   /** Requested yaw off the direction of travel. Clamped by the screen-up law. */
   yawDeg: number;
   pitchDeg: number;
@@ -63,6 +63,8 @@ export interface CameraAngle {
    * ahead (below him). Lane input follows what's on screen.
    */
   headOn?: boolean;
+  /** Phase 0c: the return home from this angle is the swoop, not a hard cut. */
+  swoopHome?: boolean;
 }
 
 export const TUNING = {
@@ -226,10 +228,14 @@ export const TUNING = {
       { name: 'Wide Side', yawDeg: 35, pitchDeg: 52, distance: 55, fov: 35, lookAheadTime: 0.5 },
       { name: 'Long Lens', yawDeg: 15, pitchDeg: 40, distance: 70, fov: 22, lookAheadTime: 0.7 },
       // Mike: head-on as a cut-away, from higher up (44° vs the 18° experiment). Far and telephoto so ≥2s of road ahead fits below him.
-      { name: 'Head-On', yawDeg: 12, pitchDeg: 44, distance: 100, fov: 16, headOn: true },
+      { name: 'Head-On', yawDeg: 12, pitchDeg: 44, distance: 100, fov: 16, headOn: true, swoopHome: true },
+      // Mike: a higher head-on. Steeper means more road per screen, so further out to keep ≥2s below him.
+      { name: 'High Head-On', yawDeg: 10, pitchDeg: 58, distance: 110, fov: 17, headOn: true, swoopHome: true },
+      // Mike: almost directly above. Travel stays screen-up; shows lanes, merges and the convoy like a map.
+      { name: 'Overhead', yawDeg: 0, pitchDeg: 82, distance: 70, fov: 30, swoopHome: true },
     ] as CameraAngle[],
-    /** Which away angles each trigger prefers (first that isn't the last away angle). */
-    cutAngles: { rampage: [3, 1], heavy: [3, 2], merge: [1, 2] } as Record<'rampage' | 'heavy' | 'merge', number[]>,
+    /** Away angles each trigger can cut to (random pick, never the last away angle). Overhead suits merges: you see the lanes close. */
+    cutAngles: { rampage: [3, 4, 1], heavy: [4, 3, 2], merge: [5, 1, 2] } as Record<'rampage' | 'heavy' | 'merge', number[]>,
     /**
      * Phase 0c: leaving Head-On is a swoop, not a cut: the chopper orbits round his
      * shoulder and cranes up into Chase High. Travel can't stay within ±35° of either

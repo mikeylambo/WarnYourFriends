@@ -153,7 +153,7 @@ for (let seed = 1; seed <= seeds; seed++) {
         lastAwayTrigger = cutTo.reason;
       }
       lastCut = sim.time;
-      if (cutTo.reason === 'home' && rig.angle.headOn) {
+      if (cutTo.reason === 'home' && rig.angle.swoopHome) {
         rig.swoopTo(cutTo.index, cutTo.side, tg);
         swoop.n++;
       } else rig.cut(cutTo.index, cutTo.side, tg);
@@ -251,7 +251,7 @@ console.log(
     `${cuts.home} returns home; min gap between cut-aways ${cuts.minAwayGap.toFixed(2)}s; away held ${cuts.minAwayHold.toFixed(2)}–${cuts.maxAwayHold.toFixed(2)}s; ` +
     `cuts with the setting off ${cuts.offCuts} (${OFF_SEEDS.size} seeds)`,
 );
-console.log(`  swoops out of Head-On: ${swoop.n}, longest ${swoop.maxLen.toFixed(2)}s (limit ${TUNING.camera.swoop.time}s), ${((swoop.frames / (cam.frames + swoop.frames)) * 100).toFixed(2)}% of frames`);
+console.log(`  swoops home: ${swoop.n}, longest ${swoop.maxLen.toFixed(2)}s (limit ${TUNING.camera.swoop.time}s), ${((swoop.frames / (cam.frames + swoop.frames)) * 100).toFixed(2)}% of frames`);
 console.log(`  escort: ${esc.joins} joins, nearest join ${esc.minJoinBehind.toFixed(1)}m back, ${esc.joinsOnCamera} on camera; closest gap ever ${esc.minGap.toFixed(2)}m (floor ${TUNING.escort.minGap}m)`);
 if (Object.keys(aheadBy).length) console.log('  road-ahead shortfalls (min s by angle/tier):', JSON.stringify(Object.fromEntries(Object.entries(aheadBy).map(([k, v]) => [k, +v.toFixed(2)]))));
 for (let t = 0; t < 3; t++) {
