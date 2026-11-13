@@ -278,7 +278,7 @@ export class Pursuit {
     const lead = this.units.find((x) => x.alive && x.group === u.group) === u;
     switch (u.phase) {
       case 'approach':
-        if (u.s - g.s <= R.tellAt) {
+        if (u.s - g.s <= Math.max(R.tellMin, g.speed * R.tellAhead)) {
           for (const x of this.units) if (x.group === u.group && x.alive) this.setPhase(x, 'tell');
           if (lead) sim.emitPublic({ type: 'tell', id: u.id, kind: 'rolling', lane: u.lane, time: R.tell });
         }
@@ -319,7 +319,7 @@ export class Pursuit {
     const sim = this.sim;
     const g = sim.giant;
     const S = TUNING.pursuit.spike;
-    if (u.phase === 'approach' && u.s - g.s <= g.speed * (S.tell + 1.8) + 4) {
+    if (u.phase === 'approach' && u.s - g.s <= g.speed * S.tellAhead + 2) {
       // Targets you: unrolls across whichever lane you're in now.
       const lane = clamp(g.lane, 0, sim.track.lanesAt(u.s) - 1);
       if (!this.propIn(lane, u.s - 6, u.s + 6)) {
@@ -377,7 +377,7 @@ export class Pursuit {
     const sim = this.sim;
     const g = sim.giant;
     const B = TUNING.pursuit.roadblock;
-    if (u.phase === 'approach' && u.s - g.s <= g.speed * B.slideLead + 10 + g.speed * B.tell) {
+    if (u.phase === 'approach' && u.s - g.s <= g.speed * B.slideAhead + 2) {
       const first = this.units.find((x) => x.alive && x.group === u.group) === u;
       for (const x of this.units) if (x.group === u.group && x.alive && x.phase === 'approach') {
         this.setPhase(x, 'act');

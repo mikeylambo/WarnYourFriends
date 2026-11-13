@@ -667,18 +667,16 @@ export class HighwayView {
     arm.scale.set(0.3, 0.3, w + 1.6 - track.laneCenter(lane) + 1.6);
     arm.position.set(armMid.x, 7.4, armMid.z);
     arm.rotation.y = -h;
-    const face = new THREE.MeshBasicMaterial({ map: signTexture() });
-    const board = new THREE.Mesh(this.box, [toon(0x1e6b3a), face, toon(0x1e6b3a), toon(0x1e6b3a), toon(0x1e6b3a), toon(0x1e6b3a)]);
+    // Fades like an overpass while he runs under it.
+    const green = new THREE.MeshToonMaterial({ color: 0x1e6b3a, gradientMap: toonRamp(), transparent: true });
+    const face = new THREE.MeshBasicMaterial({ map: signTexture(), transparent: true });
+    this.overpasses.push({ s, mat: green }, { s, mat: face as unknown as THREE.MeshToonMaterial });
+    const board = new THREE.Mesh(this.box, [green, face, green, green, green, green]);
     board.scale.set(0.2, 2.6, 3.8);
     board.position.set(mid.x, 6.3, mid.z);
     // The sign face (box −X side, material 1) faces back down the road toward the giant and the chopper.
     board.rotation.y = -h;
     group.add(p, arm, board);
-    const top = new THREE.Mesh(this.box, new THREE.MeshBasicMaterial({ map: signTexture() }));
-    top.scale.set(3.8, 0.05, 2.6);
-    top.position.set(mid.x, 7.62, mid.z);
-    top.rotation.y = -h + Math.PI / 2;
-    group.add(top);
     void seg;
   }
 

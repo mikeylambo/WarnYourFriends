@@ -4,15 +4,17 @@
 
 A top-down chase roguelite: a giant fugitive barrels through a city on live TV, scoring ratings for spectacle. Design: [`docs/GDD.md`](docs/GDD.md). Rules for building: [`CLAUDE.md`](CLAUDE.md). Build-time calls: [`DECISIONS.md`](DECISIONS.md).
 
-## Status: Phase 0c, fantasy slice
+## Status: Phase 2, core playable
 
-Everything from 0b (the v0.3 lane runner: procedural highway, lane changes with smash-across, the heavy run cycle, broadcast angles), plus the fantasy around it:
+One full live broadcast, start to finish. The giant runs a procedural road at night: highway, avenues, bridges, tunnels. You pick lanes and smash across them while the station's coverage escalates with the Ratings.
 
-- **Night by default**: sodium streetlights pooling on the road, head/tail lights on traffic, the chopper's spotlight on the giant, red/blue siren washes. The giant gets a rim light and an ink outline so he reads as a silhouette against the lit road. **LIVE TIME** (pause menu) follows your local clock (day / dusk / night).
-- **Event-driven cuts**: Chase High is home. It cuts away only on reaching Rampage, a Heavy smash or a merge (Rampage → Head-On, he runs at the lens; leaving it is a swoop round his shoulder), returns after 6–10 s, ≥15 s between cut-aways, never mid-lane-change. **Camera cuts: On/Off** in the pause menu.
-- **The world reacts**: a LIVE badge, station bug and a chyron that writes headlines from what actually happened (§21 grammar). Cars ahead brake, swerve and honk; Rampage footfalls bounce them on their suspension. Three cruisers trail with lights and sirens and never catch up. Rotor, sirens and a low news-theme bed.
+- **Keep the Ratings up** (a viewer count, top left): smashes, near-misses and shaking off pursuers feed it; it decays when nothing happens. At 0 the network cuts to commercial.
+- **Police in your lanes:** cruisers swerve in after a blinker, spike strips unroll, roadblocks slide in (one lane stays open and glows), rolling roadblocks crawl ahead (smash the small car). Rampage smashes police cars.
+- **Sign off:** at 2:10 an exit ramp opens; be in the right lane at the gore before the clock runs out.
+- **The broadcast:** traffic-cam cold open, LIVE, a second chopper, viewer video, a viewer ticker, the anchor desk, a simulcast at CITY IN CHAOS, a chyron that writes headlines from what happened, and the 11 O'Clock Recap.
+- **Cameras:** Chase High home; event-driven cut-aways (Wide Side, Long Lens, Head-On, High Head-On, Overhead) with a swoop home.
 
-No ratings, no pursuit AI. **Waiting on Mike's feel check.** Live: https://warn-your-friends.vercel.app
+Live: https://warn-your-friends.vercel.app
 
 ## Run it
 

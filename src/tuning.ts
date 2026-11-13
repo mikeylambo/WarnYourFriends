@@ -408,11 +408,12 @@ export const TUNING = {
     /** Cruiser ram (v0.3: blinker + 0.6s drift, then swerve into your lane). */
     cruiser: { closeSpeed: 7, tell: 0.6, drift: 0.6, swerve: 0.35, fallBack: 6, sideSpeed: 5 },
     /** Rolling roadblock (v0.3: brake lights 1.5s, 2–3 cruisers abreast slowing). */
-    rolling: { cruiseFactor: 0.55, tellAt: 45, tell: 1.5, decel: 6, crawl: 3, actMax: 12 },
+    /** Tells start inside the visible road (the frame shows ≥2s ahead), or nobody sees them. */
+    rolling: { cruiseFactor: 0.55, tellAhead: 1.9, tellMin: 25, tell: 1.5, decel: 6, crawl: 3, actMax: 12 },
     /** Spike strip (v0.3: officer kneels, 1.2s, covers one lane). Crossing it: −1 tier, keep 70% speed, stumble. */
-    spike: { aheadTime: 4.5, aheadMin: 60, tell: 1.2, speedKeep: 0.7 },
+    spike: { aheadTime: 4.5, aheadMin: 60, tellAhead: 1.9, tell: 1.2, speedKeep: 0.7 },
     /** Static roadblock (v0.3: cars slide in 2.0s, all lanes but one; the gap glows). */
-    roadblock: { aheadTime: 7.5, slideLead: 4, tell: 2.0 },
+    roadblock: { aheadTime: 7.5, slideAhead: 1.9, tell: 2.0 },
     /** Near-miss (§12): a pursuer passes within 1.5m without contact. */
     nearMiss: 1.5,
     /** A unit this far behind the giant has lost track (§12) and leaves. */

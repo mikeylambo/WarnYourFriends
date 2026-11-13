@@ -114,3 +114,13 @@ Mike's 0c brief, as built. Details in [DECISIONS.md](../DECISIONS.md).
 2. **Night is the default look** (amends v0.2 §23): sodium pools, car lights, chopper spotlight, siren washes; the giant has a rim light and an ink outline and is silhouetted against lit road. LIVE TIME follows the local clock.
 3. **The world reacts:** minimal broadcast HUD (LIVE, station bug, chyron from real events with the §21 grammar), traffic that brakes/swerves/honks and bounces under Rampage footfalls, 2–3 trailing cruisers that never catch up, rotor/siren/news-bed audio.
 4. Cut-away angles frame less road ahead (Wide Side 0.5s, Long Lens 0.7s) so the escort is in shot; the ≥2s-of-road-ahead and 85% framing rules still hold.
+
+## Build notes (Phase 2, core playable + broadcast escalation + road variety)
+
+Built ahead of Phase 1 at Mike's request. Details in [DECISIONS.md](../DECISIONS.md).
+
+1. **Pursuit in lanes:** cruiser ram, rolling roadblock, spike strip and static roadblock, with the §11 tells. Units are moving obstacles using the prop collision rules. Spawns ≥40m and off camera; one tell at a time; every tell starts on screen; no camera cut during a tell.
+2. **§12 resources as written:** Ratings, decay, variety, banking, Heat, Pin (box-in). Headline tiers follow Ratings; tier rises are BREAKING.
+3. **Sign-off:** an exit ramp at 130s, 150–250m ahead; the rightmost lane at the gore signs off; 165s is busted.
+4. **Coverage ladder:** traffic-cam cold open, then chopper; second chopper, viewer video and ticker at AT LARGE; anchor desk at RAMPAGE; simulcast at CITY IN CHAOS. Results are the 11 O'Clock Recap.
+5. **Road zones:** highway / avenue / bridge / tunnel with v0.3 lane counts via telegraphed merges, plus overpasses; structures over the road fade while he's under them.

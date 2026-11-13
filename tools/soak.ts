@@ -49,7 +49,7 @@ const ndc = new THREE.Vector3();
 // A few seeds with cuts switched off: Chase High must hold the whole run.
 const OFF_SEEDS = new Set([7, 77, 177]);
 const swoop = { n: 0, frames: 0, maxLen: 0 };
-const p2 = { spawns: {} as Record<string, number>, tells: {} as Record<string, number>, minSpawnDist: Infinity, spawnOnCamera: 0, maxTells: 0, ramHits: 0, ramMisses: 0, spiked: 0, nearMiss: 0, lostTrack: 0, maxPin: 0, ends: {} as Record<string, number>, endTime: 0, peak: 0, banked: 0 };
+const p2 = { tellsOffscreen: 0, spawns: {} as Record<string, number>, tells: {} as Record<string, number>, minSpawnDist: Infinity, spawnOnCamera: 0, maxTells: 0, ramHits: 0, ramMisses: 0, spiked: 0, nearMiss: 0, lostTrack: 0, maxPin: 0, ends: {} as Record<string, number>, endTime: 0, peak: 0, banked: 0 };
 const stepSamples: number[] = [];
 let maxStepMs = 0;
 const t0 = performance.now();
@@ -241,7 +241,20 @@ for (let seed = 1; seed <= seeds; seed++) {
     p2.maxTells = Math.max(p2.maxTells, tells.size);
     if (tells.size > 1) fail(`seed ${seed}: ${tells.size} tells at once at t=${sim.time.toFixed(2)}`);
     for (const e of events) {
-      if (e.type === 'tell') p2.tells[e.kind] = (p2.tells[e.kind] ?? 0) + 1;
+      if (e.type === 'tell') {
+        p2.tells[e.kind] = (p2.tells[e.kind] ?? 0) + 1;
+        // A tell nobody can see isn't a tell: it must start inside the frame.
+        const u = sim.pursuit.units.find((x) => x.id === e.id);
+        if (u && !inSwoop) {
+          sim.track.posAt(u.s, sim.track.laneCenter(e.lane), pos);
+          ndc.set(pos.x, 0.5, pos.z).project(rig.camera);
+          const seen = ndc.z > -1 && ndc.z < 1 && Math.abs(ndc.x) <= 1 && Math.abs(ndc.y) <= 1;
+          if (!seen) {
+            p2.tellsOffscreen++;
+            fail(`seed ${seed}: ${e.kind} tell started off screen (${info.angle}, ${(u.s - g.s).toFixed(0)}m ahead)`);
+          }
+        }
+      }
       if (e.type === 'ram') p2[e.hit ? 'ramHits' : 'ramMisses']++;
       if (e.type === 'spiked') p2.spiked++;
       if (e.type === 'nearMiss') p2.nearMiss++;
@@ -310,7 +323,7 @@ console.log(
 console.log(`  swoops home: ${swoop.n}, longest ${swoop.maxLen.toFixed(2)}s (limit ${TUNING.camera.swoop.time}s), ${((swoop.frames / (cam.frames + swoop.frames)) * 100).toFixed(2)}% of frames`);
 console.log(
   `  segment (Phase 2): ends ${JSON.stringify(p2.ends)}, latest end ${p2.endTime.toFixed(1)}s; peak Ratings avg ${(p2.peak / seeds).toFixed(1)}, banked avg ${(p2.banked / seeds).toFixed(0)}; ` +
-    `spawns ${JSON.stringify(p2.spawns)}, nearest spawn ${p2.minSpawnDist.toFixed(1)}m, on camera ${p2.spawnOnCamera}; tells ${JSON.stringify(p2.tells)}, max at once ${p2.maxTells}; ` +
+    `spawns ${JSON.stringify(p2.spawns)}, nearest spawn ${p2.minSpawnDist.toFixed(1)}m, on camera ${p2.spawnOnCamera}; tells ${JSON.stringify(p2.tells)}, max at once ${p2.maxTells}, off screen ${p2.tellsOffscreen}; ` +
     `rams hit ${p2.ramHits} / missed ${p2.ramMisses}; spiked ${p2.spiked}; near-misses ${p2.nearMiss}; lost track ${p2.lostTrack}; max Pin ${p2.maxPin.toFixed(0)}`,
 );
 console.log(`  escort: ${esc.joins} joins, nearest join ${esc.minJoinBehind.toFixed(1)}m back, ${esc.joinsOnCamera} on camera; closest gap ever ${esc.minGap.toFixed(2)}m (floor ${TUNING.escort.minGap}m)`);

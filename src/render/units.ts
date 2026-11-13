@@ -61,7 +61,13 @@ export class UnitViews {
       const hat = new THREE.Mesh(BOX, toon(0x10182e));
       hat.scale.set(0.36, 0.1, 0.36);
       hat.position.y = 1.6;
-      officer.add(body, head, hat);
+      // Road flare: a flashing red light so the tell reads from chopper height.
+      const flare = new THREE.Sprite(GLOW.sirenRedHalo);
+      flare.scale.set(3.4, 3.4, 1);
+      flare.position.set(0, 0.4, 0);
+      flare.visible = false;
+      officer.add(body, head, hat, flare);
+      officer.userData.flare = flare;
       const strip = new THREE.Group();
       for (let i = 0; i < 18; i++) {
         const tooth = new THREE.Mesh(BOX, toon(i % 2 ? 0x2a2a2e : 0xc9c9c9));
@@ -163,6 +169,7 @@ export class UnitViews {
         v.officer!.position.set(0, 0, off);
         const k = u.phase === 'approach' ? 0 : u.phase === 'tell' ? Math.min(1, u.phaseT / TUNING.pursuit.spike.tell) : 1;
         v.officer!.scale.y = 1 - 0.4 * Math.min(1, k * 3); // kneels
+        (v.officer!.userData.flare as THREE.Sprite).visible = u.phase !== 'approach' && (this.reduceFlashes || (this.time * 4) % 1 < 0.6);
         v.strip!.scale.z = Math.max(0.001, k);
         v.strip!.position.z = (nearLeft ? -1 : 1) * 1.9 * (1 - k);
         continue;
