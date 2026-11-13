@@ -43,8 +43,22 @@ export class Audio {
       this.startRotor();
       this.startSirens(3);
       this.startBed();
+      this.applyVolumes();
     }
     if (this.ctx.state === 'suspended') void this.ctx.resume();
+  }
+
+  private vol = { master: 0.8, music: 0.8, sfx: 0.9 };
+  /** Shell settings: master / music / SFX volume (0..1). */
+  setVolumes(master: number, music: number, sfx: number) {
+    this.vol = { master: 0.8 * master, music, sfx };
+    this.applyVolumes();
+  }
+  private applyVolumes() {
+    if (!this.ctx) return;
+    this.master.gain.value = this.vol.master;
+    this.buses.music.gain.value = 0.55 * this.vol.music;
+    this.buses.sfx.gain.value = this.vol.sfx;
   }
 
   /** §8: pause freezes broadcast audio. */

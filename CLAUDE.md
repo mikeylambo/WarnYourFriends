@@ -4,7 +4,7 @@ This file is the law for anyone (human or agent) building this repo. The design 
 
 ## Current phase
 
-**Phase 2 — Core playable** (one full broadcast: pursuit, Ratings/Heat/Pin, exit-ramp sign-off, busted, recap), plus broadcast escalation and road variety. The 0c feel check passed (Mike, 2026-11-12). Phase 1 Foundation (adopting Web-Game-Shell-v1.02) is next unless Mike says otherwise; the shell's AGENTS.md constitution applies from then.
+**Phase 2 — Core playable** (one full broadcast: pursuit, Ratings/Heat/Pin, exit-ramp sign-off, busted, recap), plus broadcast escalation and road variety. The 0c feel check passed (Mike, 2026-11-12). Phase 1 Foundation: the game now runs inside the SLU Web Shell (private repo, pinned by commit; see DECISIONS 2026-11-13). The shell's AGENTS.md constitution applies. Never vendor the shell into this public repo.
 
 ## Rules
 

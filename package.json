@@ -14,6 +14,7 @@
     "gates": "npm run typecheck && npm run test && npm run soak && npm run build && npm run e2e"
   },
   "dependencies": {
+    "@slu/web-shell": "git+https://github.com/mikeylambo/Web-Game-Shell-v1.02.git#7003ec7a46f0de4c86b8dbb28fea81c10d4f21fa",
     "three": "^0.187.0"
   },
   "devDependencies": {

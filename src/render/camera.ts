@@ -74,6 +74,8 @@ export function maxYawForScreenUp(limitDeg: number, pitchDeg: number): number {
 export class CameraRig {
   readonly camera: THREE.PerspectiveCamera;
   reducedMotion = false;
+  /** Shell setting: screen shake intensity (0..1). */
+  shakeScale = 1;
   readonly info: CameraFrameInfo = { angle: 'Chase High', screenUpDeg: 0, giantScreenY: 0, aheadMetres: 0, aheadSeconds: 0, lookAhead: 0, yawDeg: 0, raise: 0, pitchDeg: 0, insideBuilding: false, losBlocked: false, travelDown: false, transition: false };
 
   private angleIndex = 0;
@@ -146,8 +148,8 @@ export class CameraRig {
 
   /** Screen jolt in CSS px (§10 impact scale; v0.3 footfall pulse). */
   jolt(px: number, time: number = TUNING.camera.joltTime) {
-    if (this.reducedMotion || px <= 0) return;
-    this.shakes.push({ px, t: 0, max: time });
+    if (this.reducedMotion || px <= 0 || this.shakeScale <= 0) return;
+    this.shakes.push({ px: px * this.shakeScale, t: 0, max: time });
   }
 
   /**

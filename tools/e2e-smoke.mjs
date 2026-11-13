@@ -6,8 +6,10 @@
  *
  * Checks:
  *   1. Boot: every request succeeds (no 4xx/5xx, no failed loads), no page errors.
- *   2. Start: clicking the real title button (desktop) and tapping it (mobile)
- *      starts the sim; keyboard steering and Esc pause work.
+ *   2. Start through the SLU Web Shell flow (title → main menu → mode select):
+ *      by clicking (desktop), tapping (mobile) and keyboard alone; lane input and
+ *      Esc pause work; pause → settings shows the game's settings; quit returns to
+ *      the attract broadcast behind the menus.
  *   3. Regression (2026-11-10): with WebGL unavailable, the page shows the
  *      "WebGL is switched off" message instead of an inert title.
  *   4. Bot run: reaches Rampage, smashes props, speed floor holds.
@@ -84,12 +86,13 @@ async function bootAndStart(browser, label, ctxOpts, startAction) {
   await page.waitForFunction(() => document.documentElement.dataset.boot, null, { timeout: 15000 });
   const boot = await page.evaluate(() => document.documentElement.dataset.boot);
   if (boot !== 'ok') fail(`${label}: boot=${boot}`);
-  if (!(await page.isVisible('#title'))) fail(`${label}: title not visible`);
+  await page.waitForSelector('#ui [data-screen-id="title"]', { timeout: 15000 }).catch(() => {});
+  if (!(await page.isVisible('#ui [data-screen-id="title"]'))) fail(`${label}: shell title screen not visible`);
   if (await page.evaluate(() => window.__GAME.started)) fail(`${label}: started before input`);
   await startAction(page);
-  // Software GL renders ~10 fps with the night lights, so allow up to 3s for 0.3s of sim time.
-  await page.waitForFunction(() => window.__GAME.started && window.__GAME.state().time > 0.3, null, { timeout: 3000 }).catch(() => {});
-  const s = await page.evaluate(() => ({ started: window.__GAME.started, t: window.__GAME.state().time, title: !document.getElementById('title').hidden }));
+  // Software GL renders ~10 fps with the night lights, so allow up to 6s for 0.3s of sim time.
+  await page.waitForFunction(() => window.__GAME.started && window.__GAME.state().time > 0.3, null, { timeout: 6000 }).catch(() => {});
+  const s = await page.evaluate(() => ({ started: window.__GAME.started, t: window.__GAME.state().time, title: document.querySelector('#ui [data-screen-id]')?.dataset.screenId !== 'gameplay-placeholder' }));
   if (!s.started || s.title) fail(`${label}: start button did not start the run (${JSON.stringify(s)})`);
   else if (!(s.t > 0.3)) fail(`${label}: sim not advancing after start (t=${s.t})`);
   else ok(`${label}: starts the sim (t=${s.t.toFixed(2)}s)`);
@@ -101,7 +104,12 @@ try {
 
   // 1–2. Desktop: click the real start button.
   {
-    const { ctx, page, problems } = await bootAndStart(browser, 'desktop click', { viewport: { width: 1280, height: 720 } }, (p) => p.click('#start'));
+    const { ctx, page, problems } = await bootAndStart(browser, 'desktop click', { viewport: { width: 1280, height: 720 } }, async (p) => {
+      for (const id of ['start', 'play', 'broadcast']) {
+        await p.click(`[data-choice-id="${id}"]`);
+        await p.waitForTimeout(150);
+      }
+    });
     // v0.3: A changes lane left; D changes lane right.
     const lane0 = await page.evaluate(() => window.__GAME.state().lane);
     await page.keyboard.press('KeyA');
@@ -123,14 +131,25 @@ try {
 
   // 2. Mobile: tap the start button.
   {
-    const { ctx, problems } = await bootAndStart(browser, 'mobile tap', { viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true }, (p) => p.tap('#start'));
+    const { ctx, problems } = await bootAndStart(browser, 'mobile tap', { viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true }, async (p) => {
+      for (const id of ['start', 'play', 'broadcast']) {
+        await p.tap(`[data-choice-id="${id}"]`);
+        await p.waitForTimeout(150);
+      }
+    });
     if (problems.length) fail(`mobile boot problems:\n    ${problems.join('\n    ')}`);
     await ctx.close();
   }
 
   // 2b. Keyboard start ("press any key").
   {
-    const { ctx } = await bootAndStart(browser, 'keyboard', { viewport: { width: 1280, height: 720 } }, (p) => p.keyboard.press('KeyD'));
+    const { ctx } = await bootAndStart(browser, 'keyboard', { viewport: { width: 1280, height: 720 } }, async (p) => {
+      // Keyboard only: Enter through title, main menu (Play) and mode select.
+      for (let i = 0; i < 3; i++) {
+        await p.keyboard.press('Enter');
+        await p.waitForTimeout(200);
+      }
+    });
     await ctx.close();
   }
 
@@ -229,9 +248,8 @@ try {
     const ctx = await browser.newContext({ viewport: { width: 1280, height: 720 } });
     const page = await ctx.newPage();
     const problems = watch(page);
-    await page.goto(`${URL}?seed=5`);
+    await page.goto(`${URL}?seed=5&autostart=1`);
     await page.waitForFunction(() => document.documentElement.dataset.boot === 'ok', null, { timeout: 15000 });
-    await page.click('#start');
     await page.waitForFunction(() => window.__GAME.state().time > 0.5, null, { timeout: 15000 });
     await page.evaluate(() => window.__GAME.setAngle(3, 1));
     await page.waitForFunction(() => window.__GAME.camera().travelDown, null, { timeout: 2000 }).catch(() => {});
@@ -306,11 +324,21 @@ try {
     const r = await page.evaluate(() => ({ cuts: window.__GAME.cutLog().length, trig: window.__GAME.triggerLog().length, cam: window.__GAME.camera().angle }));
     if (r.cuts !== 0 || r.cam !== 'Chase High') fail(`Camera cuts: Off still cut (${JSON.stringify(r)})`);
     else ok(`Camera cuts: Off holds Chase High (${r.trig} trigger events, 0 cuts)`);
+    // Pause → Settings (shell) carries the game's settings; Quit returns to the attract broadcast.
     await page.keyboard.press('Escape');
-    const opts = await page.evaluate(() => ({ cuts: !!document.getElementById('opt-cuts'), live: !!document.getElementById('opt-livetime'), liveChecked: document.getElementById('opt-livetime').checked }));
-    if (!opts.cuts || !opts.live) fail('pause menu is missing Camera cuts or LIVE TIME');
-    else if (opts.liveChecked) fail('LIVE TIME should default to off');
-    else ok('pause menu: Camera cuts and LIVE TIME (default off)');
+    await page.waitForSelector('#ui [data-screen-id="pause"]', { timeout: 3000 }).catch(() => {});
+    await page.click('[data-choice-id="settings"]');
+    await page.waitForTimeout(200);
+    const labels = await page.evaluate(() => [...document.querySelectorAll('#ui .slu-choice-label')].map((e) => e.textContent));
+    if (!labels.includes('Camera Cuts: Off') || !labels.includes('LIVE TIME: Off')) fail(`shell settings missing the game's settings (${labels.join(' | ')})`);
+    else ok(`shell settings: ${labels.slice(0, 4).join(' · ')}`);
+    await page.click('[data-back]');
+    await page.waitForTimeout(150);
+    await page.click('[data-choice-id="quit"]');
+    await page.waitForTimeout(500);
+    const q = await page.evaluate(() => ({ screen: document.querySelector('#ui [data-screen-id]')?.dataset.screenId, attract: window.__GAME.attract, started: window.__GAME.started }));
+    if (q.screen !== 'main-menu' || !q.attract || q.started) fail(`quit did not return to the menu over the attract broadcast (${JSON.stringify(q)})`);
+    else ok('quit to menu: attract broadcast runs behind the main menu');
     await ctx.close();
   }
   await browser.close();
@@ -326,7 +354,7 @@ try {
     const r = await page.evaluate(() => ({
       boot: document.documentElement.dataset.boot,
       fatal: !document.getElementById('fatal').hidden,
-      title: !document.getElementById('title').hidden,
+      title: !!document.querySelector('#ui [data-screen-id]'),
       text: document.querySelector('#fatal h2')?.textContent,
     }));
     await page.screenshot({ path: 'test-results/e2e-no-webgl.png' });

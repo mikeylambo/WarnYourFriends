@@ -36,20 +36,6 @@
       </div>
       <button id="btn-pause" aria-label="Pause">II</button>
 
-      <div id="title" class="overlay">
-        <div class="card">
-          <div class="kicker">PHASE 2 · ONE LIVE BROADCAST</div>
-          <h1>WARN YOUR FRIENDS</h1>
-          <p class="sub">He runs; you pick the lane. Smash across it, keep the ratings up, and take the exit before the chopper runs out of fuel.</p>
-          <ul class="controls">
-            <li><b>Lane</b> A/D or ←/→ · stick flick or d-pad · swipe left/right</li>
-            <li><b>Brake</b> S / Space · LT · swipe down and hold</li>
-            <li><b>Shoulder Check</b> Shift / W / click · RB · red button</li>
-            <li><b>Pause</b> Esc · Start · II</li>
-          </ul>
-          <button id="start" class="go">Press any key, click or tap to run</button>
-        </div>
-      </div>
 
       <div id="fatal" class="overlay" hidden role="alert">
         <div class="card">
@@ -62,19 +48,10 @@
       </div>
 
       <div id="coldopen" hidden aria-hidden="true"><span class="cam">WYF TRAFFIC CAM 14</span><span class="ts" id="coldts"></span></div>
+      <!-- SLU Web Shell screens (title, menus, pause, settings) mount here. -->
+      <div id="ui"></div>
       <div id="recap" class="overlay" hidden role="dialog" aria-label="The 11 O'Clock Recap"></div>
 
-      <div id="paused" class="overlay" hidden>
-        <div class="card">
-          <h2>PAUSED</h2>
-          <label><input type="checkbox" id="opt-reduced" /> Reduced Motion (no wobble, no camera jolt)</label>
-          <label><input type="checkbox" id="opt-flashes" /> Reduce Flashes</label>
-          <label><input type="checkbox" id="opt-cuts" /> Camera cuts: On (off holds Chase High)</label>
-          <label><input type="checkbox" id="opt-livetime" /> LIVE TIME (lighting follows your clock; off = always night)</label>
-          <label><input type="checkbox" id="opt-debug" /> Debug overlay</label>
-          <button id="resume" class="go">Resume</button>
-        </div>
-      </div>
     </div>
     <script type="module" src="/src/main.ts"></script>
   </body>

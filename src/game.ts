@@ -22,6 +22,7 @@ import { Input } from './input';
 import { readFlags } from './debug';
 import { loadSettings, saveSettings } from './settings';
 import { applyStoredTuning, mountTuningPanel } from './tuningPanel';
+import { createGameApp, type CoreSettings, type FrameAssembly, type GenreFrame, type RendererAdapter, type SLUWebShell } from '@slu/web-shell';
 
 applyStoredTuning();
 
@@ -39,8 +40,6 @@ const debugEl = $('debug');
 const tierbar = $('tierbar');
 const tierName = tierbar.querySelector('.name') as HTMLElement;
 const tierMeter = tierbar.querySelector('.meter i') as HTMLElement;
-const titleEl = $('title');
-const pausedEl = $('paused');
 const touchUi = $('touch-ui');
 const camTag = $('camtag');
 const clockEl = $('clock');
@@ -223,8 +222,9 @@ function setAngle(index: number, side: number, pin = true) {
 newRun(flags.seed);
 
 // --- Presentation of sim events ---------------------------------------------
+let hapticsOn = true;
 function haptic(ms: number, strength: number) {
-  if (ms <= 0) return;
+  if (ms <= 0 || !hapticsOn) return;
   const pads = navigator.getGamepads?.() ?? [];
   for (const p of pads) {
     const act = (p as (Gamepad & { vibrationActuator?: { playEffect?: (t: string, o: object) => Promise<unknown> } }) | null)?.vibrationActuator;
@@ -273,20 +273,29 @@ function showRecap() {
       <span>On air <b>${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}</b></span><span>Rampage time <b>${Math.round(sim.stats.timeAtTier[2])}s</b></span>
       <span>Things flattened <b>${sim.stats.smashes}</b></span><span>Police cars smashed <b>${runStats.units}</b></span>
       <span>Pursuers shaken <b>${runStats.lost}</b></span><span>Heat reached <b>${'★'.repeat(sh.heat)}</b></span>
+      ${lastBest ? `<span>Best score <b>${lastBest.bestBanked.toLocaleString()}</b></span><span>Signed off <b>${lastBest.signOffs} / ${lastBest.broadcasts}</b></span>` : ''}
     </div>
     <p class="anchor">${esc(anchorLine)}</p>
-    <div class="row"><button class="go" id="again">Run it again</button><button class="go alt" id="same">Same road</button></div>
+    <div class="row"><button class="go" id="again">Run it again</button><button class="go alt" id="same">Same road</button><button class="go alt" id="tomenu">Menu</button></div>
   </div>`;
   recapEl.hidden = false;
   ($('again') as HTMLButtonElement).onclick = () => restart(false);
   ($('same') as HTMLButtonElement).onclick = () => restart(true);
+  ($('tomenu') as HTMLButtonElement).onclick = () => recapToMenu();
   ($('again') as HTMLButtonElement).focus();
 }
 
+/** Recap buttons go through the shell's results flow (retry / menu). */
+let restartFresh = false;
 function restart(sameRoad: boolean) {
-  newRun(sameRoad ? sim.seed : (Math.random() * 1e9) | 0);
-  if (flags.bot) bot = new Bot(sim);
-  menuGuard = 10;
+  if (!app) return;
+  restartFresh = !sameRoad;
+  app.flow.onActivate('results', 'retry');
+}
+function recapToMenu() {
+  if (!app) return;
+  enterAttract();
+  app.flow.onActivate('results', 'menu');
 }
 
 /** §21 chyron: show a headline; tier changes break in with the BREAKING wipe and stinger. */
@@ -475,19 +484,25 @@ function stepSim(inp: SimInput) {
   }
 }
 
-// --- Pause, focus, start ------------------------------------------------------
+// --- Pause, focus, start (the SLU Web Shell owns the flow) ----------------------
+/**
+ * Behind the title and menus the bot runs a live broadcast ("attract"). Play loads a
+ * level: a fresh broadcast with the player driving. Pause, settings, restart and quit
+ * come from the shell; the game reacts through the renderer adapter below.
+ */
+let attract = false;
+let nextSeed: number | null = flags.seedFixed ? flags.seed : null;
+
 function setPaused(p: boolean) {
   if (!started || p === paused) return;
   paused = p;
-  pausedEl.hidden = !p;
   audio.setPaused(p);
   if (!p) menuGuard = 10; // §8 10f menu guard after any screen transition
 }
 
 function start() {
-  if (started) return;
   started = true;
-  titleEl.hidden = true;
+  paused = false;
   document.documentElement.classList.add('playing');
   try {
     audio.unlock(); // audio must never block the run from starting
@@ -497,63 +512,49 @@ function start() {
   menuGuard = 10;
 }
 
-titleEl.addEventListener('click', start);
-titleEl.addEventListener('touchend', (e) => {
-  e.preventDefault();
+/** Shell "load level": a new broadcast with the player at the controls. */
+function beginBroadcast() {
+  attract = false;
+  document.documentElement.classList.remove('attract');
+  newRun(nextSeed ?? (Math.random() * 1e9) | 0);
+  nextSeed = null;
+  bot = flags.bot ? new Bot(sim) : null;
   start();
-});
+}
+
+/** Back to the menus: the bot takes over a fresh broadcast behind them. */
+function enterAttract() {
+  attract = true;
+  document.documentElement.classList.add('attract');
+  newRun((Math.random() * 1e9) | 0);
+  bot = new Bot(sim);
+  start();
+  audio.setPaused(false);
+}
+
 input.onAnyInput = () => {
-  if (!started) start();
   try {
     audio.unlock();
   } catch {
     /* audio unavailable */
   }
 };
-input.onPadDisconnect = () => setPaused(true);
-window.addEventListener('blur', () => setPaused(true)); // §20 focus loss auto-pauses
-document.addEventListener('visibilitychange', () => document.hidden && setPaused(true));
-$('resume').addEventListener('click', () => setPaused(false));
+/** Pause requests from the game (Esc/Start/II, focus loss, pad unplugged) go through the shell. */
+function requestPause() {
+  if (app && app.shell.session.phase === 'playing' && !attract && sim.live) app.flow.showPause();
+}
+input.onPadDisconnect = requestPause;
+window.addEventListener('blur', requestPause); // §20 focus loss auto-pauses
+document.addEventListener('visibilitychange', () => document.hidden && requestPause());
 
-const optReduced = $<HTMLInputElement>('opt-reduced');
-const optFlashes = $<HTMLInputElement>('opt-flashes');
-const optDebug = $<HTMLInputElement>('opt-debug');
-const optCuts = $<HTMLInputElement>('opt-cuts');
-const optLive = $<HTMLInputElement>('opt-livetime');
-optCuts.checked = settings.cameraCuts;
-optLive.checked = settings.liveTime;
-optCuts.addEventListener('change', () => {
-  settings.cameraCuts = director.enabled = optCuts.checked;
-  saveSettings(settings);
-});
-optLive.addEventListener('change', () => {
-  settings.liveTime = optLive.checked;
-  forcedLook = null;
-  applyLook();
-  saveSettings(settings);
-});
-optReduced.checked = settings.reducedMotion;
-optFlashes.checked = settings.reduceFlashes;
-optDebug.checked = settings.debug;
-debugEl.hidden = !settings.debug;
-optReduced.addEventListener('change', () => {
-  settings.reducedMotion = rig.reducedMotion = optReduced.checked;
-  saveSettings(settings);
-});
-optFlashes.addEventListener('change', () => {
-  settings.reduceFlashes = lighting.reduceFlashes = cruisers.reduceFlashes = units.reduceFlashes = optFlashes.checked;
-  saveSettings(settings);
-});
-optDebug.addEventListener('change', () => {
-  settings.debug = optDebug.checked;
+function applyDebug() {
   debugEl.hidden = !settings.debug;
-  saveSettings(settings);
-});
+}
+applyDebug();
 window.addEventListener('keydown', (e) => {
   if (e.code === 'Backquote' || e.code === 'F3') {
     settings.debug = !settings.debug;
-    optDebug.checked = settings.debug;
-    debugEl.hidden = !settings.debug;
+    applyDebug();
     saveSettings(settings);
     e.preventDefault();
   }
@@ -563,13 +564,38 @@ window.addEventListener('keydown', (e) => {
     restart(false);
     return;
   }
-  if (e.code === 'KeyH' && started && !paused) toggleHeadOn(); // dev: preview Head-On and the swoop home
-  if (e.code === 'KeyC' && started && !paused) setAngle(director.current + 1, director.side); // dev: next angle (held until C comes back to Chase High)
-  if (e.code === 'KeyR' && started && !paused) newRun(flags.seedFixed ? flags.seed : (Math.random() * 1e9) | 0);
+  const playing = started && !paused && !attract;
+  if (e.code === 'KeyH' && playing) toggleHeadOn(); // dev: preview Head-On and the swoop home
+  if (e.code === 'KeyC' && playing) setAngle(director.current + 1, director.side); // dev: next angle (held until C comes back to Chase High)
+  if (e.code === 'KeyR' && playing) {
+    nextSeed = flags.seedFixed ? flags.seed : null;
+    beginBroadcast();
+  }
 });
 
-if (flags.bot || flags.autostart) start();
-
+// The shell: title → main menu → mode select → broadcast → pause / settings → results.
+const wyfAssembly = (shell: SLUWebShell<CoreSettings>): FrameAssembly => {
+  const frame: GenreFrame = {
+    id: 'arcade',
+    label: 'Live Broadcast',
+    menuFlow: [],
+    modes: [{ id: 'broadcast', label: 'Live Broadcast', description: 'Keep the ratings up. Take the exit before the chopper runs out of fuel.', leaderboardKey: 'banked' }],
+    statKeys: ['broadcasts', 'signOffs', 'bestBanked', 'bestPeak'],
+    challengeCategories: [],
+    recommendedModules: [],
+  };
+  return { id: 'wyf', frame, modules: [], install: () => shell.modes.register(frame.modes) };
+};
+const onOff = (b: boolean) => (b ? 'On' : 'Off');
+const rendererAdapter: RendererAdapter = {
+  id: 'wyf-three',
+  loadLevel: () => beginBroadcast(),
+  unloadLevel: () => enterAttract(),
+  suspend: () => setPaused(true),
+  resume: () => setPaused(false),
+  resize: () => resize(),
+};
+let app: Awaited<ReturnType<typeof createGameApp>> | null = null;
 // --- Resize -------------------------------------------------------------------
 function resize() {
   const w = window.innerWidth;
@@ -580,6 +606,66 @@ function resize() {
 window.addEventListener('resize', resize);
 resize();
 
+enterAttract();
+app = await createGameApp({
+  gameId: 'warn-your-friends',
+  gameName: 'Warn Your Friends',
+  version: '0.2.0',
+  renderer: rendererAdapter,
+  root: $('ui'),
+  assemblies: [(shell) => wyfAssembly(shell)],
+  capabilities: { stageSelect: false, characterSelect: false, vehicleSelect: false, loadout: false, difficulty: false },
+  mobileViewport: false,
+  pwa: false,
+  flow: {
+    settingsExtension: {
+      choices: () => [
+        { id: 'wyf-cuts', label: `Camera Cuts: ${onOff(settings.cameraCuts)}`, description: 'Off holds the Chase High shot' },
+        { id: 'wyf-livetime', label: `LIVE TIME: ${onOff(settings.liveTime)}`, description: 'Lighting follows your clock; off is always night' },
+        { id: 'wyf-flashes', label: `Reduce Flashes: ${onOff(settings.reduceFlashes)}` },
+        { id: 'wyf-debug', label: `Debug Overlay: ${onOff(settings.debug)}` },
+      ],
+      handle: (id) => {
+        if (id === 'wyf-cuts') settings.cameraCuts = director.enabled = !settings.cameraCuts;
+        else if (id === 'wyf-livetime') {
+          settings.liveTime = !settings.liveTime;
+          forcedLook = null;
+          applyLook();
+        } else if (id === 'wyf-flashes') settings.reduceFlashes = lighting.reduceFlashes = cruisers.reduceFlashes = units.reduceFlashes = !settings.reduceFlashes;
+        else if (id === 'wyf-debug') {
+          settings.debug = !settings.debug;
+          applyDebug();
+        } else return false;
+        saveSettings(settings);
+        return true;
+      },
+    },
+  },
+});
+// Only what exists: no challenges or credits yet; the tagline is approved fiction (§21).
+app.ui.updateScreen('title', { subtitle: 'Giant At Large. Warn Your Friends.' });
+app.ui.updateScreen('main-menu', { choices: [{ id: 'play', label: 'Play' }, { id: 'settings', label: 'Settings' }] });
+// Core settings drive the game: reduced motion, shake, vibration, volume.
+const applyCore = (c: CoreSettings) => {
+  rig.reducedMotion = settings.reducedMotion = c.reducedMotion;
+  rig.shakeScale = c.screenShake;
+  hapticsOn = c.vibration;
+  audio.setVolumes(c.muted ? 0 : c.masterVolume, c.musicVolume, c.sfxVolume);
+};
+if (settings.reducedMotion && !app.settings.get('reducedMotion')) await app.settings.patch({ reducedMotion: true }); // carry over the 0c setting
+applyCore(app.settings.snapshot());
+app.settings.events.on('changed', applyCore);
+// Pause → Restart replays the same road; the recap's "Run it again" asks for a fresh one.
+app.shell.events.on('game:restart', () => {
+  nextSeed = restartFresh ? null : sim.seed;
+  restartFresh = false;
+});
+// Dev/test flags skip the menus straight into a broadcast.
+if (flags.bot || flags.autostart) {
+  app.flow.onActivate('title', 'start');
+  app.flow.onActivate('mode-select', 'broadcast');
+}
+
 // --- Loop -----------------------------------------------------------------------
 const SIM_DT = 1 / TUNING.sim.hz;
 let last = performance.now();
@@ -589,8 +675,8 @@ function frame(now: number) {
   const realDt = Math.min(0.1, (now - last) / 1000);
   last = now;
 
-  if (input.consumePause()) setPaused(!paused);
-  touchUi.hidden = input.device !== 'touch';
+  if (input.consumePause()) requestPause();
+  touchUi.hidden = input.device !== 'touch' || attract || !sim.live;
   document.documentElement.classList.toggle('touch', input.device === 'touch');
 
   let frozen = false;
@@ -604,7 +690,8 @@ function frame(now: number) {
         frozen = true;
         continue;
       }
-      let inp = bot ? bot.input() : input.sample();
+      const human = input.sample(); // always drain edges, even while the bot drives
+      let inp = bot ? bot.input() : human;
       // Lane input follows the screen: when travel points down (Head-On, or past halfway through
       // the swoop), his left is screen-right, so mirror it.
       if (!bot && rig.info.travelDown && inp.lane) inp = { ...inp, lane: -inp.lane };
@@ -664,7 +751,20 @@ function frame(now: number) {
   }
   if (endedAt >= 0 && !recapShown && performance.now() - endedAt > (sim.show.state === 'cleared' ? 2600 : 2200)) {
     recapShown = true;
-    showRecap();
+    if (attract) enterAttract(); // behind the menus: just roll another broadcast
+    else {
+      app?.shell.session.setPhase('results');
+      void recordStats();
+      showRecap();
+    }
+  }
+  // Controller parity on the recap: left/right to move, A to choose.
+  if (!recapEl.hidden && app) {
+    const btns = [...recapEl.querySelectorAll('button')] as HTMLButtonElement[];
+    const i = Math.max(0, btns.indexOf(document.activeElement as HTMLButtonElement));
+    if (app.shell.input.wasPressed('ui_right') || app.shell.input.wasPressed('ui_down')) btns[(i + 1) % btns.length].focus();
+    if (app.shell.input.wasPressed('ui_left') || app.shell.input.wasPressed('ui_up')) btns[(i + btns.length - 1) % btns.length].focus();
+    if (app.shell.input.wasPressed('ui_accept') && document.activeElement instanceof HTMLButtonElement && btns.includes(document.activeElement)) document.activeElement.click();
   }
   rig.update(paused ? 0 : realDt * flags.timescale, t);
   lighting.update(animDt, { giantX: t.x, giantZ: t.z, travel: t.travel, speed: g.speed, camera: rig.camera, lamps: highway.lamps, sirens: cruisers.sirens, facing: rig.facing });
@@ -699,6 +799,21 @@ function silhouette() {
 }
 
 let lastRatings = 0;
+
+/** Persist the bests (shell storage, per game id). */
+async function recordStats() {
+  if (!app) return;
+  const st = app.storage;
+  const sh = sim.show;
+  const best = (await st.get<{ broadcasts: number; signOffs: number; bestBanked: number; bestPeak: number }>('wyf.stats')) ?? { broadcasts: 0, signOffs: 0, bestBanked: 0, bestPeak: 0 };
+  best.broadcasts++;
+  if (sh.state === 'cleared') best.signOffs++;
+  best.bestBanked = Math.max(best.bestBanked, Math.round(sh.banked));
+  best.bestPeak = Math.max(best.bestPeak, sh.peak);
+  await st.set('wyf.stats', best);
+  lastBest = best;
+}
+let lastBest: { broadcasts: number; signOffs: number; bestBanked: number; bestPeak: number } | null = null;
 let lastCoverage = performance.now();
 
 /** Edge arrow to the sign-off ramp (§21), pointing at the gore from wherever it is. */
@@ -788,8 +903,15 @@ window.__GAME = {
     return sim;
   },
   flags,
+  /** A player broadcast is running (not the attract loop behind the menus). */
   get started() {
-    return started;
+    return started && !attract;
+  },
+  get attract() {
+    return attract;
+  },
+  get phase() {
+    return app?.shell.session.phase;
   },
   get paused() {
     return paused;
