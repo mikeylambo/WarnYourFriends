@@ -258,16 +258,19 @@ export class GiantView {
     this.head.rotation.set(-this.bank * 0.8, -twist, this.lean * 0.85);
     this.head.position.y = 1.6 + TUNING.tiers[p.tier].bodyDrop * gait.drop * 0.6;
 
-    // Bent-arm guard (Mike's reference clip): elbows bent, fists forward at the chest, a small
-    // pump opposite the legs, snapped so it holds the strong poses. Angles are against the
-    // world (the lean is compensated), so the guard stays forward however low he leans.
+    // Big, exaggerated arm pump opposite the legs (Mike's call): the lead fist drives forward and
+    // up, the other arm drives back. Snapped so it holds the strong poses. Angles are against the
+    // world (the lean is compensated), so "forward" stays forward however low he leans.
     const raw = Math.sin(ph);
     const pump = Math.sign(raw) * Math.pow(Math.abs(raw), TUNING.gait.poseSnap) * T.armSwing;
     const lean = this.lean;
-    this.armL.rotation.set(0.18, 0, T.armBase - pump + lean);
-    this.armR.rotation.set(-0.18, 0, T.armBase + pump + lean);
-    this.elbowL.rotation.set(0, 0, T.elbowBend + pump * 0.5);
-    this.elbowR.rotation.set(0, 0, T.elbowBend - pump * 0.5);
+    const aL = T.armBase - pump;
+    const aR = T.armBase + pump;
+    this.armL.rotation.set(0.18, 0, aL + lean);
+    this.armR.rotation.set(-0.18, 0, aR + lean);
+    // The arm driving forward folds (fist up near the chin); the arm swinging back straightens.
+    this.elbowL.rotation.set(0, 0, T.elbowBend * 0.5 + Math.max(0, aL) * 0.65);
+    this.elbowR.rotation.set(0, 0, T.elbowBend * 0.5 + Math.max(0, aR) * 0.65);
     if (sh > 0) {
       this.armL.rotation.set(0.6 * sh, 0, 0.9 * sh);
       this.elbowL.rotation.set(0, 0, 0.3 * (1 - sh));
