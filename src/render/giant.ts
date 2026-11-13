@@ -52,6 +52,8 @@ export class GiantView {
   private head = new THREE.Group();
   private armL = new THREE.Group();
   private armR = new THREE.Group();
+  private elbowL = new THREE.Group();
+  private elbowR = new THREE.Group();
   private braid: THREE.Mesh[] = [];
   private shadow: THREE.Mesh;
   private legs = new THREE.Group();
@@ -98,20 +100,22 @@ export class GiantView {
       this.torso.add(pauldron, horn);
     }
 
-    // Arms (trail behind the body).
-    for (const [arm, z] of [[this.armL, 0.86], [this.armR, -0.86]] as const) {
+    // Arms: shoulder + elbow, so the run can hold a bent-arm guard (fists forward at the chest).
+    for (const [arm, elbow, z] of [[this.armL, this.elbowL, 0.86], [this.armR, this.elbowR, -0.86]] as const) {
       arm.position.set(0, 1.25, z);
       const upper = box(0.34, 0.85, 0.34, PALETTE.giantBody);
       upper.position.y = -0.42;
+      elbow.position.y = -0.85;
       const fore = box(0.3, 0.75, 0.3, PALETTE.giantSkin);
-      fore.position.y = -1.1;
+      fore.position.y = -0.25;
       const band1 = box(0.33, 0.1, 0.33, PALETTE.giantBand);
-      band1.position.y = -0.95;
+      band1.position.y = -0.1;
       const band2 = band1.clone();
-      band2.position.y = -1.2;
+      band2.position.y = -0.35;
       const fist = box(0.34, 0.3, 0.34, PALETTE.giantSkin);
-      fist.position.y = -1.55;
-      arm.add(upper, fore, band1, band2, fist);
+      fist.position.y = -0.7;
+      elbow.add(fore, band1, band2, fist);
+      arm.add(upper, elbow);
       this.torso.add(arm);
     }
 
@@ -254,15 +258,20 @@ export class GiantView {
     this.head.rotation.set(-this.bank * 0.8, -twist, this.lean * 0.85);
     this.head.position.y = 1.6 + TUNING.tiers[p.tier].bodyDrop * gait.drop * 0.6;
 
-    // Arm pump opposite the legs: the lead fist drives forward at shoulder height, the other
-    // pulls back. Snapped so the arms hold the strong poses and move fast through the middle.
+    // Bent-arm guard (Mike's reference clip): elbows bent, fists forward at the chest, a small
+    // pump opposite the legs, snapped so it holds the strong poses. Angles are against the
+    // world (the lean is compensated), so the guard stays forward however low he leans.
     const raw = Math.sin(ph);
     const pump = Math.sign(raw) * Math.pow(Math.abs(raw), TUNING.gait.poseSnap) * T.armSwing;
-    // The lean tips the shoulders forward; compensate so "forward" stays forward in the world.
-    const lean = this.lean * 0.6;
+    const lean = this.lean;
     this.armL.rotation.set(0.18, 0, T.armBase - pump + lean);
     this.armR.rotation.set(-0.18, 0, T.armBase + pump + lean);
-    if (sh > 0) this.armL.rotation.set(0.6 * sh, 0, 0.9 * sh);
+    this.elbowL.rotation.set(0, 0, T.elbowBend + pump * 0.5);
+    this.elbowR.rotation.set(0, 0, T.elbowBend - pump * 0.5);
+    if (sh > 0) {
+      this.armL.rotation.set(0.6 * sh, 0, 0.9 * sh);
+      this.elbowL.rotation.set(0, 0, 0.3 * (1 - sh));
+    }
 
     this.root.updateMatrixWorld(true);
 
