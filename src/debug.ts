@@ -22,6 +22,8 @@ export interface Flags {
   angle: number | null;
   /** Phase 0c: override the Camera cuts setting (?cuts=0). */
   cuts: boolean | null;
+  /** Dev: render from a side-on camera beside the giant to judge the run pose (?posecam=1). */
+  posecam: boolean;
   /** Phase 0c: force a look (?time=night|dusk|day), overriding LIVE TIME. */
   time: 'night' | 'dusk' | 'day' | null;
 }
@@ -59,6 +61,7 @@ export function readFlags(search: string): Flags {
     tune: bool(q, 'tune') ?? false,
     angle: num(q, 'angle'),
     cuts: bool(q, 'cuts'),
+    posecam: bool(q, 'posecam') ?? false,
     time: ((v) => (v === 'night' || v === 'dusk' || v === 'day' ? v : null))(q.get('time')),
   };
 }

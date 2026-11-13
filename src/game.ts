@@ -787,7 +787,16 @@ function frame(now: number) {
   camTagT = Math.max(0, camTagT - realDt);
   if (camTagT === 0) camTag.classList.remove('show');
 
-  renderer.render(scene, rig.camera);
+  if (flags.posecam) {
+    // Dev: side-on, chest height, 9m out on his right, tracking him (judge the run pose).
+    const rx = -Math.sin(t.travel);
+    const rz = Math.cos(t.travel);
+    poseCam.aspect = rig.camera.aspect;
+    poseCam.updateProjectionMatrix();
+    poseCam.position.set(t.x + rx * 9 + Math.cos(t.travel) * 0.5, 2.0, t.z + rz * 9 + Math.sin(t.travel) * 0.5);
+    poseCam.lookAt(t.x + Math.cos(t.travel) * 0.5, 1.5, t.z + Math.sin(t.travel) * 0.5);
+    renderer.render(scene, poseCam);
+  } else renderer.render(scene, rig.camera);
   pip.render(renderer, scene);
   updateHud(realDt);
 }
@@ -799,6 +808,7 @@ function silhouette() {
 }
 
 let lastRatings = 0;
+const poseCam = new THREE.PerspectiveCamera(40, 16 / 9, 0.5, 500);
 
 /** Persist the bests (shell storage, per game id). */
 async function recordStats() {

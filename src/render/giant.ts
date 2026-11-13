@@ -246,7 +246,7 @@ export class GiantView {
 
     // Torso twist with the stride (opposite shoulder drives forward).
     const ph = p.stepPos * Math.PI;
-    const twist = Math.sin(ph) * 0.12 * (0.5 + p.tier * 0.25);
+    const twist = Math.sin(ph) * 0.14 * (0.6 + p.tier * 0.35); // shoulders roll against the hips
     this.torso.rotation.set(this.bank + wob, twist + (sh > 0 ? -0.5 * sh : 0), -this.lean);
     this.hips.rotation.set(this.bank * 0.4, -twist * 0.5, -this.lean * 0.2);
 
@@ -254,11 +254,14 @@ export class GiantView {
     this.head.rotation.set(-this.bank * 0.8, -twist, this.lean * 0.85);
     this.head.position.y = 1.6 + TUNING.tiers[p.tier].bodyDrop * gait.drop * 0.6;
 
-    // Arms trail behind (v0.3), with a small swing opposite the legs.
-    const trail = [0.35, 0.75, 1.15][p.tier];
-    const swing = Math.sin(ph) * (0.25 + p.tier * 0.1);
-    this.armL.rotation.set(0.18, 0, -trail - swing);
-    this.armR.rotation.set(-0.18, 0, -trail + swing);
+    // Arm pump opposite the legs: the lead fist drives forward at shoulder height, the other
+    // pulls back. Snapped so the arms hold the strong poses and move fast through the middle.
+    const raw = Math.sin(ph);
+    const pump = Math.sign(raw) * Math.pow(Math.abs(raw), TUNING.gait.poseSnap) * T.armSwing;
+    // The lean tips the shoulders forward; compensate so "forward" stays forward in the world.
+    const lean = this.lean * 0.6;
+    this.armL.rotation.set(0.18, 0, T.armBase - pump + lean);
+    this.armR.rotation.set(-0.18, 0, T.armBase + pump + lean);
     if (sh > 0) this.armL.rotation.set(0.6 * sh, 0, 0.9 * sh);
 
     this.root.updateMatrixWorld(true);

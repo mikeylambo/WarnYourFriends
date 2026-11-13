@@ -178,7 +178,10 @@ export class Gait {
       drop = 1 - smoothstep(Math.min(1, Math.max(0, u)));
     }
     out.drop = drop;
-    out.hipY = T.hipHeight - T.bodyDrop * drop;
+    // Bound: once both feet are off the ground, the hips arc up and come down into the next plant.
+    const stanceShare = Math.min(0.95, stance / p.stepLen);
+    const hang = frac > stanceShare ? (frac - stanceShare) / (1 - stanceShare) : 0;
+    out.hipY = T.hipHeight - T.bodyDrop * drop + T.flightLift * Math.sin(Math.PI * hang);
 
     // Legs.
     const reach = G.thigh + G.shin - 0.02;
@@ -222,10 +225,11 @@ export class Gait {
         }
         const total = Math.max(0.01, this.odo - f.liftOdo + stepsAway * p.stepLen);
         const t = Math.min(1, (this.odo - f.liftOdo) / total);
-        const e = smoothstep(t);
+        // Heel kicks up early and the foot hangs back (knee tucked), then whips forward to plant.
+        const e = smoothstep(Math.pow(t, G.swingLag));
         tx = f.lx + (nx - f.lx) * e;
         tz = f.lz + (nz - f.lz) * e;
-        ty = 0.1 + T.footLift * Math.sin(Math.PI * t);
+        ty = 0.1 + T.footLift * Math.sin(Math.PI * Math.pow(t, G.swingPeakEarly));
       }
 
       this.solveLeg(leg, tx, ty, tz, p.fx, p.fz);
