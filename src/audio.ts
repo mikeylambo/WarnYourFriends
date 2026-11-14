@@ -413,7 +413,7 @@ export class Audio {
   }
 
   /** §11 tells: engine rev (cruiser ram), tyre screech (roadblock), metallic rattle (spikes), brakes (rolling). */
-  tell(kind: 'cruiser' | 'roadblock' | 'spike' | 'rolling') {
+  tell(kind: 'cruiser' | 'roadblock' | 'spike' | 'rolling' | 'chopper') {
     if (!this.ready) return;
     const t = this.ctx!.currentTime;
     switch (kind) {
@@ -431,7 +431,20 @@ export class Audio {
       case 'rolling':
         this.noise(t, 1.0, 'bandpass', 3400, 9, 0.12, 2400);
         break;
+      case 'chopper':
+        // A second rotor comes in, its pitch rising as the cone sweeps (§11 "rotor pitch rises").
+        for (let k = 0; k < 14; k++) this.noise(t + k * 0.1, 0.06, 'lowpass', 260 + k * 22, 1.5, 0.16 + k * 0.01);
+        this.tone(t, 1.5, 48, 74, 0.08, 'sawtooth');
+        break;
     }
+  }
+
+  /** Police chopper spotlight locks on: a hard electrical clunk. */
+  spotlightLock() {
+    if (!this.ready) return;
+    const t = this.ctx!.currentTime;
+    this.noise(t, 0.08, 'bandpass', 1800, 3, 0.35);
+    this.tone(t, 0.25, 140, 120, 0.12, 'square');
   }
 
   /** End of the broadcast: a falling sting for busted, a rising one for the sign-off. */

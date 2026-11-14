@@ -134,12 +134,18 @@ export type SimEvent =
   | { type: 'hijack'; propId: number; kind: PropKind; variant: number }
   | { type: 'hijackBail'; s: number; d: number }
   | { type: 'pose'; gain: number; heat: number }
+  /** Police chopper spotlight locks onto the giant's lane (police arrive faster until shaken). */
+  | { type: 'spotlight'; id: number; lane: number }
+  /** A chasing cruiser ploughs through a Medium (or lighter) prop in its lane. */
+  | { type: 'policeSmash'; id: number; propId: number; cls: MassClass; mat: Material; s: number; d: number; speed: number }
+  /** A chasing cruiser crashes into something Heavy or immovable and is out of the chase; a Heavy prop goes with it. */
+  | { type: 'policeCrash'; id: number; propId: number; propKind: PropKind; propCls: MassClass; propSmashed: boolean; s: number; d: number; speed: number }
   /** Phase 2 road variety: the giant enters a new stretch of road. */
   | { type: 'zone'; zone: 'highway' | 'avenue' | 'bridge' | 'tunnel'; name: string };
 
-export type UnitKind = 'cruiser' | 'rolling' | 'roadblock' | 'spike';
+export type UnitKind = 'cruiser' | 'rolling' | 'roadblock' | 'spike' | 'chopper';
 /** §12 gain sources. */
-export type GainType = 'medium' | 'heavy' | 'nearMiss' | 'lostTrack' | 'rampage' | 'pose';
+export type GainType = 'medium' | 'heavy' | 'nearMiss' | 'lostTrack' | 'rampage' | 'pose' | 'policeCrash' | 'collateral';
 export type BustReason = 'ratings' | 'pin' | 'missed';
 export type ShowState = 'live' | 'cleared' | 'busted';
 
@@ -162,4 +168,7 @@ export interface Unit extends Prop {
   hit: boolean;
   nearMissed: boolean;
   lost: boolean;
+  /** Chopper: lane changes counted toward shaking it, and time since the last one. */
+  shakes: number;
+  shakeT: number;
 }

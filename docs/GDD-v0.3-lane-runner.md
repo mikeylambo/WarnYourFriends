@@ -124,3 +124,11 @@ Built ahead of Phase 1 at Mike's request. Details in [DECISIONS.md](../DECISIONS
 3. **Sign-off:** an exit ramp at 130s, 150–250m ahead; the rightmost lane at the gore signs off; 165s is busted.
 4. **Coverage ladder:** traffic-cam cold open, then chopper; second chopper, viewer video and ticker at AT LARGE; anchor desk at RAMPAGE; simulcast at CITY IN CHAOS. Results are the 11 O'Clock Recap.
 5. **Road zones:** highway / avenue / bridge / tunnel with v0.3 lane counts via telegraphed merges, plus overpasses; structures over the road fade while he's under them.
+
+## Build notes (Phase 3, police)
+
+Details in [DECISIONS.md](../DECISIONS.md).
+
+1. **Chopper spotlight:** sweeps in (1.5s tell), locks on and marks his lane (police arrive twice as fast); two quick lane changes or a tunnel shake it. Overpasses aren't cover (route choice isn't built).
+2. **Police crashes:** cruisers alongside him are fixated on him and hit what's in their lane. Medium: they plough through. Heavy: they crash out (+8 Ratings, chyron, cut-away). Only in frame.
+

@@ -57,6 +57,8 @@ export class Bot {
       }
       return false;
     };
+    // A police chopper has him: two lane changes in a row shake it.
+    const spotted = units.some((u) => u.unit === 'chopper' && u.phase === 'act');
     const ex = sim.exit;
     const exitLane = ex && ex.gore - g.s < 230 && ex.gore > g.s ? track.lanesAt(ex.gore) - 1 : -1;
     const score = (lane: number): number => {
@@ -69,6 +71,7 @@ export class Bot {
       for (const p of track.propsBetween(s0, s1)) {
         if (Math.abs(p.d - c) < p.hw + TUNING.giant.radius && CLASS_RANK[p.cls] <= rank) sc += 2;
       }
+      if (spotted && lane !== g.lane) sc += 3;
       return sc - Math.abs(lane - g.lane) * 0.5;
     };
 

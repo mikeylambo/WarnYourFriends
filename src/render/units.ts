@@ -14,6 +14,8 @@ import { partsFor, type HighwayView } from './highway';
  *  - rolling roadblock: brake lights blaze across the row;
  *  - spike strip: an officer kneels on the shoulder; a jagged strip unrolls across the lane;
  *  - static roadblock: cars slide in from the shoulders; the open lane glows.
+ *  - police chopper: a cool white pool and beam sweep across the road onto him; locked, his lane
+ *    lights up ahead of him (marked for units) and the pool lags each lane change.
  */
 interface View {
   root: THREE.Group;
@@ -25,6 +27,10 @@ interface View {
   strip?: THREE.Group;
   officer?: THREE.Group;
   glow?: THREE.Mesh;
+  /** Chopper: ground pool, beam, and the marked-lane stripe. */
+  pool?: THREE.Mesh;
+  beam?: THREE.Mesh;
+  mark?: THREE.Mesh;
   group: number;
   phase: number;
 }
@@ -35,6 +41,19 @@ const DISC = (() => {
   g.rotateX(-Math.PI / 2);
   return g;
 })();
+const POOL_GEO = (() => {
+  const g = new THREE.CircleGeometry(1, 32);
+  g.rotateX(-Math.PI / 2);
+  return g;
+})();
+/** Open cone, apex at +y. Scaled to (radius, length, radius) and aimed apex-to-pool. */
+const BEAM_GEO = (() => {
+  const g = new THREE.CylinderGeometry(0.02, 1, 1, 24, 1, true);
+  g.translate(0, -0.5, 0);
+  return g;
+})();
+const add = (color: number, opacity: number) => new THREE.MeshBasicMaterial({ color, transparent: true, opacity, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -3 });
+const UP = new THREE.Vector3(0, 1, 0);
 const GAP_GLOW = new THREE.MeshBasicMaterial({ color: 0x7dffb0, transparent: true, opacity: 0.35, blending: THREE.AdditiveBlending, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -3 });
 
 export class UnitViews {
@@ -49,6 +68,20 @@ export class UnitViews {
   private build(u: Unit): View {
     const root = new THREE.Group();
     const v: View = { root, red: [], blue: [], heads: [], tails: [], blink: [], group: u.group, phase: (u.id % 7) / 7 };
+    if (u.unit === 'chopper') {
+      const pool = new THREE.Mesh(POOL_GEO, add(0xdfe9ff, 0.4));
+      pool.renderOrder = 3;
+      const beam = new THREE.Mesh(BEAM_GEO, add(0xcfe0ff, 0.07));
+      beam.renderOrder = 3;
+      const mark = new THREE.Mesh(DISC, add(0xbcd4ff, 0.2));
+      mark.renderOrder = 2;
+      mark.visible = false;
+      this.group.add(pool, beam, mark);
+      v.pool = pool;
+      v.beam = beam;
+      v.mark = mark;
+      return v;
+    }
     if (u.unit === 'spike') {
       // Officer on the near shoulder, and the strip (rolled up until the tell).
       const officer = new THREE.Group();
@@ -135,7 +168,7 @@ export class UnitViews {
   smash(id: number, dirX: number, dirZ: number, speed: number, side = 1) {
     const v = this.views.get(id);
     if (!v) return;
-    if (v.glow) this.group.remove(v.glow);
+    this.drop(v);
     this.views.delete(id);
     const p = v.root.position.clone();
     // The cruiser itself is swatted off his line (the highway owns wrecks from here).
@@ -163,6 +196,10 @@ export class UnitViews {
         this.group.add(v.root);
       }
       const h = track.headingAt(u.s);
+      if (u.unit === 'chopper') {
+        this.updateChopper(u, v, h);
+        continue;
+      }
       if (u.unit === 'spike') {
         // Officer stands at the shoulder beside the lane; the strip unrolls across it during the tell.
         const w = track.widthAt(u.s);
@@ -217,9 +254,50 @@ export class UnitViews {
     }
     for (const [id, v] of this.views) {
       if (live.has(id)) continue;
-      this.group.remove(v.root);
-      if (v.glow) this.group.remove(v.glow);
+      this.drop(v);
       this.views.delete(id);
+    }
+  }
+
+  private drop(v: View) {
+    this.group.remove(v.root);
+    for (const m of [v.glow, v.pool, v.beam, v.mark]) if (m) this.group.remove(m);
+  }
+
+  private beamFrom = new THREE.Vector3();
+  private beamTo = new THREE.Vector3();
+
+  private updateChopper(u: Unit, v: View, h: number) {
+    const track = this.sim.track;
+    const H = TUNING.pursuit.chopper;
+    const fade = u.phase === 'leave' ? Math.max(0, 1 - u.phaseT / H.leaveTime) : u.phase === 'approach' ? 0.6 : 1;
+    const lock = u.phase === 'act';
+    // Tight on him when locked, a wider searching pool while it sweeps.
+    const r = lock ? 3.2 : 4.2;
+    track.posAt(u.s, u.d, this.pos);
+    v.pool!.position.set(this.pos.x, 0.09, this.pos.z);
+    v.pool!.scale.set(r, 1, r);
+    (v.pool!.material as THREE.MeshBasicMaterial).opacity = (lock ? 0.45 : 0.32) * fade;
+    // The beam comes down from the police chopper, high and ahead (it isn't the news chopper).
+    this.beamTo.set(this.pos.x, 0, this.pos.z);
+    track.posAt(u.s + 30, u.d < track.widthAt(u.s) / 2 ? -14 : track.widthAt(u.s) + 14, this.pos);
+    this.beamFrom.set(this.pos.x, 46, this.pos.z);
+    const dir = this.beamTo.clone().sub(this.beamFrom);
+    const len = dir.length();
+    v.beam!.position.copy(this.beamFrom);
+    v.beam!.quaternion.setFromUnitVectors(UP, dir.normalize().negate());
+    v.beam!.scale.set(r, len, r);
+    (v.beam!.material as THREE.MeshBasicMaterial).opacity = (lock ? 0.09 : 0.06) * fade;
+    // Locked: his lane is marked for units, a pulsing stripe running ahead of him.
+    v.mark!.visible = lock;
+    if (lock) {
+      const ahead = 14;
+      track.posAt(u.s + ahead, track.laneCenter(u.lane), this.pos);
+      v.mark!.position.set(this.pos.x, 0.07, this.pos.z);
+      v.mark!.rotation.y = -h;
+      v.mark!.scale.set(ahead * 2, 1, TUNING.lanes.width * 0.75);
+      const pulse = this.reduceFlashes ? 0.18 : 0.14 + 0.08 * Math.sin(this.time * 5);
+      (v.mark!.material as THREE.MeshBasicMaterial).opacity = pulse;
     }
   }
 }

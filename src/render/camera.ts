@@ -541,6 +541,8 @@ export type CutTrigger = 'rampage' | 'heavy' | 'merge';
 export function cutTriggerFor(e: SimEvent): CutTrigger | null {
   if (e.type === 'tierUp' && e.tier === TUNING.tiers.length - 1) return 'rampage';
   if (e.type === 'smash' && e.cls === 'heavy') return 'heavy';
+  // A police crash is a Heavy moment too: the cut-away shows the wreck still flying.
+  if (e.type === 'policeCrash') return 'heavy';
   if (e.type === 'merge' && e.from !== e.to) return 'merge';
   return null;
 }

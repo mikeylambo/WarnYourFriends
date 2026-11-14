@@ -23,7 +23,7 @@ This file is the law for anyone (human or agent) building this repo. The design 
 
 ```
 src/tuning.ts        every number, with reasons
-src/sim/             pure TS simulation (no three/DOM): sim.ts, track.ts (road zones + props), pursuit.ts (police units), show.ts (Ratings/Heat/Pin), run.ts (five-segment run, meeting offers, budget), escort.ts, bot.ts, rng.ts
+src/sim/             pure TS simulation (no three/DOM): sim.ts, track.ts (road zones + props), pursuit.ts (police units, chopper spotlight, police crashes), show.ts (Ratings/Heat/Pin), run.ts (five-segment run, meeting offers, budget), escort.ts, bot.ts, rng.ts
 src/anim/gait.ts     run cycle: pinned feet, two-bone IK, phase locked to distance (pure math, tested)
 src/render/          three.js views: highway (zones, ramp), units (police), giant (greybox pose rig) + giantModel (Meshy skin, assets/giant/giant.glb), cruisers, pip (viewer video), camera rig + director, lighting (night/dusk/day), glow, silhouette test, palette, toon
 src/broadcast/       headline generator (§21) + headlines.json word bank (pure TS, tested); coverage.ts (escalation ladder), viewers.json
@@ -45,6 +45,7 @@ tools/shots-model.mjs   model pass evidence: tiers in game, cape on a lane chang
 tools/shots-title.mjs   title screen (desktop, phone, glide)
 tools/filmstrip.mjs     slow-motion strip of an impact (smash-heavy, bounce, bounce-immovable)
 tools/shots-onboarding.mjs  producer tip, live budget, recap and meeting
+tools/shots-police.mjs  Police evidence: chopper spotlight sweep and lock, a police crash
 ```
 
 ## Commands

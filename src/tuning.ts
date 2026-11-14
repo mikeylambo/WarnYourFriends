@@ -463,7 +463,8 @@ export const TUNING = {
     startRatings: 20,
     max: 100,
     /** §12 gains. Sustained Rampage is per second. */
-    gain: { medium: 2, heavy: 5, nearMiss: 3, lostTrack: 6, rampage: 1 },
+    /** Police crash (a cruiser he led into something Heavy): the best TV of the chase, above lost track. Collateral: police plough through something Medium. */
+    gain: { medium: 2, heavy: 5, nearMiss: 3, lostTrack: 6, rampage: 1, policeCrash: 8, collateral: 2 },
     /** HUD: viewers shown per Ratings point ("370K WATCHING" at the starting 20). */
     viewersPerPoint: 18_500,
     /** §12 decay: after 3s with no gain; segment 1 rate (2.0/2.75/3.5/4.25/5.0 by segment). */
@@ -500,12 +501,12 @@ export const TUNING = {
     firstAt: 12,
     byHeat: [
       { cadence: 8, cap: 2, kinds: ['cruiser'] },
-      { cadence: 6, cap: 3, kinds: ['cruiser', 'spike', 'rolling'] },
-      { cadence: 5, cap: 4, kinds: ['cruiser', 'spike', 'rolling', 'roadblock'] },
-      { cadence: 4, cap: 5, kinds: ['cruiser', 'spike', 'rolling', 'roadblock'] },
-      { cadence: 4, cap: 5, kinds: ['cruiser', 'spike', 'rolling', 'roadblock'] },
-    ] as { cadence: number; cap: number; kinds: ('cruiser' | 'spike' | 'rolling' | 'roadblock')[] }[],
-    weights: { cruiser: 3, spike: 2, rolling: 1.5, roadblock: 1.5 },
+      { cadence: 6, cap: 3, kinds: ['cruiser', 'spike', 'rolling', 'chopper'] },
+      { cadence: 5, cap: 4, kinds: ['cruiser', 'spike', 'rolling', 'roadblock', 'chopper'] },
+      { cadence: 4, cap: 5, kinds: ['cruiser', 'spike', 'rolling', 'roadblock', 'chopper'] },
+      { cadence: 4, cap: 5, kinds: ['cruiser', 'spike', 'rolling', 'roadblock', 'chopper'] },
+    ] as { cadence: number; cap: number; kinds: ('cruiser' | 'spike' | 'rolling' | 'roadblock' | 'chopper')[] }[],
+    weights: { cruiser: 3, spike: 2, rolling: 1.5, roadblock: 1.5, chopper: 1 },
     /** LOCKED (§1): never spawn within 40m. Behind spawns also sit behind every camera. */
     spawnBehind: 100,
     spawnAheadMin: 110,
@@ -518,6 +519,23 @@ export const TUNING = {
     spike: { aheadTime: 4.5, aheadMin: 60, tellAhead: 1.9, tellMax: 28, tell: 1.2, speedKeep: 0.7 },
     /** Static roadblock (v0.3: cars slide in 2.0s, all lanes but one; the gap glows). */
     roadblock: { aheadTime: 7.5, slideAhead: 1.9, slideMax: 28, tell: 2.0 },
+    /**
+     * Police chopper spotlight (v0.3 §11: cone sweeps 1.5s, marks your lane for units; change lanes
+     * twice to shake it). It waits off the top of the frame until no other tell is live, sweeps in to
+     * `tellAhead` (on screen, like every tell), then the cone sweeps onto him. Locked: police arrive
+     * `spawnBoost`× as fast. Two lane changes with under `shakeWindow` between them shake it (+lost track);
+     * a tunnel breaks line of sight; after `lockMax` it gives up (no award). At most one per `every` s:
+     * it's a set piece, not traffic.
+     */
+    chopper: { holdAhead: 3.2, holdMin: 70, sweepInSpeed: 40, tellAhead: 1.9, tellMax: 28, tell: 1.5, trackSpeed: 7, shakeWindow: 3, shakes: 2, lockMax: 12, spawnBoost: 2, leaveTime: 1.5, giveUp: 12, every: 25 },
+    /**
+     * Police crashes: a cruiser chasing in a lane hits what's in it. It watches the giant, not the road,
+     * so it only reacts `react` m ahead (swerving to a clear lane that isn't his). Medium and lighter: it
+     * ploughs through (keeps `plowKeep` of its speed). Heavy or immovable: it crashes out of the chase, and
+     * a Heavy prop goes flying with it. Only within `visibleBehind` m behind him and ahead of that, so every
+     * crash is in the chopper's frame (§1).
+     */
+    crash: { react: 6, plowKeep: 0.8, visibleBehind: 3 },
     /** Near-miss (§12): a pursuer passes within 1.5m without contact. */
     nearMiss: 1.5,
     /** A unit this far behind the giant has lost track (§12) and leaves. */

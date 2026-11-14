@@ -43,10 +43,10 @@ export interface Headline {
   sources: SimEvent[];
 }
 
-type Kind = 'zone' | 'spotted' | 'ratingsTier' | 'tierUp' | 'tierDown' | 'smash' | 'bounce' | 'wall' | 'merge' | 'escort' | 'ramHit' | 'ramMiss' | 'lostTrack' | 'spiked' | 'heat' | 'tell' | 'exitOpen' | 'end' | 'leap' | 'stare' | 'hijack' | 'pose';
+type Kind = 'zone' | 'spotted' | 'ratingsTier' | 'tierUp' | 'tierDown' | 'smash' | 'bounce' | 'wall' | 'merge' | 'escort' | 'ramHit' | 'ramMiss' | 'lostTrack' | 'spiked' | 'heat' | 'tell' | 'exitOpen' | 'end' | 'leap' | 'stare' | 'hijack' | 'pose' | 'spotlight' | 'chopperLost' | 'policeCrash' | 'policeSmash';
 type Item = { kind: Kind; t: number; prio: number; events: SimEvent[] };
 
-const PRIO: Partial<Record<Kind, number>> = { zone: 66, spotted: 95, ratingsTier: 100, end: 200, exitOpen: 90, tell: 75, ramHit: 65, ramMiss: 58, lostTrack: 57, spiked: 62, heat: 52, escort: 60, merge: 55, leap: 64, stare: 61, hijack: 68, pose: 72, tierUp: 50, bounce: 45, tierDown: 40, wall: 10 };
+const PRIO: Partial<Record<Kind, number>> = { zone: 66, spotted: 95, ratingsTier: 100, end: 200, exitOpen: 90, tell: 75, ramHit: 65, ramMiss: 58, lostTrack: 57, spiked: 62, heat: 52, escort: 60, merge: 55, leap: 64, stare: 61, hijack: 68, pose: 72, spotlight: 63, chopperLost: 59, policeCrash: 70, policeSmash: 35, tierUp: 50, bounce: 45, tierDown: 40, wall: 10 };
 /** These break in immediately, ignoring the 4s cadence (§21: tier changes; and the end of the broadcast). */
 const IMMEDIATE: Kind[] = ['ratingsTier', 'end', 'exitOpen'];
 
@@ -103,7 +103,10 @@ export class Newsroom {
       case 'merge': add('merge'); break;
       case 'escortJoin': add('escort'); break;
       case 'ram': add(e.hit ? 'ramHit' : 'ramMiss'); break;
-      case 'lostTrack': add('lostTrack'); break;
+      case 'lostTrack': add(e.kind === 'chopper' ? 'chopperLost' : 'lostTrack'); break;
+      case 'spotlight': add('spotlight'); break;
+      case 'policeCrash': add('policeCrash'); break;
+      case 'policeSmash': add('policeSmash'); break;
       case 'spiked': add('spiked'); break;
       case 'heat':
         if (this.heatSeen && e.heat > this.heatSeen) add('heat');
@@ -243,6 +246,19 @@ export class Newsroom {
         const place = this.freshPlace(ctx);
         return mk(this.fill(line[1], { subject: this.subject(e.tier), place }), line[0], place);
       }
+      case 'policeCrash':
+      case 'policeSmash': {
+        // What the cruiser hit, by name (a fact from the event).
+        const e = q.events[0] as Extract<SimEvent, { type: 'policeCrash' | 'policeSmash' }>;
+        const kind = e.type === 'policeCrash' ? e.propKind : propKind(e.propId);
+        if (!kind) return null;
+        const line = this.freshLine(L[q.kind]);
+        if (!line) return null;
+        const place = line[1].includes('{place}') ? this.freshPlace(ctx) : null;
+        return mk(this.fill(line[1], { noun: BANK.nouns[kind][0], place }), line[0], place);
+      }
+      case 'spotlight':
+      case 'chopperLost':
       case 'ramHit':
       case 'ramMiss':
       case 'lostTrack':
@@ -255,7 +271,7 @@ export class Newsroom {
       }
       case 'tell': {
         const e = q.events[0] as Extract<SimEvent, { type: 'tell' }>;
-        const pool = e.kind === 'roadblock' ? L.tellRoadblock : e.kind === 'rolling' ? L.tellRolling : L.tellSpike;
+        const pool = e.kind === 'roadblock' ? L.tellRoadblock : e.kind === 'rolling' ? L.tellRolling : e.kind === 'chopper' ? L.tellChopper : L.tellSpike;
         const line = this.freshLine(pool);
         if (!line) return null;
         const place = line[1].includes('{place}') ? this.freshPlace(ctx) : null;

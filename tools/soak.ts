@@ -51,7 +51,7 @@ const ndc = new THREE.Vector3();
 const OFF_SEEDS = new Set([7, 77, 177]);
 const swoop = { n: 0, frames: 0, maxLen: 0 };
 const p3 = { segments: [0, 0, 0, 0, 0], uses: {} as Record<string, number>, duds: 0, leapLands: 0, leapSmash: 0, stareMoved: 0, hijackBails: 0, poseGain: 0, maxPose: 0, maxAir: 0 };
-const p2 = { tellsOffscreen: 0, spawns: {} as Record<string, number>, tells: {} as Record<string, number>, minSpawnDist: Infinity, spawnOnCamera: 0, maxTells: 0, ramHits: 0, ramMisses: 0, spiked: 0, nearMiss: 0, dodges: 0, lostTrack: 0, maxPin: 0, ends: {} as Record<string, number>, endTime: 0, peak: 0, banked: 0 };
+const p2 = { tellsOffscreen: 0, spawns: {} as Record<string, number>, tells: {} as Record<string, number>, minSpawnDist: Infinity, spawnOnCamera: 0, maxTells: 0, ramHits: 0, ramMisses: 0, spotlights: 0, choppersShaken: 0, policeCrash: 0, policeSmash: 0, crashOffscreen: 0, spiked: 0, nearMiss: 0, dodges: 0, lostTrack: 0, maxPin: 0, ends: {} as Record<string, number>, endTime: 0, peak: 0, banked: 0 };
 const stepSamples: number[] = [];
 let maxStepMs = 0;
 const t0 = performance.now();
@@ -274,6 +274,20 @@ for (let seed = 1; seed <= seeds; seed++) {
         }
       }
       if (e.type === 'ram') p2[e.hit ? 'ramHits' : 'ramMisses']++;
+      if (e.type === 'spotlight') p2.spotlights++;
+      if (e.type === 'lostTrack' && e.kind === 'chopper') p2.choppersShaken++;
+      if (e.type === 'policeSmash') p2.policeSmash++;
+      if (e.type === 'policeCrash') {
+        p2.policeCrash++;
+        // Every destruction is readable from the chopper (§1): a police crash happens in frame.
+        if (e.s < g.s - TUNING.pursuit.crash.visibleBehind - 0.5) fail(`seed ${seed}: police crash ${(g.s - e.s).toFixed(1)}m behind the giant`);
+        sim.track.posAt(e.s, e.d, pos);
+        ndc.set(pos.x, 0.5, pos.z).project(rig.camera);
+        if (!(ndc.z > -1 && ndc.z < 1 && Math.abs(ndc.x) <= 1.05 && Math.abs(ndc.y) <= 1.05)) {
+          p2.crashOffscreen++;
+          if (process.env.SOAK_VERBOSE) console.log(`  crash off frame: seed ${seed} ${info.angle} behind ${(g.s - e.s).toFixed(1)}m ndc ${ndc.x.toFixed(2)},${ndc.y.toFixed(2)}`);
+        }
+      }
       if (e.type === 'spiked') p2.spiked++;
       if (e.type === 'nearMiss') p2.nearMiss++;
       if (e.type === 'dodge') p2.dodges++;
@@ -348,7 +362,7 @@ console.log(`  swoops home: ${swoop.n}, longest ${swoop.maxLen.toFixed(2)}s (lim
 console.log(
   `  segment (Phase 2): ends ${JSON.stringify(p2.ends)}, latest end ${p2.endTime.toFixed(1)}s; peak Ratings avg ${(p2.peak / seeds).toFixed(1)}, banked avg ${(p2.banked / seeds).toFixed(0)}; ` +
     `spawns ${JSON.stringify(p2.spawns)}, nearest spawn ${p2.minSpawnDist.toFixed(1)}m, on camera ${p2.spawnOnCamera}; tells ${JSON.stringify(p2.tells)}, max at once ${p2.maxTells}, off screen ${p2.tellsOffscreen}; ` +
-    `rams hit ${p2.ramHits} / missed ${p2.ramMisses}; spiked ${p2.spiked}; near-misses ${p2.nearMiss}; traffic dodges ${p2.dodges}; lost track ${p2.lostTrack}; max Pin ${p2.maxPin.toFixed(0)}`,
+    `rams hit ${p2.ramHits} / missed ${p2.ramMisses}; spotlight locks ${p2.spotlights}, choppers shaken ${p2.choppersShaken}; police crashes ${p2.policeCrash} (${p2.crashOffscreen} outside the frame), ploughed through ${p2.policeSmash}; spiked ${p2.spiked}; near-misses ${p2.nearMiss}; traffic dodges ${p2.dodges}; lost track ${p2.lostTrack}; max Pin ${p2.maxPin.toFixed(0)}`,
 );
 console.log(`  run (Phase 3): segments ${p3.segments.join('/')}; ability uses ${JSON.stringify(p3.uses)}, no-target presses ${p3.duds}; leap landings ${p3.leapLands} (smashed ${p3.leapSmash}); stare pulled over ${p3.stareMoved}; hijack bails ${p3.hijackBails}; pose Ratings +${p3.poseGain.toFixed(0)}`);
 console.log(`  escort: ${esc.joins} joins, nearest join ${esc.minJoinBehind.toFixed(1)}m back, ${esc.joinsOnCamera} on camera; closest gap ever ${esc.minGap.toFixed(2)}m (floor ${TUNING.escort.minGap}m)`);
@@ -365,7 +379,10 @@ for (const k of ['rampage', 'heavy', 'merge'] as CutTrigger[]) if (cuts.byTrigge
 if (cuts.minAwayHold < TUNING.camera.awayHold[0] - 1e-6) fail(`returned home after only ${cuts.minAwayHold.toFixed(2)}s`);
 if (cuts.maxAwayHold > TUNING.camera.awayHold[1] + 2) fail(`stayed away ${cuts.maxAwayHold.toFixed(2)}s`);
 if (swoop.n < seeds / 4) fail(`too few swoops to test (${swoop.n})`);
-for (const k of ['cruiser', 'spike', 'rolling', 'roadblock']) if (!p2.tells[k]) fail(`no ${k} tell in ${seeds} seeds`);
+for (const k of ['cruiser', 'spike', 'rolling', 'roadblock', 'chopper']) if (!p2.tells[k]) fail(`no ${k} tell in ${seeds} seeds`);
+if (!p2.choppersShaken) fail(`no police chopper was ever shaken in ${seeds} seeds`);
+if (!p2.policeCrash) fail(`no police crash in ${seeds} seeds`);
+if (p2.crashOffscreen > p2.policeCrash * 0.1) fail(`${p2.crashOffscreen}/${p2.policeCrash} police crashes outside the frame`);
 for (const k of ABILITIES) if (!p3.uses[k]) fail(`ability ${k} never used in ${seeds} seeds`);
 if (cuts.offCuts > 0) fail(`${cuts.offCuts} cuts with Camera cuts: Off`);
 if (esc.joins < seeds) fail(`too few escort joins (${esc.joins})`);

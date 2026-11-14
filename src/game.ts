@@ -120,7 +120,7 @@ const recapEl = $('recap');
 const coverage = new Coverage();
 const pip = new ViewerVideo($('pip'));
 /** Run stats for the recap, counted from sim events. */
-const runStats = { heavy: 0, units: 0, lost: 0, dodged: 0, nearMiss: 0, best: null as Headline | null, bestRatings: -1 };
+const runStats = { heavy: 0, units: 0, crashes: 0, lost: 0, dodged: 0, nearMiss: 0, best: null as Headline | null, bestRatings: -1 };
 let news: Newsroom;
 /** Prop kinds by id, recorded when a smash/bounce happens (the prop may be pruned before the headline). */
 const propKinds = new Map<number, PropKind>();
@@ -184,7 +184,7 @@ function newRun(seed: number, segment = 0, upgrades: UpgradeId[] = []) {
   hideRecap();
   coverage.reset();
   pip.reset();
-  Object.assign(runStats, { heavy: 0, units: 0, lost: 0, dodged: 0, nearMiss: 0, best: null, bestRatings: -1 });
+  Object.assign(runStats, { heavy: 0, units: 0, crashes: 0, lost: 0, dodged: 0, nearMiss: 0, best: null, bestRatings: -1 });
   $('coldts').textContent = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
   sim = new Sim({ seed, segment, upgrades });
   highway = new HighwayView(sim);
@@ -440,7 +440,7 @@ function showRecap() {
     <div class="stats">
       <span>Peak audience <b>${viewers(sh.peak)}</b></span><span>Score banked <b>${Math.round(sh.banked).toLocaleString()}</b></span>
       <span>On air <b>${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}</b></span><span>Rampage time <b>${Math.round(sim.stats.timeAtTier[2])}s</b></span>
-      <span>Things flattened <b>${sim.stats.smashes}</b></span><span>Police cars smashed <b>${runStats.units}</b></span>
+      <span>Things flattened <b>${sim.stats.smashes}</b></span><span>Police cars smashed <b>${runStats.units}</b></span><span>Police cars crashed <b>${runStats.crashes}</b></span>
       <span>Pursuers shaken <b>${runStats.lost}</b></span><span>Heat reached <b>${'★'.repeat(sh.heat)}</b></span>
       ${runStatsHtml}
       ${!run && lastBest ? `<span>Best score <b>${lastBest.bestBanked.toLocaleString()}</b></span><span>Signed off <b>${lastBest.signOffs} / ${lastBest.broadcasts}</b></span>` : ''}
@@ -492,7 +492,7 @@ function showHeadline(h: Headline) {
 function present(e: SimEvent) {
   recentEvents.push(e);
   if (recentEvents.length > 64) recentEvents.shift();
-  if (e.type === 'smash' || e.type === 'bounce') {
+  if (e.type === 'smash' || e.type === 'bounce' || e.type === 'policeSmash' || e.type === 'policeCrash') {
     const p = sim.track.props.find((q) => q.id === e.propId) ?? sim.pursuit.units.find((q) => q.id === e.propId);
     if (p) propKinds.set(p.id, p.kind);
   }
@@ -678,6 +678,29 @@ function present(e: SimEvent) {
       haptic(120, 0.8);
       break;
     }
+    case 'policeSmash': {
+      // A chasing cruiser ploughs through something in its lane: the prop flies along its run.
+      highway.smash(e.propId, Math.cos(h), Math.sin(h), e.speed, Math.sign(e.d - g.d) || 1);
+      audio.smash('medium');
+      break;
+    }
+    case 'policeCrash': {
+      // Out of the chase: the cruiser and (if Heavy) what it hit both go flying. Never anyone hurt (§ rule 10).
+      runStats.crashes++;
+      // Both go off his line, away from him.
+      const side = Math.sign(e.d - g.d) || 1;
+      units.smash(e.id, Math.cos(h), Math.sin(h), e.speed, side);
+      if (e.propSmashed) highway.smash(e.propId, Math.cos(h), Math.sin(h), e.speed * 0.6, side);
+      audio.smash('heavy');
+      hitstop = Math.max(hitstop, TUNING.impact.medium.hitstop);
+      rig.jolt(TUNING.impact.medium.shake, 0.12);
+      haptic(TUNING.impact.medium.haptic, TUNING.impact.medium.hapticStrength);
+      pip.trigger(sim, sim.show.tier);
+      break;
+    }
+    case 'spotlight':
+      audio.spotlightLock();
+      break;
     case 'pose':
       audio.pose();
       pip.trigger(sim, sim.show.tier, true);

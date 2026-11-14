@@ -487,6 +487,64 @@
         "Strikes",
         "{subject} Strikes A Pose; Police Unsure Of Protocol"
       ]
+    ],
+    "tellChopper": [
+      [
+        "Sweeps",
+        "Police Chopper Sweeps Highway For Giant"
+      ],
+      [
+        "Searches",
+        "Police Chopper Searches {place}"
+      ]
+    ],
+    "spotlight": [
+      [
+        "Lights Up",
+        "Police Chopper Lights Up Giant {place}"
+      ],
+      [
+        "Has",
+        "Police Chopper Has Giant In Its Light"
+      ],
+      [
+        "Spotlights",
+        "Police Spotlight Finds Giant {place}"
+      ]
+    ],
+    "chopperLost": [
+      [
+        "Shakes",
+        "Giant Shakes Police Chopper {place}"
+      ],
+      [
+        "Loses",
+        "Police Chopper Loses Giant {place}"
+      ]
+    ],
+    "policeCrash": [
+      [
+        "Crashes Into",
+        "Cruiser Crashes Into {noun}; Officers Fine"
+      ],
+      [
+        "Finds",
+        "Pursuit Car Finds {noun} {place}"
+      ],
+      [
+        "Ends",
+        "Chase Ends For Cruiser At {noun}"
+      ]
+    ],
+    "policeSmash": [
+      [
+        "Ploughs Through",
+        "Cruiser Ploughs Through {noun} {place}"
+      ],
+      [
+        "Clips",
+        "Pursuit Car Clips {noun}"
+      ]
     ]
   }
 }

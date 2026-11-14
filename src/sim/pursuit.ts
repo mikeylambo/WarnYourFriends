@@ -18,6 +18,11 @@ const smoothstep = (t: number) => t * t * (3 - 2 * t);
  *    slow to a crawl. One car is a compact (Medium): Stride or Shoulder Check beats it.
  *  - Spike strip: covers your lane; officer kneels 1.2s. Change lanes.
  *  - Static roadblock: cars slide in over 2.0s across all lanes but one; the gap is clear.
+ *  - Police chopper: a spotlight sweeps in (1.5s) and locks onto his lane; while it has him,
+ *    police arrive twice as fast. Two quick lane changes shake it; a tunnel breaks line of sight.
+ *
+ * Police crashes: a chasing cruiser drives in a lane and hits what's in it. It watches him,
+ * not the road, so leading it into a Heavy prop crashes it out of the chase (on screen only).
  *
  * Fairness: spawns ≥40m away (LOCKED) and off camera (soak-checked), at most one
  * tell at a time, ahead-threats one at a time and never on the approach to the exit.
@@ -27,6 +32,8 @@ export class Pursuit {
   private nextId = 1_000_000;
   private group = 0;
   private spawnT = 0;
+  /** Sim time the last police chopper spawned (one per `chopper.every`). */
+  private chopperAt = -Infinity;
   /** Closest approach (m) per unit while passing, for near-misses. */
   private closest = new Map<number, number>();
   private rng: Rng;
@@ -38,6 +45,11 @@ export class Pursuit {
   /** Any threat is winding up (camera director: no cuts during a tell). */
   get tellActive(): boolean {
     return this.units.some((u) => u.alive && (u.phase === 'tell' || (u.unit === 'roadblock' && u.phase === 'act' && u.phaseT < TUNING.pursuit.roadblock.tell)));
+  }
+
+  /** A police chopper has his lane: police arrive faster (v0.3 §11 "marks your lane for units"). */
+  get marked(): boolean {
+    return this.units.some((u) => u.alive && u.unit === 'chopper' && u.phase === 'act');
   }
 
   /** Units chasing (not yet lost), for §12 "outnumbered". */
@@ -68,7 +80,7 @@ export class Pursuit {
     const def = PROP_DEFS[kind];
     const u: Unit = {
       id: this.nextId++, kind, cls: def.cls, mat: def.mat, s, d, hl: def.hl, hw: def.hw, h: def.h, variant: 0, alive: true, segment: -1,
-      unit, phase: 'approach', phaseT: 0, speed: 0, lane, fromD: d, toD: d, group: -1, solid: true, target: -1, hit: false, nearMissed: false, lost: false,
+      unit, phase: 'approach', phaseT: 0, speed: 0, lane, fromD: d, toD: d, group: -1, solid: true, target: -1, hit: false, nearMissed: false, lost: false, shakes: 0, shakeT: 0,
     };
     this.units.push(u);
     return u;
@@ -87,7 +99,7 @@ export class Pursuit {
   }
 
   private aheadThreatActive(): boolean {
-    return this.units.some((u) => u.alive && u.unit !== 'cruiser' && !u.lost && u.s > this.sim.giant.s - 10);
+    return this.units.some((u) => u.alive && u.unit !== 'cruiser' && u.unit !== 'chopper' && !u.lost && u.s > this.sim.giant.s - 10);
   }
 
   step(dt: number) {
@@ -97,7 +109,7 @@ export class Pursuit {
     // Spawning (§19 by Heat).
     if (sim.time >= P.firstAt) {
       const H = P.byHeat[sim.show.heat - 1];
-      this.spawnT += dt;
+      this.spawnT += dt * (this.marked ? P.chopper.spawnBoost : 1);
       const active = this.units.filter((u) => u.alive && !u.lost).length;
       if (this.spawnT >= H.cadence && active < H.cap) {
         const kinds = H.kinds.filter((k) => this.allowed(k));
@@ -120,6 +132,7 @@ export class Pursuit {
       const u = this.units[i];
       const behind = sim.giant.s - u.s;
       const done = u.lost || u.phase === 'leave' || u.unit === 'spike' || u.unit === 'roadblock';
+      if (u.unit === 'chopper' && u.phase === 'leave' && u.phaseT >= P.chopper.leaveTime) u.alive = false;
       if (!u.alive || (done && behind > P.removeBehind) || behind > P.spawnBehind + 20) this.units.splice(i, 1);
     }
   }
@@ -127,6 +140,12 @@ export class Pursuit {
   private allowed(k: UnitKind): boolean {
     const sim = this.sim;
     if (k === 'cruiser') return this.units.filter((u) => u.alive && u.unit === 'cruiser' && !u.lost).length < 2;
+    if (k === 'chopper') {
+      if (this.units.some((u) => u.alive && u.unit === 'chopper') || sim.time - this.chopperAt < TUNING.pursuit.chopper.every) return false;
+      if (this.units.some((u) => u.alive && u.phase === 'tell') || this.aheadThreatActive()) return false;
+      const ex = sim.exit;
+      return !(ex && ex.gore - sim.giant.s < 320 && ex.gore > sim.giant.s);
+    }
     if (this.aheadThreatActive()) return false;
     // One tell at a time: no threat ahead while a cruiser is closing in or winding up.
     if (this.units.some((u) => u.alive && u.unit === 'cruiser' && !u.lost && u.phase !== 'leave' && u.s > sim.giant.s - 40)) return false;
@@ -142,6 +161,7 @@ export class Pursuit {
       case 'rolling': return this.spawnRolling();
       case 'spike': return this.spawnSpike();
       case 'roadblock': return this.spawnRoadblock();
+      case 'chopper': return this.spawnChopper();
     }
   }
 
@@ -190,8 +210,13 @@ export class Pursuit {
           break;
         }
         // Close: pull into a clear lane next to his and come alongside.
-        const clear = (l: number) => l >= 0 && l < lanes && l !== g.lane && !this.propIn(l, u.s - u.hl - 2, g.s + 8);
-        if (!clear(u.lane) || Math.abs(u.lane - g.lane) !== 1) {
+        // It watches him, not the road: only what's just ahead of it counts.
+        const clear = (l: number) => l >= 0 && l < lanes && l !== g.lane && !this.propIn(l, u.s - u.hl - 2, Math.max(u.s + u.hl + TUNING.pursuit.crash.react, g.s + 2));
+        if (u.lane !== g.lane && Math.abs(u.d - g.d) < TUNING.lanes.width * 1.5 && !clear(u.lane)) {
+          // Alongside him and its lane is blocked just ahead: the only way out is away from him.
+          const away = u.lane + Math.sign(u.lane - g.lane);
+          if (clear(away)) u.lane = away;
+        } else if (!clear(u.lane) || Math.abs(u.lane - g.lane) !== 1) {
           const opts = [g.lane - 1, g.lane + 1].filter(clear);
           if (opts.length) u.lane = opts.reduce((a, b) => (Math.abs(track.laneCenter(a) - u.d) <= Math.abs(track.laneCenter(b) - u.d) ? a : b));
         }
@@ -200,8 +225,11 @@ export class Pursuit {
         const inPlace = Math.abs(u.d - cd) < 0.05 && Math.abs(u.lane - g.lane) === 1 && clear(u.lane);
         if (!inPlace || u.s < g.s - 2.5) {
           // Hang back until the lane is clear, then close up.
+          // Alongside him it's fixated: it keeps pace even when its lane is blocked ahead (lead it into
+          // something Heavy and it crashes). Otherwise it hangs back 9m until a lane opens.
+          const fixated = u.s >= g.s - 4 && Math.abs(u.lane - g.lane) === 1;
           u.speed = inPlace ? g.speed + C.closeSpeed * 0.5 : g.speed;
-          u.s = Math.min(u.s + u.speed * dt, g.s - (inPlace ? 0 : 9));
+          u.s = fixated && !inPlace ? u.s + u.speed * dt : Math.min(u.s + u.speed * dt, g.s - (inPlace ? 0 : 9));
           if (u.phaseT > 8) this.setPhase(u, 'leave'); // never found a way in
         } else {
           u.speed = g.speed;
@@ -244,8 +272,18 @@ export class Pursuit {
         break;
       }
       case 'leave': {
-        u.speed = Math.max(0, g.speed - C.fallBack);
+        // Falls back, never parks: it always moves, and it pulls out of his lane so it can't wall him in.
+        // In his way and level with or ahead of him, it speeds up to clear him rather than sit in front.
+        const inWay = this.inHisWay(u);
+        u.speed = inWay && u.s >= g.s - u.hl ? g.speed + C.fallBack * 0.5 : Math.max(g.speed * 0.4, g.speed - C.fallBack);
         u.s += u.speed * dt;
+        if (inWay) {
+          const opts = [g.lane - 1, g.lane + 1].filter((l) => l >= 0 && l < lanes);
+          if (opts.length) {
+            u.lane = opts.reduce((a, b) => (Math.abs(track.laneCenter(a) - u.d) <= Math.abs(track.laneCenter(b) - u.d) ? a : b));
+            u.d += clamp(track.laneCenter(u.lane) - u.d, -C.sideSpeed * dt, C.sideSpeed * dt);
+          }
+        }
         break;
       }
     }
@@ -405,6 +443,147 @@ export class Pursuit {
     }
   }
 
+  // --- Police chopper spotlight -----------------------------------------------------------
+
+  private spawnChopper(): boolean {
+    const sim = this.sim;
+    const g = sim.giant;
+    const s = this.aheadSpot();
+    const w = sim.track.widthAt(s);
+    // The pool starts over the far side of the road, ahead and off the top of the frame.
+    const d = g.d < w / 2 ? w - 1.5 : 1.5;
+    const u = this.make('barricade', 'chopper', s, d, g.lane);
+    u.solid = false;
+    u.cls = 'immovable';
+    u.hl = 0;
+    u.hw = 0;
+    u.h = 0;
+    this.chopperAt = sim.time;
+    sim.emitPublic({ type: 'unitSpawn', id: u.id, kind: 'chopper', s, d, lanes: [g.lane] });
+    return true;
+  }
+
+  private chopperLose(u: Unit, award: boolean) {
+    u.lost = true;
+    this.setPhase(u, 'leave');
+    u.fromD = u.d;
+    if (award) {
+      this.sim.emitPublic({ type: 'lostTrack', id: u.id, kind: 'chopper' });
+      this.sim.award('lostTrack');
+    }
+  }
+
+  private updateChopper(u: Unit, dt: number) {
+    const sim = this.sim;
+    const g = sim.giant;
+    const H = TUNING.pursuit.chopper;
+    const tellAt = Math.min(H.tellMax, g.speed * H.tellAhead + 2);
+    const hold = Math.max(H.holdMin, g.speed * H.holdAhead + 20);
+    const tunnel = sim.track.segmentAt(g.s).zone === 'tunnel';
+    switch (u.phase) {
+      case 'approach': {
+        // Hover off the top of the frame until nothing else is winding up, then sweep in.
+        const free = !tunnel && !sim.tellBusy(u) && !this.units.some((x) => x.alive && x !== u && x.unit !== 'chopper' && x.unit !== 'cruiser' && x.phase === 'approach' && x.s - g.s < 90)
+          ;
+        const want = free ? tellAt : hold;
+        const gap = u.s - g.s;
+        u.s = g.s + Math.max(want, gap - (gap > want ? H.sweepInSpeed * dt : 0));
+        if (!free) u.s = Math.max(u.s, g.s + Math.min(gap, hold));
+        if (free && u.s - g.s <= tellAt + 0.01) {
+          u.lane = g.lane;
+          u.fromD = u.d;
+          this.setPhase(u, 'tell');
+          sim.emitPublic({ type: 'tell', id: u.id, kind: 'chopper', lane: g.lane, time: H.tell });
+        } else if (u.phaseT > H.giveUp) this.chopperLose(u, false);
+        break;
+      }
+      case 'tell': {
+        // The cone sweeps across and down the road onto him.
+        const k = smoothstep(Math.min(1, u.phaseT / H.tell));
+        u.s = g.s + tellAt * (1 - k);
+        u.d = u.fromD + (g.d - u.fromD) * k;
+        if (u.phaseT >= H.tell) {
+          u.lane = g.lane;
+          u.shakes = 0;
+          u.shakeT = 0;
+          this.setPhase(u, 'act');
+          sim.emitPublic({ type: 'spotlight', id: u.id, lane: g.lane });
+        }
+        break;
+      }
+      case 'act': {
+        // Locked: the pool rides with him and lags his lane changes, so each one visibly pulls him out of it.
+        u.s = g.s;
+        u.d += clamp(g.d - u.d, -H.trackSpeed * dt, H.trackSpeed * dt);
+        u.shakeT += dt;
+        if (u.shakeT > H.shakeWindow) u.shakes = 0;
+        if (g.move === null && g.lane !== u.lane) {
+          u.lane = g.lane;
+          u.shakes = u.shakeT <= H.shakeWindow || u.shakes === 0 ? u.shakes + 1 : 1;
+          u.shakeT = 0;
+        }
+        if (u.shakes >= H.shakes || tunnel) this.chopperLose(u, true);
+        else if (u.phaseT >= H.lockMax) this.chopperLose(u, false);
+        break;
+      }
+      case 'leave': {
+        // Sweeps off ahead and away.
+        u.s = g.s + u.phaseT * 30;
+        u.d = u.fromD + (u.fromD < sim.track.widthAt(u.s) / 2 ? -1 : 1) * u.phaseT * 8;
+        break;
+      }
+    }
+  }
+
+  /** A leaving cruiser still overlapping his lane near him (it must clear out before anything else). */
+  private inHisWay(u: Unit): boolean {
+    const g = this.sim.giant;
+    return u.s > g.s - 10 && Math.abs(u.d - g.d) < TUNING.lanes.width * 0.9;
+  }
+
+  // --- Police crashes --------------------------------------------------------------
+
+  /** A chasing cruiser hits what's in its lane: ploughs through Medium, crashes out on Heavy. */
+  private crashCheck(u: Unit) {
+    const sim = this.sim;
+    const g = sim.giant;
+    const K = TUNING.pursuit.crash;
+    if (u.s < g.s - K.visibleBehind) return; // out of the chopper's frame: not news, no crash
+    const track = sim.track;
+    // Last-moment swerve: a clear neighbouring lane that isn't his.
+    if (u.phase === 'leave' || (u.phase === 'approach' && u.s >= g.s - 9)) {
+      const lanes = track.lanesAt(u.s);
+      const lane = clamp(Math.round(u.d / TUNING.lanes.width - 0.5), 0, lanes - 1);
+      const heavyAhead = (l: number) => track.propsBetween(u.s, u.s + u.hl + K.react).some((p) => p.cls !== 'medium' && p.cls !== 'light' && Math.abs(p.d - track.laneCenter(l)) < p.hw + u.hw);
+      if (u.phase === 'leave' && !this.inHisWay(u) && heavyAhead(lane)) {
+        const opts = [lane - 1, lane + 1].filter((l) => l >= 0 && l < lanes && l !== g.lane && !this.propIn(l, u.s - u.hl, u.s + u.hl + K.react));
+        if (opts.length) {
+          u.lane = opts[0];
+          u.d += clamp(track.laneCenter(u.lane) - u.d, -TUNING.pursuit.cruiser.sideSpeed * 2 * this.sim.dt, TUNING.pursuit.cruiser.sideSpeed * 2 * this.sim.dt);
+        }
+      }
+    }
+    for (const p of track.propsBetween(u.s - u.hl - 3, u.s + u.hl + 3)) {
+      if (!p.alive) continue;
+      if (Math.abs(p.s - u.s) >= p.hl + u.hl || Math.abs(p.d - u.d) >= p.hw + u.hw - 0.15) continue;
+      if (p.cls === 'medium' || p.cls === 'light') {
+        p.alive = false;
+        u.speed *= K.plowKeep;
+        sim.emitPublic({ type: 'policeSmash', id: u.id, propId: p.id, cls: p.cls, mat: p.mat, s: p.s, d: p.d, speed: u.speed });
+        sim.award('collateral');
+        continue;
+      }
+      // Heavy or immovable: out of the chase. A Heavy prop goes flying with it.
+      const smashed = p.cls === 'heavy';
+      if (smashed) p.alive = false;
+      u.alive = false;
+      u.lost = true;
+      sim.emitPublic({ type: 'policeCrash', id: u.id, propId: p.id, propKind: p.kind, propCls: p.cls, propSmashed: smashed, s: u.s, d: u.d, speed: Math.max(u.speed, g.speed) });
+      sim.award('policeCrash');
+      return;
+    }
+  }
+
   private update(u: Unit, dt: number) {
     u.phaseT += dt;
     switch (u.unit) {
@@ -412,7 +591,10 @@ export class Pursuit {
       case 'rolling': this.updateRolling(u, dt); break;
       case 'spike': this.updateSpike(u); break;
       case 'roadblock': this.updateRoadblock(u); break;
+      case 'chopper': this.updateChopper(u, dt); break;
     }
+    if (u.unit === 'cruiser' && u.alive) this.crashCheck(u);
+    if (!u.alive) return;
     this.checkNearAndLost(u);
   }
 
@@ -421,7 +603,7 @@ export class Pursuit {
     const sim = this.sim;
     const g = sim.giant;
     const P = TUNING.pursuit;
-    if (u.unit === 'spike' || u.unit === 'roadblock') return;
+    if (u.unit === 'spike' || u.unit === 'roadblock' || u.unit === 'chopper') return;
     // A near-miss (§12) is judged once the pass is over: the closest he came during the
     // swerve (or the crawl past), if it never connected.
     const passing = u.phase === 'act' || (u.unit === 'rolling' && u.phase === 'leave');
