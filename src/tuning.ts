@@ -126,6 +126,11 @@ export const TUNING = {
     braidFollow: 0.05,
     /** Share of the cape's length that is the cream Greek-key hem (Mike's sheet). */
     capeHemShare: 0.2,
+    /** Meshy model, upper body on Meshy's run clip: share of the greybox lean added on top of the clip's own, and the arm swing per tier (1 = the clip's). */
+    clipLean: 1,
+    /** His hips ride this much above the gait's (m): straighter legs on a realistic body; the IK still lands the feet. */
+    hipRaise: 0.12,
+    armAmp: [0.8, 1.05, 1.3],
     /** Meshy model: texture multiplier, so his silhouette holds ≥3:1 against a lit road (§23, silhouette test). */
     tint: 0.75,
     /** Meshy model: ink outline thickness around the skinned mesh (m), as the greybox hull. */

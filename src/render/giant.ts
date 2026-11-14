@@ -438,6 +438,11 @@ export class GiantView {
       ],
       gait: { ...gait, legs: this.legPose },
       footPitch: [gait.legs[0].planted ? 0 : 0.35, gait.legs[1].planted ? 0 : 0.35],
+      stepPos: p.stepPos,
+      tier: p.tier,
+      armsProcedural: (p.pose ?? 0) > 0 || sh > 0 || (p.leap ?? 0) > 0,
+      lean: this.lean * (1 - (p.pose ?? 0) * 0.8),
+      bank: this.bank,
     });
     this.updateCape(dt, p);
   }

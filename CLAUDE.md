@@ -39,6 +39,7 @@ tools/shots.mjs      evidence screenshots + silhouette numbers per angle and loo
 tools/shots-phase2.mjs  Phase 2 evidence: tells, zones, exit, recap
 tools/shots-phase3.mjs  Phase 3 evidence: each ability mid-action
 tools/modelsheet.mjs    giant turnaround (side / Chase High / top down × tiers), dev page in tools/modelsheet/
+tools/strip.mjs         stride strip: one tier, eight moments of a stride (side / chase); GREYBOX=1 for the old rig
 tools/shots-model.mjs   model pass evidence: tiers in game, cape on a lane change, PS4 HUD
 tools/shots-title.mjs   title screen (desktop, phone, glide)
 tools/filmstrip.mjs     slow-motion strip of an impact (smash-heavy, bounce, bounce-immovable)
