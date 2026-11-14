@@ -4,5 +4,5 @@
   "installCommand": "git config --global url.\"https://x-access-token:${GITHUB_TOKEN}@github.com/\".insteadOf \"ssh://git@github.com/\" && git config --global --add url.\"https://x-access-token:${GITHUB_TOKEN}@github.com/\".insteadOf \"git@github.com:\" && npm ci",
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
-  "ignoreCommand": "[ \"$VERCEL_ENV\" != \"production\" ]"
+  "ignoreCommand": "[ \"$VERCEL_GIT_COMMIT_REF\" != \"claude/new-session-cxrh92\" ]"
 }
