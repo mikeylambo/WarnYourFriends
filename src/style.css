@@ -341,9 +341,9 @@ html.attract #gainpop { display: none; }
 /* Title screen (Mike's chopper-feed direction): wordmark left, the live chase right, LIVE bug. */
 html.title #hud, html.title #abil, html.title #controls, html.title #camtag, html.title #btn-pause { display: none !important; }
 #ui [data-screen-id="title"].slu-screen { place-items: center start; padding: 0 0 0 clamp(20px, 7vw, 110px); background: linear-gradient(90deg, rgba(5, 3, 12, 0.88) 0%, rgba(5, 3, 12, 0.55) 38%, rgba(5, 3, 12, 0) 62%); }
-#ui [data-screen-id="title"] .slu-panel { background: none; border: 0; box-shadow: none; padding: 0; width: auto; max-width: min(92vw, 640px); overflow: visible; }
-#ui [data-screen-id="title"] .slu-header h1 { font: italic 900 clamp(84px, 17vw, 230px)/0.82 'Arial Black', 'Helvetica Neue', Impact, system-ui, sans-serif; letter-spacing: -0.03em; color: #f4ead6; text-transform: uppercase; margin: 0; transform: skewX(-6deg); text-shadow: 0 6px 30px rgba(0, 0, 0, 0.5); }
-#ui [data-screen-id="title"] .slu-header p { color: #f4ead6; opacity: 1; font-weight: 800; letter-spacing: 0.16em; text-transform: uppercase; font-size: clamp(12px, 1.6vw, 20px); margin: 14px 0 clamp(28px, 6vh, 64px) 4px; }
+#ui [data-screen-id="title"] .slu-panel { background: none; border: 0; box-shadow: none; padding: 0; width: auto; max-width: min(92vw, 1000px); overflow: visible; }
+#ui [data-screen-id="title"] .slu-header h1 { white-space: pre-line; font: italic 900 clamp(52px, 9vw, 140px)/0.86 'Arial Black', 'Helvetica Neue', Impact, system-ui, sans-serif; letter-spacing: -0.03em; color: #f4ead6; text-transform: uppercase; margin: 0; transform: skewX(-6deg); text-shadow: 0 6px 30px rgba(0, 0, 0, 0.5); }
+#ui [data-screen-id="title"] .slu-header p { color: #f4ead6; opacity: 1; font-weight: 800; letter-spacing: 0.04em; text-transform: none; font-size: clamp(16px, 2.4vw, 32px); margin: 14px 0 clamp(28px, 6vh, 64px) 4px; }
 #ui [data-screen-id="title"] .slu-choice { border: 0; background: none; padding: 0 0 0 4px; color: #f4ead6; }
 #ui [data-screen-id="title"] .slu-choice:hover, #ui [data-screen-id="title"] .slu-choice[data-focused="true"], #ui [data-screen-id="title"] .slu-choice:focus-visible { background: none; color: #f4ead6; outline: none; }
 #ui [data-screen-id="title"] .slu-choice-label { font-size: clamp(14px, 1.7vw, 22px); letter-spacing: 0.32em; animation: pressstart 1.6s ease-in-out infinite; }

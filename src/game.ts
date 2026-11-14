@@ -868,7 +868,7 @@ resize();
 enterAttract();
 app = await createGameApp({
   gameId: 'warn-your-friends',
-  gameName: 'Warn Your Friends',
+  gameName: 'Giant at Large',
   version: '0.2.0',
   renderer: rendererAdapter,
   root: $('ui'),
@@ -903,7 +903,7 @@ app = await createGameApp({
 });
 registerGlyphs(app.shell.production.glyphs);
 // Only what exists: no challenges or credits yet; the tagline is approved fiction (§21).
-app.ui.updateScreen('title', { title: 'Giant', subtitle: 'Giant at large. Warn your friends.', choices: [{ id: 'start', label: 'Press Start' }] });
+app.ui.updateScreen('title', { title: 'Giant\nat Large', subtitle: 'Warn your friends.', choices: [{ id: 'start', label: 'Press Start' }] });
 app.ui.updateScreen('main-menu', { choices: [{ id: 'play', label: 'Play' }, { id: 'settings', label: 'Settings' }] });
 // Core settings drive the game: reduced motion, shake, vibration, volume.
 const applyCore = (c: CoreSettings) => {
