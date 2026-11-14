@@ -67,11 +67,19 @@ describe('track (v0.3 highway)', () => {
     }
   });
 
-  it('only places Medium and Heavy props, and every row leaves a lane open', () => {
+  it('places Medium and Heavy props plus at most one dozer per row (never early), and every row leaves a lane open', () => {
+    let dozers = 0;
     for (let seed = 1; seed <= 30; seed++) {
       const t = new Track(seed);
       t.ensure(3000);
-      for (const p of t.props) expect(['medium', 'heavy']).toContain(p.cls);
+      for (const p of t.props) {
+        expect(['medium', 'heavy', 'immovable']).toContain(p.cls);
+        if (p.cls === 'immovable') {
+          expect(p.kind).toBe('dozer');
+          expect(p.s).toBeGreaterThanOrEqual(TUNING.props.immovableFrom - 2);
+          dozers++;
+        }
+      }
       // Group by row (props within 4m of each other along s).
       const rows: Prop[][] = [];
       for (const p of t.props) {
@@ -79,8 +87,12 @@ describe('track (v0.3 highway)', () => {
         if (row && Math.abs(row[0].s - p.s) < 4) row.push(p);
         else rows.push([p]);
       }
-      for (const row of rows) expect(row.length).toBeLessThan(t.lanesAt(row[0].s));
+      for (const row of rows) {
+        expect(row.length).toBeLessThan(t.lanesAt(row[0].s));
+        expect(row.filter((p) => p.cls === 'immovable').length).toBeLessThanOrEqual(1);
+      }
     }
+    expect(dozers).toBeGreaterThan(0);
   });
 });
 

@@ -321,7 +321,7 @@ try {
     const ctx = await browser.newContext({ viewport: { width: 1280, height: 720 } });
     const page = await ctx.newPage();
     const problems = watch(page);
-    await page.goto(`${URL}?seed=10&bot=1&step=1&mode=run`);
+    await page.goto(`${URL}?seed=11&bot=1&step=1&mode=run`); // a seed the bot clears segment 1 on (seed 10 busts since the dozer)
     await page.waitForFunction(() => window.__GAME && window.__GAME.started, null, { timeout: 15000 });
     await page.evaluate(() => window.__GAME.step(60 * 170));
     await page.waitForFunction(() => window.__GAME.recap(), null, { timeout: 15000 }).catch(() => {});

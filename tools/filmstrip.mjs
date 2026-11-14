@@ -16,7 +16,7 @@ await page.waitForFunction(() => !window.__GAME.coverage().cold, null, { timeout
 const found = await page.evaluate((kind) => {
   const G = window.__GAME;
   // Bounces need a driver who doesn't steer: run straight into whatever comes.
-  const manual = kind === 'bounce';
+  const manual = kind.startsWith('bounce');
   G.setBot(!manual);
   const [type, cls] = kind.split('-');
   for (let i = 0; i < 60 * 120; i++) {

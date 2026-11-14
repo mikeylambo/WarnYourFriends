@@ -279,7 +279,7 @@ export const TUNING = {
      * Impact pass: chance a blocked lane slot is a dozer (immovable: bounces him at any tier),
      * from this far in. Before it, Rampage made every obstacle confetti, so dodging meant nothing.
      */
-    immovableChance: 0, // off until Mike's call (option B); 0.2 tested: soak camera shortfall at Head-On to fix first
+    immovableChance: 0.2,
     immovableFrom: 250,
     /** Max fraction of lanes a row may block (always leaves ≥1 lane open). */
     maxBlockedShare: 0.67,
@@ -333,7 +333,7 @@ export const TUNING = {
       // Mike: head-on as a cut-away, from higher up (44° vs the 18° experiment). Far and telephoto so ≥2s of road ahead fits below him.
       { name: 'Head-On', yawDeg: 12, pitchDeg: 44, distance: 100, fov: 16, headOn: true, swoopHome: true },
       // Mike: a higher head-on. Steeper means more road per screen, so further out to keep ≥2s below him.
-      { name: 'High Head-On', yawDeg: 10, pitchDeg: 58, distance: 110, fov: 17, headOn: true, swoopHome: true },
+      { name: 'High Head-On', yawDeg: 10, pitchDeg: 58, distance: 122, fov: 17, headOn: true, swoopHome: true },
       // Mike: almost directly above. Travel stays screen-up; shows lanes, merges and the convoy like a map.
       { name: 'Overhead', yawDeg: 0, pitchDeg: 82, distance: 70, fov: 30, swoopHome: true },
     ] as CameraAngle[],
