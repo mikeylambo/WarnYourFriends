@@ -128,9 +128,11 @@ export class HighwayView {
   private pos = { x: 0, z: 0 };
   private cars = new Map<number, CarFx>();
   /** Smashed props and units: the real body tumbles off his line and comes to rest as a wreck. */
-  private wrecks: { g: THREE.Object3D; vx: number; vy: number; vz: number; wx: number; wy: number; wz: number; half: number; t: number; bounced: number }[] = [];
+  private wrecks: { g: THREE.Object3D; vx: number; vy: number; vz: number; wx: number; wy: number; wz: number; half: number; t: number; bounced: number; ox: number; oz: number; sx: number; sz: number; wall: number }[] = [];
   private lampList: LampPos[] = [];
   private overpasses: { s: number; mat: THREE.MeshToonMaterial }[] = [];
+  /** Tunnel roof beams: hidden near the giant (cheaper than fading; wrecks tumble there). */
+  private tunnelBeams: { s: number; mesh: THREE.Mesh }[] = [];
   private lampsDirty = true;
   private fxTime = 0;
   private honkCd = 0;
@@ -483,6 +485,7 @@ export class HighwayView {
       const h = track.headingAt(s);
       const mid = track.posAt(s, w / 2, { x: 0, z: 0 });
       const beam = new THREE.Mesh(this.box, toon(PALETTE.tunnelWall));
+      this.tunnelBeams.push({ s, mesh: beam }); // hidden around him so the tumble stays readable
       beam.scale.set(0.5, 0.6, w + 1.8);
       beam.position.set(mid.x, 5.6, mid.z);
       beam.rotation.y = -h;
@@ -900,7 +903,8 @@ export class HighwayView {
     this.sim.track.posAt(p.s, p.d, this.pos);
     const colors = [...((g?.userData.colors as number[]) ?? []), ...MATERIAL_DEBRIS[p.mat]];
     const heavy = p.cls === 'heavy';
-    if (g) this.launchWreck(g, dirX, dirZ, speed, heavy, side, p.h);
+    const W = this.sim.track.widthAt(p.s);
+    if (g) this.launchWreck(g, dirX, dirZ, speed, heavy, side, p.h, (side > 0 ? W - p.d : p.d) - p.hw);
     const sx = -dirZ * side, sz = dirX * side;
     this.spawnDebris(this.pos.x, this.pos.z, dirX + sx * 1.4, dirZ + sz * 1.4, speed * 0.5, heavy ? 28 : 14, colors, heavy ? [0.3, 0.9] : [0.2, 0.6], p.h);
     if (heavy) this.spawnDebris(this.pos.x, this.pos.z, dirX - sx * 0.8, dirZ - sz * 0.8, speed * 0.35, 10, MATERIAL_DEBRIS.glass, [0.1, 0.25], p.h);
@@ -910,7 +914,7 @@ export class HighwayView {
    * Swat a body off the giant's line: it flies out to `side` (slower forward than he runs, so he
    * passes it), tumbles, bounces and slides to rest. Units hand their body over here too.
    */
-  launchWreck(g: THREE.Object3D, dirX: number, dirZ: number, speed: number, heavy: boolean, side: number, height = 1.5) {
+  launchWreck(g: THREE.Object3D, dirX: number, dirZ: number, speed: number, heavy: boolean, side: number, height = 1.5, wall = Infinity) {
     const W = TUNING.impact.wreck;
     const L = heavy ? W.heavy : W.medium;
     if (g.parent !== this.group) this.group.add(g);
@@ -930,6 +934,12 @@ export class HighwayView {
       half: Math.max(0.3, height * 0.5 * W.crumple),
       t: 0,
       bounced: 0,
+      // Road-edge wall, measured out along the fling: wrecks bounce off it, never through it.
+      ox: g.position.x,
+      oz: g.position.z,
+      sx,
+      sz,
+      wall: Math.max(0, wall),
     });
     if (this.wrecks.length > W.max) {
       const old = this.wrecks.shift()!;
@@ -950,6 +960,16 @@ export class HighwayView {
       g.position.x += w.vx * dt;
       g.position.y += w.vy * dt;
       g.position.z += w.vz * dt;
+      const out = (g.position.x - w.ox) * w.sx + (g.position.z - w.oz) * w.sz;
+      if (out > w.wall) {
+        g.position.x -= w.sx * (out - w.wall);
+        g.position.z -= w.sz * (out - w.wall);
+        const vOut = w.vx * w.sx + w.vz * w.sz;
+        if (vOut > 0) {
+          w.vx -= w.sx * vOut * (1 + W.wallBounce);
+          w.vz -= w.sz * vOut * (1 + W.wallBounce);
+        }
+      }
       if (g.position.y < w.half) {
         g.position.y = w.half;
         if (w.vy < -2 && w.bounced < 2) {
@@ -1016,6 +1036,9 @@ export class HighwayView {
       o.mat.depthWrite = o.mat.opacity > 0.95;
     }
     if (this.overpasses.length > 24) this.overpasses.splice(0, this.overpasses.length - 24);
+    const B = TUNING.impact.wreck.beamClear;
+    for (const b of this.tunnelBeams) b.mesh.visible = b.s < giantS - B[0] || b.s > giantS + B[1];
+    while (this.tunnelBeams.length && this.tunnelBeams[0].s < giantS - 200) this.tunnelBeams.shift();
     const g = 30;
     for (let i = 0; i < MAX_DEBRIS; i++) {
       const d = this.debris[i];

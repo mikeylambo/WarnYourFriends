@@ -21,6 +21,7 @@ import { Gait } from './anim/gait';
 import { Audio } from './audio';
 import { Input } from './input';
 import { registerGlyphs, padFamily, type GlyphAction } from './glyphs';
+import coverUrl from './assets/title-cover.webp';
 import { readFlags } from './debug';
 import { loadSettings, saveSettings } from './settings';
 import { applyStoredTuning, mountTuningPanel } from './tuningPanel';
@@ -785,6 +786,7 @@ function enterAttract() {
 }
 
 input.onAnyInput = () => {
+  lastInputAt = performance.now();
   try {
     audio.unlock();
   } catch {
@@ -1119,6 +1121,19 @@ function updateGlyphs() {
 const titleCam = new THREE.PerspectiveCamera(TUNING.title.fov, 16 / 9, 0.5, 900);
 const titleTmp = { q: new THREE.Quaternion(), p: new THREE.Vector3(), m: new THREE.Matrix4(), up: new THREE.Vector3(0, 1, 0) };
 const titleBug = $('titlebug');
+/**
+ * Mike: the cover art is the start screen; the live attract shot slides in when left idle, and any
+ * input brings the cover back.
+ */
+const coverEl = $('cover');
+($('cover').querySelector('img') as HTMLImageElement).src = coverUrl;
+// The cover sits under the shell's title screen; clicking or tapping anywhere on the title is Press Start.
+$('ui').addEventListener('click', (e) => {
+  const screen = (e.target as HTMLElement).closest('[data-screen-id="title"]');
+  if (screen && !(e.target as HTMLElement).closest('button')) screen.querySelector<HTMLButtonElement>('[data-choice-id="start"]')?.click();
+});
+let lastInputAt = performance.now();
+for (const ev of ['keydown', 'pointerdown', 'touchstart'] as const) window.addEventListener(ev, () => (lastInputAt = performance.now()), { passive: true });
 const titleRoad = $('titleroad');
 let titleK = 0;
 let wasTitle = false;
@@ -1132,6 +1147,11 @@ function updateTitleShot(dt: number, t: CameraTarget): boolean {
       if (!forcedLook) lighting.setMode('night');
     } else applyLook();
   }
+  const idle = (performance.now() - lastInputAt) / 1000;
+  const cover = onTitle && idle < T.idleToAttract;
+  coverEl.hidden = !onTitle; // leaving the title, the camera glide is the transition: the art cuts away
+  coverEl.classList.toggle('away', !cover);
+  document.documentElement.classList.toggle('cover', cover);
   if (onTitle) {
     titleK = 1;
     const seg = sim.track.segmentAt(sim.giant.s);
@@ -1346,6 +1366,10 @@ window.__GAME = {
     flags.timescale = v;
   },
   /** Dev: leave (or enter) step mode, e.g. to fast-forward to an event and then watch it in slow motion. */
+  /** Dev: act as if the title has been left idle (the attract shot slides in over the cover). */
+  idleTitle() {
+    lastInputAt = -1e9;
+  },
   setStepMode(v: boolean) {
     flags.stepMode = v;
   },

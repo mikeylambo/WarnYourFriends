@@ -39,9 +39,8 @@ export const PALETTE = {
   giantArmor: 0x3a1c5c,
   giantCape: 0x1c0b30,
   giantBone: 0xe6dcc3,
-  giantHair: 0x16121a,
-  /** Mike's title-screen direction: red skin, black hair. */
-  giantSkin: 0x8a3329,
+  giantHair: 0xfaf7f0,
+  giantSkin: 0x6b4a5e,
   giantBand: 0xd9ccb0,
   /** Model pass: the cape clasp under the pauldron, the one warm metal on him. */
   giantClasp: 0xc9a14a,

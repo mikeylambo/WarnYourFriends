@@ -213,6 +213,10 @@ export const TUNING = {
       heavy: { forward: 0.5, lateral: [6, 9] as [number, number], up: [5, 7] as [number, number], spin: 6 },
       gravity: 26,
       bounce: 0.35,
+      /** Off the road-edge wall (share of the outward speed kept): wrecks stay on the road, in view, even in tunnels. */
+      wallBounce: 0.3,
+      /** Tunnel roof beams this far behind / ahead of him (m) are hidden, so wrecks tumbling past stay in view. */
+      beamClear: [30, 8] as [number, number],
       /** Ground friction (1/s) on speed and spin. */
       friction: 3.2,
       /** Squash on impact (height scale): it reads as crumpled. */
@@ -634,6 +638,8 @@ export const TUNING = {
     fov: 42,
     /** Leaving the title, the camera glides down into the chase over this long (s). */
     glideTime: 1.6,
+    /** The cover art holds this long without input, then the live attract shot slides in (s). */
+    idleToAttract: 12,
   },
 
   /** Input gestures (v0.3). */

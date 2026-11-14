@@ -16,6 +16,10 @@ for (const [name, ctx] of [['desktop', { viewport: { width: 1280, height: 720 },
   await page.waitForSelector('#ui [data-screen-id="title"]');
   await page.waitForFunction(() => window.__GAME?.attract, null, { timeout: 30000 });
   await page.waitForTimeout(6000);
+  await page.screenshot({ path: `${OUT}/cover-${name}.png` });
+  // Left idle, the live attract shot slides in over the cover.
+  await page.evaluate(() => window.__GAME.idleTitle?.());
+  await page.waitForTimeout(1500);
   await page.screenshot({ path: `${OUT}/title-${name}.png` });
   if (name === 'desktop') {
     await page.keyboard.press('Enter');

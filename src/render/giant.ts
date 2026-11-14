@@ -102,7 +102,7 @@ export class GiantView {
     belt.position.y = 0.12;
     this.torso.add(chest, plate, back, belt);
 
-    // ONE smooth pauldron (the top-down silhouette, Mike's title art): a big plate over a lame.
+    // ONE horned pauldron (the top-down silhouette): a big plate over a lame, two horns sweeping back.
     const S = PAULDRON_SIDE;
     const pauldron = box(1.15, 0.44, 0.8, PALETTE.giantBone);
     pauldron.position.set(0, 1.46, S * 0.82);
@@ -110,6 +110,12 @@ export class GiantView {
     const lame = box(0.9, 0.2, 0.62, PALETTE.giantBone);
     lame.position.set(0, 1.18, S * 0.98);
     lame.rotation.x = S * 0.42;
+    const horn = new THREE.Mesh(new THREE.ConeGeometry(0.2, 1.1, 6), rimToon(PALETTE.giantBone));
+    horn.position.set(0.05, 1.98, S * 1.12);
+    horn.rotation.set(S * -0.7, 0, -0.45);
+    const horn2 = new THREE.Mesh(new THREE.ConeGeometry(0.13, 0.62, 6), rimToon(PALETTE.giantBone));
+    horn2.position.set(-0.38, 1.82, S * 1.05);
+    horn2.rotation.set(S * -0.55, 0, 0.6);
     // The bare shoulder carries only the cape strap.
     const pad = box(0.62, 0.16, 0.36, PALETTE.giantArmor);
     pad.position.set(0, 1.36, -S * 0.72);
@@ -120,22 +126,23 @@ export class GiantView {
     const clasp = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.15, 0.09, 10), rimToon(PALETTE.giantClasp));
     clasp.rotation.z = Math.PI / 2;
     clasp.position.set(0.62, 0.86, S * 0.5);
-    this.torso.add(pauldron, lame, pad, strap, clasp);
+    this.torso.add(pauldron, lame, horn, horn2, pad, strap, clasp);
 
     // Arms: shoulder + elbow, so the run can hold a bent-arm guard (fists forward at the chest).
     for (const [arm, elbow, z] of [[this.armL, this.elbowL, 0.86], [this.armR, this.elbowR, -0.86]] as const) {
       arm.position.set(0, 1.25, z);
-      const upper = box(0.36, 0.85, 0.36, PALETTE.giantSkin);
+      const upper = box(0.34, 0.85, 0.34, PALETTE.giantBody);
       upper.position.y = -0.42;
       elbow.position.y = -0.85;
       const fore = box(0.3, 0.75, 0.3, PALETTE.giantSkin);
       fore.position.y = -0.25;
-      // Cream wrist cuff (title art).
-      const band1 = box(0.36, 0.26, 0.36, PALETTE.giantBone);
-      band1.position.y = -0.45;
+      const band1 = box(0.33, 0.1, 0.33, PALETTE.giantBand);
+      band1.position.y = -0.1;
+      const band2 = band1.clone();
+      band2.position.y = -0.35;
       const fist = box(0.34, 0.3, 0.34, PALETTE.giantSkin);
       fist.position.y = -0.7;
-      elbow.add(fore, band1, fist);
+      elbow.add(fore, band1, band2, fist);
       arm.add(upper, elbow);
       this.torso.add(arm);
     }
@@ -145,11 +152,12 @@ export class GiantView {
     this.torso.add(this.head);
     const skull = box(0.5, 0.55, 0.5, PALETTE.giantSkin);
     skull.position.y = 0.28;
-    // Black flat-top (title art); no helm, no braid.
-    const hair = box(0.54, 0.26, 0.54, PALETTE.giantHair);
-    hair.position.y = 0.6;
-    this.head.add(skull, hair);
-    for (let i = 0; i < 0; i++) {
+    const helm = box(0.56, 0.3, 0.56, PALETTE.giantBone);
+    helm.position.y = 0.45;
+    const knot = box(0.24, 0.26, 0.24, PALETTE.giantHair);
+    knot.position.set(-0.08, 0.72, 0);
+    this.head.add(skull, helm, knot);
+    for (let i = 0; i < 4; i++) {
       const b = box(0.15 - i * 0.015, 0.15 - i * 0.015, 0.15 - i * 0.015, PALETTE.giantHair);
       this.braid.push(b);
     }
@@ -161,11 +169,10 @@ export class GiantView {
       return new THREE.Mesh(g, rimToon(color));
     };
     for (let i = 0; i < 2; i++) {
-      const thigh = seg(0.46, PALETTE.giantSkin);
-      const shin = seg(0.4, PALETTE.giantSkin);
-      // Cream greave over the shin (title art); bare feet.
-      const knee = box(0.46, 0.55, 0.46, PALETTE.giantBone);
-      const boot = box(0.66, 0.26, 0.42, PALETTE.giantSkin);
+      const thigh = seg(0.44, PALETTE.giantBody);
+      const shin = seg(0.38, PALETTE.giantBody);
+      const knee = box(0.46, 0.24, 0.46, PALETTE.giantBone);
+      const boot = box(0.72, 0.32, 0.5, PALETTE.giantArmor);
       this.legs.add(thigh, shin, knee, boot);
       this.legParts.push({ thigh, shin, knee, boot });
     }
@@ -345,9 +352,8 @@ export class GiantView {
       const P = this.legParts[i];
       this.placeSegment(P.thigh, L.hip, L.knee);
       this.placeSegment(P.shin, L.knee, L.foot);
-      // The greave rides the upper shin, along it.
-      P.knee.position.set(L.knee.x + (L.foot.x - L.knee.x) * 0.38, L.knee.y + (L.foot.y - L.knee.y) * 0.38, L.knee.z + (L.foot.z - L.knee.z) * 0.38);
-      P.knee.quaternion.copy(P.shin.quaternion);
+      P.knee.position.set(L.knee.x, L.knee.y, L.knee.z);
+      P.knee.rotation.set(0, -p.heading, 0);
       P.boot.position.set(L.foot.x + Math.cos(p.heading) * 0.12, Math.max(0.16, L.foot.y + 0.06), L.foot.z + Math.sin(p.heading) * 0.12);
       P.boot.rotation.set(0, -p.heading, L.planted ? 0 : 0.35);
     }
