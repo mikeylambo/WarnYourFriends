@@ -315,3 +315,12 @@ html.touch #abil { display: none; }
 #recap .pitch:hover:not(:disabled), #recap .pitch:focus-visible, #recap .pitch:focus { border-color: #f2cc8f; outline: none; transform: translateY(-2px); }
 #recap .pitch:disabled { opacity: 0.4; cursor: not-allowed; }
 #recap .pitch:disabled .price::after { content: ' · over budget'; font-size: 11px; color: var(--bone); }
+
+/* Button labels per device (src/glyphs.ts): controls strip at a segment's start, hints under cards. */
+#controls { position: absolute; left: 50%; top: calc(64px + env(safe-area-inset-top)); transform: translateX(-50%); display: flex; gap: 14px; padding: 6px 12px; background: rgba(10, 8, 20, 0.72); color: var(--bone); font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; white-space: nowrap; pointer-events: none; }
+#controls[hidden] { display: none; }
+#controls span { display: flex; align-items: center; gap: 6px; }
+#controls kbd, #recap .padhint kbd { font: inherit; font-weight: 700; border: 1px solid currentColor; border-radius: 3px; padding: 0 5px; min-width: 1.2em; text-align: center; text-transform: none; }
+#recap .padhint { margin-top: 10px; font-size: 12px; opacity: 0.7; display: flex; gap: 6px; align-items: center; justify-content: center; }
+#recap .padhint:empty { display: none; }
+@media (max-width: 560px) { #controls { gap: 8px; font-size: 10px; } }

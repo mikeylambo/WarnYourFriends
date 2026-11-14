@@ -8,18 +8,19 @@ import { blobTexture, rimToon } from './toon';
  * Greybox giant (Phase 0b). A placeholder that swaps without touching logic
  * (§23): it reads the sim pose and the gait frame and draws; nothing writes back.
  *
- * Identity per §13 (provisional): armored warlord, violet-and-bone, horned
- * pauldrons, braided white topknot, wrapped forearms, and (v0.3) a KNEE-LENGTH
- * cape so it never hides the run.
+ * Identity (Mike's sheet, model pass): armored warlord in plum with cream bone
+ * plates, ONE horned pauldron, the cape clasped under it and slung across the
+ * back, braided white topknot, wrapped forearms. The cape is knee length (v0.3):
+ * it hangs heavy at Jog and snaps out almost horizontal at Rampage.
  *
  * v0.3 run: legs are drawn from the gait's IK (hip → knee → planted foot), so a
  * planted foot never slides. Low, forward-driving posture, arms trailing, head
  * steady. The torso model faces +X; the root is yawed to the heading.
  */
 
-const CAPE_SEGS = 6;
-/** Knee length: from the shoulders (~3.0m) to about the knee (~1.0m). */
-const CAPE_LEN = 1.9;
+const CAPE_SEGS = 8;
+/** The pauldron (and the clasp under it) sits on the torso's +Z shoulder. */
+const PAULDRON_SIDE = 1;
 /** Ink outline thickness (m): ~2px at Chase High distance. */
 const OUTLINE_WIDTH = 0.06;
 
@@ -65,8 +66,9 @@ export class GiantView {
 
   private cape: THREE.Mesh;
   private capePts: THREE.Vector3[] = [];
-  private capeHistory: THREE.Vector3[] = [];
   private capeGeo: THREE.BufferGeometry;
+  private capeAngle = 0;
+  private capePhase = 0;
 
   private lean = 0;
   private bank = 0;
@@ -86,23 +88,40 @@ export class GiantView {
     this.hips.add(this.torso);
     const chest = box(0.95, 1.25, 1.35, PALETTE.giantBody);
     chest.position.y = 0.72;
-    const plate = box(0.2, 0.8, 1.0, PALETTE.giantArmor);
+    // Cream bone plates on plum: breastplate and a backplate the cape swings clear of.
+    const plate = box(0.2, 0.8, 1.0, PALETTE.giantBone);
     plate.position.set(0.48, 0.8, 0);
+    const back = box(0.14, 0.7, 0.8, PALETTE.giantBone);
+    back.position.set(-0.5, 0.85, 0);
     const belt = box(1.0, 0.18, 1.4, PALETTE.giantBone);
     belt.position.y = 0.12;
-    this.torso.add(chest, plate, belt);
+    this.torso.add(chest, plate, back, belt);
 
-    // Horned pauldrons: the top-down silhouette.
-    for (const side of [1, -1]) {
-      const pauldron = box(0.95, 0.38, 0.62, PALETTE.giantBone);
-      pauldron.position.set(0, 1.42, side * 0.78);
-      pauldron.rotation.x = side * 0.25;
-      const horn = new THREE.Mesh(new THREE.ConeGeometry(0.16, 0.85, 6), rimToon(PALETTE.giantBone));
-      horn.position.set(0.1, 1.85, side * 1.02);
-      horn.rotation.x = side * -0.75;
-      horn.rotation.z = -0.25;
-      this.torso.add(pauldron, horn);
-    }
+    // ONE horned pauldron (the top-down silhouette): a big plate over a lame, two horns sweeping back.
+    const S = PAULDRON_SIDE;
+    const pauldron = box(1.15, 0.44, 0.8, PALETTE.giantBone);
+    pauldron.position.set(0, 1.46, S * 0.82);
+    pauldron.rotation.x = S * 0.28;
+    const lame = box(0.9, 0.2, 0.62, PALETTE.giantBone);
+    lame.position.set(0, 1.18, S * 0.98);
+    lame.rotation.x = S * 0.42;
+    const horn = new THREE.Mesh(new THREE.ConeGeometry(0.2, 1.1, 6), rimToon(PALETTE.giantBone));
+    horn.position.set(0.05, 1.98, S * 1.12);
+    horn.rotation.set(S * -0.7, 0, -0.45);
+    const horn2 = new THREE.Mesh(new THREE.ConeGeometry(0.13, 0.62, 6), rimToon(PALETTE.giantBone));
+    horn2.position.set(-0.38, 1.82, S * 1.05);
+    horn2.rotation.set(S * -0.55, 0, 0.6);
+    // The bare shoulder carries only the cape strap.
+    const pad = box(0.62, 0.16, 0.36, PALETTE.giantArmor);
+    pad.position.set(0, 1.36, -S * 0.72);
+    // Strap across the chest from the far shoulder down to the clasp under the pauldron.
+    const strap = box(0.08, 1.15, 0.16, PALETTE.giantArmor);
+    strap.position.set(0.6, 1.05, -S * 0.08);
+    strap.rotation.x = S * -0.95;
+    const clasp = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.15, 0.09, 10), rimToon(PALETTE.giantClasp));
+    clasp.rotation.z = Math.PI / 2;
+    clasp.position.set(0.62, 0.86, S * 0.5);
+    this.torso.add(pauldron, lame, horn, horn2, pad, strap, clasp);
 
     // Arms: shoulder + elbow, so the run can hold a bent-arm guard (fists forward at the chest).
     for (const [arm, elbow, z] of [[this.armL, this.elbowL, 0.86], [this.armR, this.elbowR, -0.86]] as const) {
@@ -134,7 +153,7 @@ export class GiantView {
     knot.position.set(-0.08, 0.72, 0);
     this.head.add(skull, helm, knot);
     for (let i = 0; i < 4; i++) {
-      const b = box(0.16, 0.16, 0.16, PALETTE.giantHair);
+      const b = box(0.15 - i * 0.015, 0.15 - i * 0.015, 0.15 - i * 0.015, PALETTE.giantHair);
       this.braid.push(b);
     }
 
@@ -153,7 +172,7 @@ export class GiantView {
       this.legParts.push({ thigh, shin, knee, boot });
     }
 
-    // Cape: knee length, follows the anchor's path.
+    // Cape: knee length, clasped under the pauldron.
     this.capeGeo = new THREE.BufferGeometry();
     this.capeGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array((CAPE_SEGS + 1) * 2 * 3), 3));
     const idx: number[] = [];
@@ -207,7 +226,7 @@ export class GiantView {
   }
 
   reset() {
-    this.capeHistory.length = 0;
+    this.capeAngle = 0;
   }
 
   onShoulder() {
@@ -305,76 +324,82 @@ export class GiantView {
       P.boot.rotation.set(0, -p.heading, L.planted ? 0 : 0.35);
     }
 
-    // Braid trails from the topknot.
+    // Braid: a chain from the topknot. Each link chases its rest spot behind the one before,
+    // then is pulled back to a fixed link length, so it trails without ever coming apart.
+    const M = TUNING.giantModel;
     const knotWorld = this.head.localToWorld(new THREE.Vector3(-0.15, 0.72, 0));
     let prev = knotWorld;
     const back = new THREE.Vector3(-Math.cos(p.travel), 0, -Math.sin(p.travel));
+    const hang = 1 - Math.min(1, p.speed / 15);
     this.braid.forEach((b, i) => {
-      const target = prev.clone().addScaledVector(back, 0.22 + p.speed * 0.012).add(new THREE.Vector3(0, -0.12 - (1 - p.speed / 15) * 0.12, 0));
-      b.position.lerp(target, k(0.04 + i * 0.02));
-      if (b.position.distanceToSquared(target) > 4) b.position.copy(target);
+      const rest = prev.clone().addScaledVector(back, M.braidLink * (1 - hang * 0.6)).add(new THREE.Vector3(0, -M.braidLink * (0.45 + hang * 0.9), 0));
+      if (b.position.distanceToSquared(rest) > 4) b.position.copy(rest);
+      b.position.lerp(rest, k(M.braidFollow * (1 + i * 0.4)));
+      const off = this.tmp.subVectors(b.position, prev);
+      b.position.copy(prev).addScaledVector(off.normalize(), M.braidLink);
       prev = b.position;
     });
 
     this.updateCape(dt, p);
   }
 
-  private capeAnchor(side: number): THREE.Vector3 {
-    return this.torso.localToWorld(new THREE.Vector3(-0.55, 1.35, side * 0.7));
+  /** Cape top corners: the clasp side sits low under the pauldron, the far side over the bare shoulder. */
+  private capeAnchor(clasp: boolean): THREE.Vector3 {
+    const S = PAULDRON_SIDE;
+    return this.torso.localToWorld(clasp ? new THREE.Vector3(-0.66, 1.2, S * 0.62) : new THREE.Vector3(-0.66, 1.4, -S * 0.6));
   }
 
-  /** Kinematic knee-length cape: follows the anchor's recent path, flares with speed. */
+  /**
+   * Kinematic cape. The angle from hanging straight down is per tier (tuning): heavy at
+   * Jog, out behind at Stride, almost horizontal at Rampage. A wave runs down it, sharper
+   * per tier so Rampage snaps; it swings out opposite a lane change and flares on a tier-up.
+   */
   private updateCape(dt: number, p: GiantPose) {
+    const M = TUNING.giantModel;
+    const T = TUNING.tiers[p.tier];
     this.tierFlare = Math.max(0, this.tierFlare - dt / 0.6);
-    const left = this.capeAnchor(1);
-    const right = this.capeAnchor(-1);
-    const anchor = left.clone().add(right).multiplyScalar(0.5);
-    const hist = this.capeHistory;
-    const lastH = hist[hist.length - 1];
-    if (!lastH || lastH.distanceToSquared(anchor) > 0.0025) hist.push(anchor.clone());
-    if (hist.length > 60) hist.shift();
-    // Teleports (new run, knock-back) break the path: start it again.
-    if (lastH && lastH.distanceToSquared(anchor) > 25) {
-      hist.length = 0;
-      hist.push(anchor.clone());
-    }
+    const k = 1 - Math.exp(-dt / M.capeAngleTime);
+    // Slow below the tier's top speed eases it toward hanging (a brake drops it).
+    const speedK = Math.min(1, p.speed / T.topSpeed);
+    const want = (T.capeAngle * speedK + M.capeTierFlare * this.tierFlare) * (Math.PI / 180);
+    this.capeAngle += (want - this.capeAngle) * k;
+    this.capePhase += dt * T.capeFlutterHz * Math.PI * 2;
 
-    const segLen = CAPE_LEN / CAPE_SEGS;
-    const speedK = Math.min(1, p.speed / 15);
-    const droop = (1 - speedK) * 1.1 + 0.45 - this.tierFlare * 0.3;
-    const horiz = Math.cos(droop);
-    const vert = Math.sin(droop);
+    const a = this.capeAnchor(true);
+    const b = this.capeAnchor(false);
+    const top = a.clone().add(b).multiplyScalar(0.5);
+    const halfTop = a.clone().sub(b).multiplyScalar(0.5);
+    const side = halfTop.clone().setY(0).normalize();
     const back = new THREE.Vector3(-Math.cos(p.travel), 0, -Math.sin(p.travel));
-    let walked = 0;
-    let h = hist.length - 1;
-    let from = anchor.clone();
-    for (let i = 0; i <= CAPE_SEGS; i++) {
-      const want = i * segLen * horiz;
-      while (walked < want && h > 0) {
-        const step = from.distanceTo(hist[h - 1]);
-        if (walked + step >= want) {
-          from = from.clone().lerp(hist[h - 1], (want - walked) / Math.max(step, 1e-6));
-          walked = want;
-          break;
-        }
-        walked += step;
-        from = hist[h - 1].clone();
-        h--;
-      }
-      const pt = this.capePts[i];
-      pt.copy(from);
-      if (walked < want) pt.addScaledVector(back, want - walked);
-      const flutter = i === 0 ? 0 : Math.sin(this.time * (5 + p.speed * 0.8) + i * 1.1) * 0.05 * i * (0.3 + speedK);
-      pt.y = Math.max(0.6, anchor.y - i * segLen * vert + flutter);
-    }
+    const segLen = M.capeLength / CAPE_SEGS;
+    const snap = M.capeSnapPow[p.tier];
     const pos = this.capeGeo.getAttribute('position') as THREE.BufferAttribute;
-    const side = right.clone().sub(left).setY(0).normalize();
+    const c = this.tmp.copy(top);
     for (let i = 0; i <= CAPE_SEGS; i++) {
-      const c = this.capePts[i];
-      const w = 0.42 + (i / CAPE_SEGS) * 0.12; // narrow: the legs must read past it (v0.3)
-      const tatter = i === CAPE_SEGS ? Math.sin(this.time * 11) * 0.1 : 0;
-      pos.setXYZ(i * 2, c.x - side.x * w, c.y + tatter, c.z - side.z * w);
-      pos.setXYZ(i * 2 + 1, c.x + side.x * w, c.y - tatter, c.z + side.z * w);
+      const f = i / CAPE_SEGS;
+      if (i > 0) {
+        // The hem rides a little flatter than the top: the cloth bellies out behind him.
+        // The top rows drape over his leaning back (never inside it), then the cloth takes its own angle.
+        const drape = (this.lean + M.capeBackClear) * Math.max(0, 1 - f / M.capeDrapeShare);
+        const th = Math.min(1.5, Math.max(drape, this.capeAngle * (0.85 + 0.3 * f)));
+        c.addScaledVector(back, Math.sin(th) * segLen);
+        c.y -= Math.cos(th) * segLen;
+        c.addScaledVector(side, -p.lateralVel * M.capeLateralLag * (segLen / M.capeLength));
+      }
+      const pt = this.capePts[i].copy(c);
+      const w = Math.sin(this.capePhase - f * 4.2);
+      const wave = Math.sign(w) * Math.pow(Math.abs(w), snap) * T.capeFlutterAmp * Math.pow(f, 1.4);
+      // Flutter across the cloth (perpendicular to it, in the travel plane).
+      const th = this.capeAngle;
+      pt.addScaledVector(back, -Math.cos(th) * wave);
+      pt.y += Math.sin(th) * wave;
+      pt.y = Math.max(0.3, pt.y);
+      // Top edge keeps the clasp's slant; lower rows level out and widen to the hem.
+      const hw = M.capeHalfWidthTop + (M.capeHalfWidthHem - M.capeHalfWidthTop) * f;
+      const slant = halfTop.y * (1 - f);
+      const tatter = i === CAPE_SEGS ? Math.sin(this.capePhase * 1.7) * 0.06 * (0.5 + p.tier) : 0;
+      pos.setXYZ(i * 2, pt.x + side.x * hw, pt.y + slant + tatter, pt.z + side.z * hw);
+      pos.setXYZ(i * 2 + 1, pt.x - side.x * hw, pt.y - slant - tatter, pt.z - side.z * hw);
     }
     pos.needsUpdate = true;
     this.capeGeo.computeVertexNormals();

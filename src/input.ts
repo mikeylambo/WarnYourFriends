@@ -6,14 +6,17 @@ export type Device = 'keyboard' | 'mouse' | 'gamepad' | 'touch';
 /**
  * v0.3 controls, folded into one SimInput per tick.
  *   Lane left/right: A/D, ←/→ · stick flick or d-pad · swipe left/right
- *   Brake:           S / Space · LT · swipe down and hold
- *   Shoulder Check:  Shift / W / LMB · RB · tap the right button
- *   Ability (§17):   E / Q · LB or Y · the ability button
- *   Pause:           Esc · Start · II
+ *   Brake:           S / Space · LT (L2) · swipe down and hold
+ *   Shoulder Check:  Shift / W / LMB · RB (R1) · tap the right button
+ *   Ability (§17):   E / Q · LB or Y (L1 or △) · the ability button
+ *   Pause:           Esc · Start (Options) · II
+ * Labels on screen follow the pad's family: src/glyphs.ts.
  * Lane presses are edges; the sim buffers (5f) and queues (one max) them.
  */
 export class Input {
   device: Device = 'keyboard';
+  /** id of the pad last used (for its button labels). */
+  padId = '';
   private keys = new Set<string>();
   private laneEdge = 0;
   private shoulderEdge = false;
@@ -167,8 +170,9 @@ export class Input {
     P.left = left;
     P.right = right;
     P.brake = (gp.buttons[6]?.value ?? 0) > 0.3;
-    if (Math.abs(lx) > 0.3 || P.brake || rb || lb || left || right) {
+    if (Math.abs(lx) > 0.3 || P.brake || rb || lb || left || right || gp.buttons.some((b) => b.pressed)) {
       this.device = 'gamepad';
+      this.padId = gp.id;
       this.onAnyInput?.();
     }
   }

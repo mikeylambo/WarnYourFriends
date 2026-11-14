@@ -29,6 +29,7 @@ src/render/          three.js views: highway (zones, ramp), units (police), gian
 src/broadcast/       headline generator (§21) + headlines.json word bank (pure TS, tested); coverage.ts (escalation ladder), viewers.json
 src/audio.ts         Web Audio, music/sfx/voice buses (synth placeholders)
 src/input.ts         KBM, gamepad, touch → SimInput
+src/glyphs.ts        button labels per device family (PS4: L1/R1/L2/✕), via the shell's glyph registry
 src/main.ts          bootstrap: WebGL check, then loads game.ts; boot errors shown on screen
 src/game.ts          fixed-step loop, event presentation, window.__GAME
 tools/soak.ts        headless N-seed soak: sim + gait + camera invariants (cadence, foot slide, screen-up, cuts, framing)
@@ -36,6 +37,8 @@ tools/e2e-smoke.mjs  headless Chromium smoke against the production build (E2E_U
 tools/shots.mjs      evidence screenshots + silhouette numbers per angle and look
 tools/shots-phase2.mjs  Phase 2 evidence: tells, zones, exit, recap
 tools/shots-phase3.mjs  Phase 3 evidence: each ability mid-action
+tools/modelsheet.mjs    giant turnaround (side / Chase High / top down × tiers), dev page in tools/modelsheet/
+tools/shots-model.mjs   model pass evidence: tiers in game, cape on a lane change, PS4 HUD
 ```
 
 ## Commands

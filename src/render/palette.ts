@@ -42,6 +42,8 @@ export const PALETTE = {
   giantHair: 0xfaf7f0,
   giantSkin: 0x6b4a5e,
   giantBand: 0xd9ccb0,
+  /** Model pass: the cape clasp under the pauldron, the one warm metal on him. */
+  giantClasp: 0xc9a14a,
   /** Phase 0c ink outline around the giant. */
   giantOutline: 0x07030f,
 };

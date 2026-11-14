@@ -20,10 +20,11 @@ import type { PropKind } from './sim/types';
 import { Gait } from './anim/gait';
 import { Audio } from './audio';
 import { Input } from './input';
+import { registerGlyphs, padFamily, type GlyphAction } from './glyphs';
 import { readFlags } from './debug';
 import { loadSettings, saveSettings } from './settings';
 import { applyStoredTuning, mountTuningPanel } from './tuningPanel';
-import { createGameApp, type CoreSettings, type FrameAssembly, type GenreFrame, type RendererAdapter, type SLUWebShell } from '@slu/web-shell';
+import { createGameApp, type InputDeviceFamily, type CoreSettings, type FrameAssembly, type GenreFrame, type RendererAdapter, type SLUWebShell } from '@slu/web-shell';
 
 applyStoredTuning();
 
@@ -61,6 +62,7 @@ const abilName = abilEl.querySelector('.nm') as HTMLElement;
 const abilKey = abilEl.querySelector('.key') as HTMLElement;
 const abilCd = abilEl.querySelector('.cd i') as HTMLElement;
 const abilBtn = $<HTMLButtonElement>('btn-ability');
+const controlsEl = $('controls');
 
 // --- Renderer ---------------------------------------------------------------
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
@@ -292,6 +294,7 @@ function showMeeting() {
       })
       .join('')}</div>
     <div class="row"><button class="go alt" id="skip">Skip</button></div>
+    <div class="padhint"></div>
   </div>`;
   recapArmedAt = performance.now() + 250;
   for (const b of recapEl.querySelectorAll<HTMLButtonElement>('.pitch')) b.onclick = () => r.buy(b.dataset.id as UpgradeId) && nextSegment();
@@ -343,6 +346,7 @@ function showRecap() {
     </div>
     <p class="anchor">${esc(anchorLine)}</p>
     <div class="row">${buttons}</div>
+    <div class="padhint"></div>
   </div>`;
   recapEl.hidden = false;
   recapArmedAt = performance.now() + 250;
@@ -786,6 +790,7 @@ app = await createGameApp({
     },
   },
 });
+registerGlyphs(app.shell.production.glyphs);
 // Only what exists: no challenges or credits yet; the tagline is approved fiction (§21).
 app.ui.updateScreen('title', { subtitle: 'Giant At Large. Warn Your Friends.' });
 app.ui.updateScreen('main-menu', { choices: [{ id: 'play', label: 'Play' }, { id: 'settings', label: 'Settings' }] });
@@ -963,6 +968,36 @@ function frame(now: number) {
   } else renderer.render(scene, rig.camera);
   pip.render(renderer, scene);
   updateHud(realDt);
+  updateGlyphs();
+}
+
+/**
+ * Button labels follow the device in use (PS4/PS5 pads show L1/R1/L2/✕). Shown on the ability
+ * chip, on a controls strip for the first seconds of each segment, and under recap/meeting cards.
+ */
+let glyphFamily: InputDeviceFamily | null = null;
+function glyph(action: GlyphAction): string {
+  return app?.shell.production.glyphs.resolve(action, glyphFamily ?? 'keyboard-mouse')?.label ?? '';
+}
+function updateGlyphs() {
+  if (!app) return;
+  const fam: InputDeviceFamily = input.device === 'gamepad' ? padFamily(input.padId) : input.device === 'touch' ? 'touch' : 'keyboard-mouse';
+  if (fam !== glyphFamily) {
+    glyphFamily = fam;
+    app.shell.production.glyphs.setFamily(fam);
+    abilKey.textContent = glyph('ability');
+    const key = (a: GlyphAction, what: string) => `<span><kbd>${esc(glyph(a))}</kbd>${what}</span>`;
+    controlsEl.innerHTML = fam === 'touch'
+      ? `<span>Swipe to change lanes · hold down to brake</span>`
+      : key('lanes', 'Lane') + key('brake', 'Brake') + key('shoulder', 'Shoulder') + key('pause', 'Pause');
+    recapEl.dataset.fam = '';
+  }
+  controlsEl.hidden = attract || !sim.live || sim.time > TUNING.input.controlsHintTime;
+  const hint = recapEl.querySelector<HTMLElement>('.padhint');
+  if (hint && recapEl.dataset.fam !== fam) {
+    recapEl.dataset.fam = fam;
+    hint.innerHTML = fam === 'touch' ? '' : `<kbd>${esc(glyph('move'))}</kbd> Move <kbd>${esc(glyph('accept'))}</kbd> Choose`;
+  }
 }
 
 /** Render one frame now and measure the giant's silhouette (E2E / evidence). */
@@ -1053,7 +1088,6 @@ function updateHud(dt: number) {
       abilBtn.textContent = label.split(' ')[0].toUpperCase().slice(0, 5);
       abilBtn.setAttribute('aria-label', label);
     }
-    abilKey.textContent = input.device === 'gamepad' ? 'LB' : input.device === 'touch' ? '' : 'E';
     const ready = g.abilityCd <= 0;
     abilCd.style.width = `${((1 - g.abilityCd / A.cooldown) * 100).toFixed(1)}%`;
     abilEl.classList.toggle('ready', ready);

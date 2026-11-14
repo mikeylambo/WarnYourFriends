@@ -54,6 +54,11 @@ export interface TierTuning {
   flightLift: number;
   /** Elbow bend (rad): the forearm folds forward so the fists ride in front of the chest. */
   elbowBend: number;
+  /** Model pass: cape angle from hanging straight down (deg). Heavy at Jog, near horizontal at Rampage. */
+  capeAngle: number;
+  /** Model pass: cape flutter (Hz) and amplitude at the hem (m). Rampage snaps. */
+  capeFlutterHz: number;
+  capeFlutterAmp: number;
 }
 
 export interface CameraAngle {
@@ -98,14 +103,37 @@ export const TUNING = {
     overspeedDecel: 7,
   },
 
+  /** Model pass (Mike's sheet): one horned pauldron, the cape clasped under it. */
+  giantModel: {
+    /** Cape length from the clasp line (m): knee length at Jog (v0.3 §10). */
+    capeLength: 1.9,
+    /** Cape half-width at the shoulders and at the hem (m): narrow so the legs read past it. */
+    capeHalfWidthTop: 0.42,
+    capeHalfWidthHem: 0.62,
+    /** How fast the cape angle follows a tier change (s): a gear change, so quick. */
+    capeAngleTime: 0.25,
+    /** The cape's top lies along his back: lean plus this clearance (rad), over this share of its length. */
+    capeBackClear: 0.18,
+    capeDrapeShare: 0.45,
+    /** Hem lift on a tier-up (deg): the flare. */
+    capeTierFlare: 18,
+    /** Flutter shape: >1 sharpens the wave into a snap; scales up with tier. */
+    capeSnapPow: [1, 1.6, 2.6],
+    /** Cape swings out opposite a lane change (m of hem offset per m/s of lateral speed). */
+    capeLateralLag: 0.09,
+    /** Braid: segment length (m) and how quickly each link follows (s). */
+    braidLink: 0.2,
+    braidFollow: 0.05,
+  },
+
   /** Momentum tiers: v0.2 speeds and timings, v0.3 lane-change times and run cycle. */
   tiers: [
     // Pose pass (Mike's reference stills + clip): deep lean, legs cycling under a gliding torso
     // (little bob), knee drive and heel kick, a big exaggerated arm pump (Mike: "exaggerated a bit"). Speeds, cadence
     // and stride are unchanged.
-    { name: 'Jog', topSpeed: 6, accel: 8, tierUpAfter: 2.0, smashes: 'light', laneChangeTime: 0.22, cadence: 2.0, specStrideLength: 2.5, leanDeg: 20, hipHeight: 1.68, bodyDrop: 0.12, footLift: 0.45, cameraDistanceScale: 0.9, armSwing: 0.9, armBase: -0.1, flightLift: 0.03, elbowBend: 1.2 },
-    { name: 'Stride', topSpeed: 10, accel: 6, tierUpAfter: 3.0, smashes: 'medium', laneChangeTime: 0.3, cadence: 2.1, specStrideLength: 4.0, leanDeg: 30, hipHeight: 1.64, bodyDrop: 0.18, footLift: 0.75, cameraDistanceScale: 1.0, armSwing: 1.25, armBase: -0.05, flightLift: 0.07, elbowBend: 1.4 },
-    { name: 'Rampage', topSpeed: 15, accel: 4, tierUpAfter: Infinity, smashes: 'heavy', laneChangeTime: 0.4, cadence: 2.3, specStrideLength: 6.0, leanDeg: 40, hipHeight: 1.6, bodyDrop: 0.24, footLift: 1.05, cameraDistanceScale: 1.15, armSwing: 1.6, armBase: 0, flightLift: 0.11, elbowBend: 1.6 },
+    { name: 'Jog', topSpeed: 6, accel: 8, tierUpAfter: 2.0, smashes: 'light', laneChangeTime: 0.22, cadence: 2.0, specStrideLength: 2.5, leanDeg: 20, hipHeight: 1.68, bodyDrop: 0.12, footLift: 0.45, cameraDistanceScale: 0.9, armSwing: 0.9, armBase: -0.1, flightLift: 0.03, elbowBend: 1.2, capeAngle: 20, capeFlutterHz: 1.3, capeFlutterAmp: 0.05 },
+    { name: 'Stride', topSpeed: 10, accel: 6, tierUpAfter: 3.0, smashes: 'medium', laneChangeTime: 0.3, cadence: 2.1, specStrideLength: 4.0, leanDeg: 30, hipHeight: 1.64, bodyDrop: 0.18, footLift: 0.75, cameraDistanceScale: 1.0, armSwing: 1.25, armBase: -0.05, flightLift: 0.07, elbowBend: 1.4, capeAngle: 52, capeFlutterHz: 3.2, capeFlutterAmp: 0.12 },
+    { name: 'Rampage', topSpeed: 15, accel: 4, tierUpAfter: Infinity, smashes: 'heavy', laneChangeTime: 0.4, cadence: 2.3, specStrideLength: 6.0, leanDeg: 40, hipHeight: 1.6, bodyDrop: 0.24, footLift: 1.05, cameraDistanceScale: 1.15, armSwing: 1.6, armBase: 0, flightLift: 0.11, elbowBend: 1.6, capeAngle: 80, capeFlutterHz: 6.5, capeFlutterAmp: 0.2 },
   ] as TierTuning[],
 
   tierDrop: {
@@ -566,6 +594,8 @@ export const TUNING = {
     swipeMaxTime: 0.35,
     /** Swipe down and hold to brake: downward drag past this many px. */
     swipeDownBrakePx: 40,
+    /** The controls strip shows for this long at the start of each segment (s). */
+    controlsHintTime: 7,
   },
 } as const;
 
