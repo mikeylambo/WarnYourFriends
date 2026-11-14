@@ -41,6 +41,22 @@ export function rimToon(color: number, side: THREE.Side = THREE.FrontSide): THRE
   return m;
 }
 
+/** Toon + rim (as rimToon) over a texture: the Meshy giant's base colour. */
+export function rimToonMap(map: THREE.Texture, side: THREE.Side = THREE.FrontSide): THREE.MeshToonMaterial {
+  const m = new THREE.MeshToonMaterial({ map, gradientMap: toonRamp(), side });
+  m.onBeforeCompile = (sh) => {
+    sh.uniforms.rimColor = RIM.color;
+    sh.uniforms.rimStrength = RIM.strength;
+    sh.uniforms.rimPower = RIM.power;
+    sh.fragmentShader = 'uniform vec3 rimColor;\nuniform float rimStrength;\nuniform float rimPower;\n' + sh.fragmentShader.replace(
+      '#include <opaque_fragment>',
+      'float rimF = pow(1.0 - clamp(abs(dot(normalize(normal), normalize(vViewPosition))), 0.0, 1.0), rimPower);\noutgoingLight += rimColor * rimF * rimStrength;\n#include <opaque_fragment>',
+    );
+  };
+  m.customProgramCacheKey = () => 'rim-map';
+  return m;
+}
+
 const cache = new Map<string, THREE.MeshToonMaterial>();
 export function toon(color: number, extra: THREE.MeshToonMaterialParameters = {}): THREE.MeshToonMaterial {
   const key = `${color}:${JSON.stringify(extra)}`;

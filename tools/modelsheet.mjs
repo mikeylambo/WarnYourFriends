@@ -10,7 +10,7 @@ await new Promise((r) => server.stdout.on('data', (d) => String(d).includes('517
 const browser = await chromium.launch({ args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
 const page = await browser.newPage({ viewport: { width: 1500, height: 900 }, deviceScaleFactor: 1 });
 page.on('pageerror', (e) => console.error(e.message));
-await page.goto(`http://localhost:5179/tools/modelsheet/?t=${t}`);
+await page.goto(`http://localhost:5179/tools/modelsheet/?t=${t}${process.env.GREYBOX ? '&greybox=1' : ''}`);
 await page.waitForFunction(() => window.__SHEET, null, { timeout: 60000 });
 await page.screenshot({ path: out });
 await browser.close();

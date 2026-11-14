@@ -2,7 +2,9 @@ import * as THREE from 'three';
 import { TUNING } from '../tuning';
 import type { GaitFrame, Vec3 } from '../anim/gait';
 import { PALETTE } from './palette';
-import { blobTexture, rimToon } from './toon';
+import { blobTexture, rimToon, rimToonMap } from './toon';
+import { GiantModel } from './giantModel';
+import giantUrl from '../assets/giant/giant.glb?url';
 
 /**
  * Greybox giant (Phase 0b). A placeholder that swaps without touching logic
@@ -19,10 +21,38 @@ import { blobTexture, rimToon } from './toon';
  */
 
 const CAPE_SEGS = 8;
-/** The pauldron (and the clasp under it) sits on the torso's +Z shoulder. */
-const PAULDRON_SIDE = 1;
+/** The pauldron (and the clasp under it) sits on his left shoulder (the torso's −Z), as on Mike's sheet. */
+const PAULDRON_SIDE = -1;
 /** Ink outline thickness (m): ~2px at Chase High distance. */
 const OUTLINE_WIDTH = 0.06;
+
+/** Mike's sheet: a plum cape with a cream Greek-key band along the hem. */
+function capeTexture(): THREE.CanvasTexture {
+  const W = 128, H = 256;
+  const c = document.createElement('canvas');
+  c.width = W;
+  c.height = H;
+  const g = c.getContext('2d')!;
+  const hex = (n: number) => `#${n.toString(16).padStart(6, '0')}`;
+  g.fillStyle = hex(PALETTE.giantCape);
+  g.fillRect(0, 0, W, H);
+  // Band: a cream rule, a stepped key, a cream rule at the very edge.
+  const top = H * (1 - TUNING.giantModel.capeHemShare);
+  g.fillStyle = hex(PALETTE.giantBone);
+  g.fillRect(0, top, W, 5);
+  g.fillRect(0, H - 6, W, 6);
+  const step = W / 4, mid = top + (H - top) / 2;
+  for (let x = 0; x < W; x += step) {
+    g.fillRect(x, mid - 7, step * 0.55, 6);
+    g.fillRect(x + step * 0.45, mid - 7, 6, 18);
+    g.fillRect(x + step * 0.45, mid + 5, step * 0.55, 6);
+  }
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.wrapS = THREE.RepeatWrapping;
+  t.repeat.set(2, 1);
+  return t;
+}
 
 export interface GiantPose {
   x: number;
@@ -69,6 +99,10 @@ export class GiantView {
   private cape: THREE.Mesh;
   private capePts: THREE.Vector3[] = [];
   private capeGeo: THREE.BufferGeometry;
+  /** The Meshy giant, skinned over this rig once it loads (the greybox until then). */
+  readonly model = new GiantModel();
+  /** Resolves true when the Meshy model is showing, false if it failed (greybox stays). */
+  readonly ready: Promise<boolean>;
   private capeAngle = 0;
   private capePhase = 0;
 
@@ -82,6 +116,8 @@ export class GiantView {
   private recoil = 0;
   private time = 0;
   private tmp = new THREE.Vector3();
+  /** The legs as drawn this frame (gait IK, tucked in a Leap), for the Meshy model. */
+  private legPose: GaitFrame['legs'] = [] as unknown as GaitFrame['legs'];
 
   constructor() {
     this.root.add(this.hips);
@@ -186,7 +222,11 @@ export class GiantView {
       idx.push(a, a + 1, a + 2, a + 1, a + 3, a + 2);
     }
     this.capeGeo.setIndex(idx);
-    this.cape = new THREE.Mesh(this.capeGeo, rimToon(PALETTE.giantCape, THREE.DoubleSide));
+    // UVs: u across, v down the cape, so the hem texture sits at the bottom edge.
+    const uv = new Float32Array((CAPE_SEGS + 1) * 2 * 2);
+    for (let i = 0; i <= CAPE_SEGS; i++) uv.set([0, 1 - i / CAPE_SEGS, 1, 1 - i / CAPE_SEGS], i * 4);
+    this.capeGeo.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+    this.cape = new THREE.Mesh(this.capeGeo, typeof document === 'undefined' ? rimToon(PALETTE.giantCape, THREE.DoubleSide) : rimToonMap(capeTexture(), THREE.DoubleSide));
     this.cape.frustumCulled = false;
     for (let i = 0; i <= CAPE_SEGS; i++) this.capePts.push(new THREE.Vector3());
 
@@ -195,6 +235,18 @@ export class GiantView {
     this.shadow = new THREE.Mesh(sg, new THREE.MeshBasicMaterial({ map: blobTexture(), transparent: true, depthWrite: false }));
     this.shadow.scale.set(3.2, 1, 3.2);
     this.addOutlines();
+
+    let done: (ok: boolean) => void = () => {};
+    this.ready = new Promise((r) => (done = r));
+    if (typeof window === 'undefined' || new URLSearchParams(window.location.search).get('greybox') === '1') done(false);
+    else {
+      this.model.load(giantUrl, () => {
+        // The greybox's meshes hide; its groups stay as the pose rig the model follows.
+        for (const o of [this.root, this.legs, ...this.braid]) o.traverse((m) => (m as THREE.Mesh).isMesh && (m.visible = false));
+        done(true);
+      });
+      setTimeout(() => done(this.model.loaded), 20000);
+    }
   }
 
   /**
@@ -222,12 +274,12 @@ export class GiantView {
   }
 
   get objects(): THREE.Object3D[] {
-    return [this.root, this.legs, this.cape, this.shadow, ...this.braid];
+    return [this.root, this.legs, this.cape, this.shadow, this.model.group, ...this.braid];
   }
 
   /** The giant's body without his ground shadow (silhouette test). */
   get bodyObjects(): THREE.Object3D[] {
-    return [this.root, this.legs, this.cape, ...this.braid];
+    return [this.root, this.legs, this.cape, this.model.group, ...this.braid];
   }
 
   reset() {
@@ -349,6 +401,7 @@ export class GiantView {
     for (let i = 0; i < 2; i++) {
       const G = gait.legs[i];
       const L = tuck > 0 ? this.tucked(G, tuck) : G;
+      this.legPose[i] = L;
       const P = this.legParts[i];
       this.placeSegment(P.thigh, L.hip, L.knee);
       this.placeSegment(P.shin, L.knee, L.foot);
@@ -374,6 +427,18 @@ export class GiantView {
       prev = b.position;
     });
 
+    this.model.update({
+      root: this.root,
+      hips: this.hips,
+      torso: this.torso,
+      head: this.head,
+      arms: [
+        { side: 1, shoulder: this.armL, elbow: this.elbowL },
+        { side: -1, shoulder: this.armR, elbow: this.elbowR },
+      ],
+      gait: { ...gait, legs: this.legPose },
+      footPitch: [gait.legs[0].planted ? 0 : 0.35, gait.legs[1].planted ? 0 : 0.35],
+    });
     this.updateCape(dt, p);
   }
 

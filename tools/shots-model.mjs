@@ -23,6 +23,7 @@ async function shot(file, query, ticks, { pad = false, lane = 0 } = {}) {
   if (pad) await page.addInitScript(ds4);
   await page.goto(`${URL}?seed=4&step=1&autostart=1&cuts=0&debug=0&time=night&${query}`);
   await page.waitForFunction(() => window.__GAME && window.__GAME.started, null, { timeout: 15000 });
+  await page.waitForFunction(() => !window.__GAME.coverage().cold, null, { timeout: 15000 }); // cold open runs on wall-clock time
   const st = await page.evaluate(([ticks, lane]) => {
     const G = window.__GAME;
     if (ticks) {

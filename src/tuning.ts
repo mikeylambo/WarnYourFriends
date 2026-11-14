@@ -124,6 +124,12 @@ export const TUNING = {
     /** Braid: segment length (m) and how quickly each link follows (s). */
     braidLink: 0.2,
     braidFollow: 0.05,
+    /** Share of the cape's length that is the cream Greek-key hem (Mike's sheet). */
+    capeHemShare: 0.2,
+    /** Meshy model: texture multiplier, so his silhouette holds ≥3:1 against a lit road (§23, silhouette test). */
+    tint: 0.75,
+    /** Meshy model: ink outline thickness around the skinned mesh (m), as the greybox hull. */
+    outline: 0.05,
   },
 
   /** Momentum tiers: v0.2 speeds, v0.3 lane-change times and run cycle. Impact pass: smashes and dodges also feed the tier-up timer (collision.tierFeed). */

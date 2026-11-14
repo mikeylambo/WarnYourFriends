@@ -21,6 +21,7 @@ const views = [
 ];
 const labels = document.getElementById('l')!;
 const cells: { scene: THREE.Scene; cam: THREE.PerspectiveCamera }[] = [];
+const greybox = new URLSearchParams(location.search).get('greybox') === '1';
 for (let tier = 0; tier < 3; tier++) {
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(0xd8d2c4);
@@ -33,6 +34,7 @@ for (let tier = 0; tier < 3; tier++) {
   scene.add(ground);
   const giant = new GiantView();
   for (const o of giant.objects) scene.add(o);
+  if (!greybox) await giant.ready;
   const gait = new Gait();
   const T = TUNING.tiers[tier];
   const speed = T.topSpeed;
