@@ -441,6 +441,7 @@ export class GiantView {
       stepPos: p.stepPos,
       tier: p.tier,
       armsProcedural: (p.pose ?? 0) > 0 || sh > 0 || (p.leap ?? 0) > 0,
+      dt,
       lean: this.lean * (1 - (p.pose ?? 0) * 0.8),
       bank: this.bank,
     });

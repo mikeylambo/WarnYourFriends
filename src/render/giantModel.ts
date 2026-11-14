@@ -4,16 +4,17 @@ import type { GaitFrame, Vec3 } from '../anim/gait';
 import { TUNING } from '../tuning';
 import { PALETTE } from './palette';
 import { rimToonMap } from './toon';
-import runClip from '../assets/giant/run.json';
+import runClips from '../assets/giant/runs.json';
 
 /**
  * The Meshy giant (Mike's character sheet → image edit without the cape → image-to-3D →
  * rigging). A presentation skin over the greybox rig: GiantView still computes every pose
- * (gait IK legs, lean, twist, flex, steady head); the skinned legs and hips follow it, so feel
- * and the pinned feet are untouched. The upper body (spine sway, shoulders, arm pump) plays
- * Meshy's run clip, time-locked to the stride so the arms always swing against the legs, with
- * the tier's lean and arm amplitude on top. The Pose, the Shoulder Check and Leap take the arms
- * back to the procedural pose. Until (or unless) it loads, the greybox shows.
+ * (gait IK, hip height and bound, steady head, flex); the model plays an authored Meshy run clip
+ * per tier (Jog "Run 2", Stride "Lean Forward Sprint", Rampage "Male Head-down Charge"),
+ * crossfaded on tier changes and time-locked to the stride. Feet: while the gait has a foot
+ * planted, that leg blends into IK onto the gait's plant spot, so nothing slides; in swing the
+ * clip's foot arc leads. The Pose, the Shoulder Check and Leap take the arms back to the
+ * procedural pose. Until (or unless) it loads, the greybox shows.
  */
 
 /** What the greybox pose gives this frame (world space). */
@@ -33,6 +34,8 @@ export interface GreyboxPose {
   /** The greybox torso's forward lean and bank (rad), without its stride twist (the clip has its own sway). */
   lean: number;
   bank: number;
+  /** Frame time (s), for the crossfades and plant blends. */
+  dt: number;
   /** Pose, Shoulder Check or Leap: arms follow the procedural pose instead of the clip. */
   armsProcedural: boolean;
 }
@@ -63,9 +66,10 @@ export class GiantModel {
   private readonly face = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI / 2);
   private q = [new THREE.Quaternion(), new THREE.Quaternion(), new THREE.Quaternion(), new THREE.Quaternion()];
   private mixer: THREE.AnimationMixer | null = null;
-  private clipLen = 1;
-  /** Clip time at which its left foot is down; stride phase at the gait's left plant. */
-  private clipLeftPlant = 0;
+  /** One run clip per tier: its action, length, and the clip time at which its left foot is down. */
+  private runs: { action: THREE.AnimationAction; len: number; leftPlant: number; weight: number }[] = [];
+  /** Per model leg (Left, Right): how far the leg is blended onto the gait's planted foot. */
+  private plantW = [0, 0];
   private gaitLeftPhase = 0;
   private leftWasPlanted = false;
   private armBlend = 0;
@@ -132,20 +136,29 @@ export class GiantModel {
     const mid = wp(b('LeftUpLeg')).add(wp(b('RightUpLeg'))).multiplyScalar(0.5);
     this.hipsOffset.copy(wp(b('Hips'))).sub(mid);
 
-    // Meshy's run clip (rotations only): find the moment its left foot is lowest, to lock it to the gait.
-    const clip = THREE.AnimationClip.parse(runClip as unknown as THREE.AnimationClipJSON);
+    // Authored run clips (rotations only), one per tier: find each one's left plant (lowest left foot)
+    // so it can be locked to the gait.
     this.mixer = new THREE.AnimationMixer(scene);
-    this.mixer.clipAction(clip).play();
-    this.clipLen = clip.duration;
-    let low = Infinity;
-    for (let i = 0; i < 48; i++) {
-      const t = (clip.duration * i) / 48;
-      this.mixer.setTime(t);
-      scene.updateMatrixWorld(true);
-      const y = wp(b('LeftFoot')).y;
-      if (y < low) {
-        low = y;
-        this.clipLeftPlant = t;
+    const clipJson = runClips as unknown as Record<string, THREE.AnimationClipJSON>;
+    for (const key of ['jog', 'stride', 'rampage']) {
+      const clip = THREE.AnimationClip.parse(clipJson[key]);
+      const action = this.mixer.clipAction(clip);
+      action.play();
+      this.runs.push({ action, len: clip.duration, leftPlant: 0, weight: 0 });
+    }
+    for (const run of this.runs) {
+      for (const r of this.runs) r.action.setEffectiveWeight(r === run ? 1 : 0);
+      let low = Infinity;
+      for (let i = 0; i < 48; i++) {
+        const t = (run.len * i) / 48;
+        run.action.time = t;
+        this.mixer.update(0);
+        scene.updateMatrixWorld(true);
+        const y = wp(b('LeftFoot')).y;
+        if (y < low) {
+          low = y;
+          run.leftPlant = t;
+        }
       }
     }
     for (const [bone, r] of this.rest) bone.quaternion.copy(r.local);
@@ -202,18 +215,10 @@ export class GiantModel {
     this.setWorld(bone, delta.multiply(restWorld));
   }
 
-  /** Greybox pose relative to the root, applied to a bone's rest world rotation. */
-  private follow(bone: THREE.Bone, obj: THREE.Object3D, rootInv: THREE.Quaternion, rootQ: THREE.Quaternion, amount = 1) {
-    const rel = obj.getWorldQuaternion(new THREE.Quaternion()).premultiply(rootInv);
-    if (amount < 1) rel.slerp(new THREE.Quaternion(), 1 - amount);
-    this.setWorld(bone, rel.premultiply(rootQ).multiply(this.rest.get(bone)!.world));
-  }
-
   update(g: GreyboxPose) {
     if (!this.loaded) return;
     const b = (n: string) => this.bones.get(n)!;
     const rootQ = g.root.getWorldQuaternion(new THREE.Quaternion());
-    const rootInv = rootQ.clone().invert();
     const right = new THREE.Vector3(0, 0, 1).applyQuaternion(rootQ);
     this.group.position.copy(g.root.getWorldPosition(new THREE.Vector3()));
     this.group.quaternion.copy(rootQ).multiply(this.face);
@@ -221,70 +226,60 @@ export class GiantModel {
 
     const L = g.gait.legs;
     const M = TUNING.giantModel;
-    // Lock the clip to the stride: the gait's left plant lines up with the clip's.
+    // Lock the clips to the stride: the gait's left plant lines up with each clip's.
     const leftIdx = Math.sign(this.p[1].copy(v(L[0].hip)).sub(this.group.position).dot(right)) < 0 ? 0 : 1;
     const leftPlanted = L[leftIdx].planted;
     if (leftPlanted && !this.leftWasPlanted) this.gaitLeftPhase = ((g.stepPos % 2) + 2) % 2;
     this.leftWasPlanted = leftPlanted;
     const phase = ((((g.stepPos - this.gaitLeftPhase) % 2) + 2) % 2) / 2;
-    this.mixer!.setTime(this.clipLeftPlant + phase * this.clipLen);
+    const fade = Math.min(1, g.dt / M.clipFade);
+    this.runs.forEach((r, i) => {
+      r.weight += ((i === g.tier ? 1 : 0) - r.weight) * fade;
+      r.action.setEffectiveWeight(r.weight);
+      r.action.time = (r.leftPlant + phase * r.len) % r.len;
+    });
+    this.mixer!.update(0);
     this.armBlend += ((g.armsProcedural ? 1 : 0) - this.armBlend) * 0.25;
 
-    // Hips: at the gait's hip midpoint, turned like the greybox pelvis.
+    // Hips: at the gait's hip height (bound, plant drop), turned by the clip, banked into lane changes.
     const mid = v(L[0].hip).add(v(L[1].hip, this.p[0])).multiplyScalar(0.5);
-    const hipsRel = g.hips.getWorldQuaternion(new THREE.Quaternion()).premultiply(rootInv);
-    const hips = b('Hips');
-    // The clip's own pelvis motion (relative to rest), kept on top of the greybox pelvis: the clip's
-    // spine is authored against it, so dropping it makes the torso rock.
-    const clipHips = this.rest.get(hips)!.local.clone().invert().multiply(hips.quaternion);
     mid.y += M.hipRaise;
-    hips.position.copy(hips.parent!.worldToLocal(mid.clone().add(this.hipsOffset.clone().applyQuaternion(rootQ).applyQuaternion(hipsRel))));
-    this.follow(hips, g.hips, rootInv, rootQ);
-    this.setWorld(hips, hips.getWorldQuaternion(new THREE.Quaternion()).multiply(clipHips));
-    // Spine: the clip's sway, plus the greybox torso's lean, bank and twist relative to the pelvis.
-    // The chest holds the run's lean: the clip's chest pitches with every arm swing (and its upper back
-    // sits ~20° more upright than its lower back), which read as him standing up mid-stride. Measure the
-    // chest's forward pitch and rotate the whole upper body (at the lower spine) so it lands on the lean;
-    // the clip keeps its sway, roll and arms. Bank on top.
-    // Meshy names the spine top-down: Spine02 sits on the hips, Spine is the chest (neck and shoulders hang off it).
-    const spine = b('Spine02');
-    const chest = b('Spine');
-    spine.updateMatrixWorld(true);
-    const up = new THREE.Vector3(0, 1, 0).applyQuaternion(chest.getWorldQuaternion(new THREE.Quaternion())).applyQuaternion(rootInv);
-    const chestPitch = Math.atan2(up.x, up.y); // + = leaning forward (+X)
-    const want = g.lean * M.clipLean;
-    const delta = new THREE.Quaternion().setFromEuler(new THREE.Euler(g.bank, 0, -(want - chestPitch), 'XYZ'));
-    this.setWorld(spine, delta.premultiply(rootQ).multiply(rootInv).multiply(spine.getWorldQuaternion(new THREE.Quaternion())));
-    this.follow(b('Head'), g.head, rootInv, rootQ);
-    // Clip arms, swing scaled per tier (smaller at Jog, bigger at Rampage).
-    const amp = M.armAmp[g.tier];
-    for (const c of this.arms) for (const bone of [c.upper, c.lower]) {
-      const r = this.rest.get(bone)!;
-      bone.quaternion.copy(r.local.clone().slerp(bone.quaternion, amp));
-    }
-    b('Spine02').updateMatrixWorld(true);
+    const hips = b('Hips');
+    hips.position.copy(hips.parent!.worldToLocal(mid.clone().add(this.hipsOffset.clone().applyQuaternion(rootQ))));
+    hips.updateMatrixWorld(true);
+    const bank = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0).applyQuaternion(rootQ), g.bank);
+    this.setWorld(hips, hips.getWorldQuaternion(new THREE.Quaternion()).premultiply(bank));
 
-    // Legs: two-bone IK from his own hip to the gait's foot (so planted feet stay exactly where the
-    // gait put them), knee bending forward; foot flat, toes down in swing.
+    // Legs: two-bone IK from his hip to a foot target. Planted (by the gait), the target is the gait's
+    // plant spot and the foot lies flat, so nothing slides; in swing it's the clip's own foot arc.
+    // Knees bend the way the clip bends them.
     const fwd = new THREE.Vector3(1, 0, 0).applyQuaternion(rootQ);
-    for (const c of this.legs) {
+    const plantFade = Math.min(1, g.dt / M.plantBlend);
+    this.legs.forEach((c, li) => {
       const gi = Math.sign(this.p[1].copy(v(L[0].hip)).sub(this.group.position).dot(right)) === c.side ? 0 : 1;
       const leg = L[gi];
+      this.plantW[li] += ((leg.planted ? 1 : 0) - this.plantW[li]) * plantFade;
+      const w = this.plantW[li];
       const hip = c.upper.getWorldPosition(new THREE.Vector3());
-      const foot = v(leg.foot);
+      const clipKnee = c.lower.getWorldPosition(new THREE.Vector3());
+      const clipFoot = c.end.getWorldPosition(new THREE.Vector3());
+      clipFoot.y = Math.max(clipFoot.y, M.ankleHeight);
+      const clipFootQ = c.end.getWorldQuaternion(new THREE.Quaternion());
+      const target = clipFoot.lerp(v(leg.foot).setY(Math.max(leg.foot.y, M.ankleHeight)), w);
       const a = this.segLen.get(c.upper)!, bl = this.segLen.get(c.lower)!;
-      const toFoot = foot.clone().sub(hip);
+      const toFoot = target.clone().sub(hip);
       const d = Math.min(toFoot.length(), (a + bl) * 0.999);
       const u = toFoot.normalize();
       const cosA = (a * a + d * d - bl * bl) / (2 * a * d);
       const sinA = Math.sqrt(Math.max(0, 1 - cosA * cosA));
-      const n = fwd.clone().addScaledVector(u, -fwd.dot(u)).normalize();
+      const pole = clipKnee.sub(hip).lerp(fwd, 0.3);
+      const n = pole.addScaledVector(u, -pole.dot(u)).normalize();
       const knee = hip.clone().addScaledVector(u, a * cosA).addScaledVector(n, a * sinA);
       this.aim(c.upper, knee.clone().sub(hip));
       this.aim(c.lower, hip.addScaledVector(u, d).sub(knee));
-      const pitch = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), -g.footPitch[gi]);
-      this.setWorld(c.end, pitch.premultiply(rootQ).multiply(this.rest.get(c.end)!.world));
-    }
+      const flat = new THREE.Quaternion().copy(rootQ).multiply(this.rest.get(c.end)!.world);
+      this.setWorld(c.end, clipFootQ.slerp(flat, w));
+    });
     // Pose / Shoulder Check / Leap: arms along the greybox arm (upper arm to the elbow, forearm to the fist).
     if (this.armBlend < 0.02) return;
     for (const c of this.arms) {

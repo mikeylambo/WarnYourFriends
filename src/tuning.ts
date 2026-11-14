@@ -126,7 +126,12 @@ export const TUNING = {
     braidFollow: 0.05,
     /** Share of the cape's length that is the cream Greek-key hem (Mike's sheet). */
     capeHemShare: 0.2,
-    /** Meshy model, upper body on Meshy's run clip: share of the greybox lean added on top of the clip's own, and the arm swing per tier (1 = the clip's). */
+    /** Meshy model on authored run clips (Mike: the hybrid "still reads as jank"): crossfade between tiers' clips (s), and how fast a leg blends onto / off the gait's planted foot (s). */
+    clipFade: 0.3,
+    plantBlend: 0.06,
+    /** Ankle bone height above the road (m): feet never sink into it. */
+    ankleHeight: 0.12,
+    /** Unused since the authored clips (kept for the greybox-driven arm fallback). */
     clipLean: 1,
     /** His hips ride this much above the gait's (m): straighter legs on a realistic body; the IK still lands the feet. */
     hipRaise: 0.12,
