@@ -30,6 +30,7 @@ src/broadcast/       headline generator (§21) + headlines.json word bank (pure 
 src/audio.ts         Web Audio, music/sfx/voice buses (synth placeholders)
 src/input.ts         KBM, gamepad, touch → SimInput
 src/glyphs.ts        button labels per device family (PS4: L1/R1/L2/✕), via the shell's glyph registry
+src/tips.ts          onboarding producer notes (each once, first time it matters)
 src/main.ts          bootstrap: WebGL check, then loads game.ts; boot errors shown on screen
 src/game.ts          fixed-step loop, event presentation, window.__GAME
 tools/soak.ts        headless N-seed soak: sim + gait + camera invariants (cadence, foot slide, screen-up, cuts, framing)
@@ -41,6 +42,7 @@ tools/modelsheet.mjs    giant turnaround (side / Chase High / top down × tiers)
 tools/shots-model.mjs   model pass evidence: tiers in game, cape on a lane change, PS4 HUD
 tools/shots-title.mjs   title screen (desktop, phone, glide)
 tools/filmstrip.mjs     slow-motion strip of an impact (smash-heavy, bounce, bounce-immovable)
+tools/shots-onboarding.mjs  producer tip, live budget, recap and meeting
 ```
 
 ## Commands

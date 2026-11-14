@@ -7,10 +7,14 @@ export interface Settings {
   cameraCuts: boolean;
   /** Phase 0c LIVE TIME: lighting follows the local clock. Off = always night. */
   liveTime: boolean;
+  /** Onboarding: one-line producer notes the first time each thing matters. */
+  producerTips: boolean;
+  /** Set when the player turns the debug overlay on themselves (older saves defaulted it on). */
+  debugChosen?: boolean;
 }
 
 const KEY = 'wyf.settings.v1';
-const DEFAULTS: Settings = { reducedMotion: false, reduceFlashes: false, debug: true, cameraCuts: true, liveTime: false };
+const DEFAULTS: Settings = { reducedMotion: false, reduceFlashes: false, debug: false, cameraCuts: true, liveTime: false, producerTips: true };
 
 export function loadSettings(): Settings {
   try {
@@ -20,9 +24,12 @@ export function loadSettings(): Settings {
     return {
       reducedMotion: typeof parsed.reducedMotion === 'boolean' ? parsed.reducedMotion : DEFAULTS.reducedMotion,
       reduceFlashes: typeof parsed.reduceFlashes === 'boolean' ? parsed.reduceFlashes : DEFAULTS.reduceFlashes,
-      debug: typeof parsed.debug === 'boolean' ? parsed.debug : DEFAULTS.debug,
+      // The overlay used to default on for everyone: keep it only if the player chose it.
+      debug: parsed.debugChosen === true && parsed.debug === true,
+      debugChosen: parsed.debugChosen === true,
       cameraCuts: typeof parsed.cameraCuts === 'boolean' ? parsed.cameraCuts : DEFAULTS.cameraCuts,
       liveTime: typeof parsed.liveTime === 'boolean' ? parsed.liveTime : DEFAULTS.liveTime,
+      producerTips: typeof parsed.producerTips === 'boolean' ? parsed.producerTips : DEFAULTS.producerTips,
     };
   } catch {
     console.warn('Settings were unreadable and have been reset to defaults.');

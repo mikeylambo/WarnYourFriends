@@ -21,6 +21,7 @@ import { Gait } from './anim/gait';
 import { Audio } from './audio';
 import { Input } from './input';
 import { registerGlyphs, padFamily, type GlyphAction } from './glyphs';
+import { Tips } from './tips';
 import coverUrl from './assets/title-cover.webp';
 import { readFlags } from './debug';
 import { loadSettings, saveSettings } from './settings';
@@ -64,6 +65,8 @@ const abilKey = abilEl.querySelector('.key') as HTMLElement;
 const abilCd = abilEl.querySelector('.cd i') as HTMLElement;
 const abilBtn = $<HTMLButtonElement>('btn-ability');
 const controlsEl = $('controls');
+const budgetEl = $('budget');
+const tips = new Tips($('tip'), TUNING.tips.showTime, TUNING.tips.minGap);
 
 // --- Renderer ---------------------------------------------------------------
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
@@ -167,6 +170,7 @@ function targetAt(s: number, d: number): CameraTarget {
 }
 
 function newRun(seed: number, segment = 0, upgrades: UpgradeId[] = []) {
+  tips.clear();
   if (highway) scene.remove(highway.group);
   if (giant) for (const o of giant.objects) scene.remove(o);
   if (cruisers) scene.remove(cruisers.group);
@@ -271,6 +275,20 @@ function showCamTag() {
 function hideRecap() {
   recapEl.hidden = true;
 }
+/** Onboarding producer notes: what triggers each one (events trigger the rest). */
+function updateTips(dt: number) {
+  const T = TUNING.tips;
+  const on = settings.producerTips && !attract && started && sim.live && !document.documentElement.classList.contains('coldopen');
+  if (on) {
+    const g = sim.giant;
+    if (g.tier === 0 && sim.time > T.gearAfter) tips.want('gear');
+    if (sim.track.propsBetween(g.s + 15, g.s + T.dozerAhead).some((p) => p.kind === 'dozer')) tips.want('dozer');
+    if (sim.show.ratings < T.losingBelow && sim.time > T.losingAfter) tips.want('losing');
+    if (run && sim.time > T.budgetAfter) tips.want('budget');
+  }
+  tips.update(dt, on);
+}
+
 /** What an ability just did, beside its chip: the payoff has to read even when the chopper is far out. */
 const abilPop = $('abilpop');
 let abilPopT = 0;
@@ -366,13 +384,14 @@ function showMeeting() {
   recapEl.innerHTML = `<div class="card meeting">
     <div class="kicker">PRODUCER'S MEETING · BEFORE SEGMENT ${r.segment + 2} OF ${TUNING.run.segments}</div>
     <div class="purse">Budget <b>${r.purse.toLocaleString()}</b></div>
+    <p class="how">Viewers × gear, banked every second, pays for these. Spending never lowers your score.</p>
     <div class="pitches">${offers
       .map((id) => {
         const u = TUNING.upgrades[id];
         const swap = u.kind === 'ability' && held ? `<small class="swap">Replaces ${esc(TUNING.upgrades[held].label)}</small>` : '';
         return `<button class="pitch ${u.kind}" data-id="${id}" ${r.canAfford(id) ? '' : 'disabled'}>
           <span class="tag">${u.kind === 'ability' ? 'ABILITY' : 'PASSIVE'}</span>
-          <b>${esc(u.label)}</b><span class="blurb">${esc(u.blurb)}</span>${swap}<span class="price">${u.price.toLocaleString()}</span></button>`;
+          <b>${esc(u.label)}</b><span class="blurb">${esc(u.blurb)}</span>${swap}<span class="price">${u.price.toLocaleString()}</span>${r.canAfford(id) ? '' : `<small class="need">Need ${(u.price - r.purse).toLocaleString()} more</small>`}</button>`;
       })
       .join('')}</div>
     <div class="row"><button class="go alt" id="skip">Skip</button></div>
@@ -407,7 +426,7 @@ function showRecap() {
   const segLabel = run ? ` · SEGMENT ${run.segment + 1} OF ${N}` : '';
   const runStatsHtml = run && run.phase !== 'meeting'
     ? `<span>Run score <b>${Math.round(run.earned).toLocaleString()}</b></span><span>Segments cleared <b>${run.results.filter((x) => x.cleared).length} / ${N}</b></span>`
-    : run ? `<span>Run so far <b>${Math.round(run.earned).toLocaleString()}</b></span><span>Budget <b>${run.purse.toLocaleString()}</b></span>` : '';
+    : run ? `<span>Added to budget <b>+${Math.round(sh.banked).toLocaleString()}</b></span><span>Budget <b>${run.purse.toLocaleString()}</b></span><span class="how">Viewers × gear, banked every second. Spend it at the meeting.</span>` : '';
   const buttons = run?.phase === 'meeting'
     ? `<button class="go" id="meet">Producer's Meeting</button>`
     : run
@@ -525,6 +544,7 @@ function present(e: SimEvent) {
       break;
     }
     case 'bounce': {
+      tips.want(e.cls === 'immovable' ? 'dozer' : 'bounce');
       const k = I.bounce;
       audio.bounce();
       giant.onBounce();
@@ -554,6 +574,7 @@ function present(e: SimEvent) {
       audio.whoosh();
       break;
     case 'dodge': {
+      tips.want('dodge');
       runStats.nearMiss++;
       audio.whoosh();
       rig.jolt(I.dodge.shake, 0.1);
@@ -579,6 +600,7 @@ function present(e: SimEvent) {
       haptic(110, 0.6);
       break;
     case 'exitOpen':
+      tips.want('exit');
       highway.rebuild([e.segment - 1, e.segment, e.segment + 1]);
       break;
     case 'busted':
@@ -665,6 +687,7 @@ function present(e: SimEvent) {
       audio.capeWhip(0.5 + g.tier * 0.25);
       break;
     case 'tierUp': {
+      tips.want(e.tier === 1 ? 'stride' : 'rampage');
       rig.tierUpPulse();
       audio.tierUp(e.tier);
       giant.onTierUp();
@@ -882,6 +905,7 @@ app = await createGameApp({
         { id: 'wyf-cuts', label: `Camera Cuts: ${onOff(settings.cameraCuts)}`, description: 'Off holds the Chase High shot' },
         { id: 'wyf-livetime', label: `LIVE TIME: ${onOff(settings.liveTime)}`, description: 'Lighting follows your clock; off is always night' },
         { id: 'wyf-flashes', label: `Reduce Flashes: ${onOff(settings.reduceFlashes)}` },
+        { id: 'wyf-tips', label: `Producer Tips: ${onOff(settings.producerTips)}`, description: 'Turning them back on replays them' },
         { id: 'wyf-debug', label: `Debug Overlay: ${onOff(settings.debug)}` },
       ],
       handle: (id) => {
@@ -891,8 +915,12 @@ app = await createGameApp({
           forcedLook = null;
           applyLook();
         } else if (id === 'wyf-flashes') settings.reduceFlashes = lighting.reduceFlashes = cruisers.reduceFlashes = units.reduceFlashes = !settings.reduceFlashes;
-        else if (id === 'wyf-debug') {
+        else if (id === 'wyf-tips') {
+          settings.producerTips = !settings.producerTips;
+          if (settings.producerTips) tips.reset();
+        } else if (id === 'wyf-debug') {
           settings.debug = !settings.debug;
+          settings.debugChosen = true;
           applyDebug();
         } else return false;
         saveSettings(settings);
@@ -1246,6 +1274,14 @@ function updateHud(dt: number) {
   ratingsBar.style.width = `${sh.ratings.toFixed(1)}%`;
   for (let k = 1; k <= 3; k++) ratingsEl.classList.toggle(`t${k}`, sh.tier === k);
   ratingsEl.classList.toggle('danger', sh.ratings < 8 && sim.live);
+  // Full Broadcast: the budget ticks up live (what's banked so far plus this segment), with the gear's multiplier.
+  budgetEl.hidden = !run || attract;
+  if (run && !attract) {
+    // While live, this segment's banked score isn't in the purse yet; once it ends, it is.
+    budgetEl.querySelector('b')!.textContent = Math.floor(run.purse + (run.phase === 'live' ? sh.banked : 0)).toLocaleString();
+    budgetEl.querySelector('i')!.textContent = `×${TUNING.show.bankMult[g.tier]}`;
+  }
+  updateTips(dt);
   const falling = sim.live && sh.ratings < lastRatings - 1e-6;
   trendEl.textContent = falling ? '▼' : '';
   lastRatings = sh.ratings;

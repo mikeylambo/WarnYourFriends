@@ -633,6 +633,21 @@ export const TUNING = {
     sirenHz: 2.2,
   },
 
+  /** Onboarding producer notes (src/tips.ts): on screen this long, at least this far apart (s); thresholds. */
+  tips: {
+    showTime: 4.5,
+    minGap: 3,
+    /** "He shifts up a gear" if he's still at Jog this far in (s). */
+    gearAfter: 4,
+    /** Warn about a bulldozer this far ahead (m). */
+    dozerAhead: 70,
+    /** "We're losing them" below this Ratings, after this long on air. */
+    losingBelow: 12,
+    losingAfter: 10,
+    /** Budget note this far into the first Full Broadcast segment (s). */
+    budgetAfter: 8,
+  },
+
   /** Title screen chopper shot (Mike's visual direction): metres relative to the giant's travel. */
   title: {
     back: 14,
