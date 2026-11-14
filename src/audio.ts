@@ -184,6 +184,12 @@ export class Audio {
     this.noise(t, 0.35, 'bandpass', 400, 1.2, 0.4, 1800);
     this.tone(t, 0.25, 70, 140, 0.4);
   }
+  /** Impact pass: a dodge, air ripping past (rising then falling, like a car passing close). */
+  whoosh() {
+    if (!this.ready) return;
+    const t = this.ctx!.currentTime;
+    this.noise(t, 0.28, 'bandpass', 700, 1.6, 0.45, 2600);
+  }
   /** Leap landing: the biggest thump in the game. */
   land() {
     if (!this.ready) return;

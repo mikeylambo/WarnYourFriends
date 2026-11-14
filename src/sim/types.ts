@@ -2,7 +2,7 @@ import type { AbilityId, MassClass } from '../tuning';
 
 export type Material = 'wood' | 'glass' | 'metal' | 'fruit' | 'concrete' | 'paper';
 
-export type PropKind = 'sawhorse' | 'cart' | 'fence' | 'scooter' | 'car' | 'van' | 'barricade' | 'cruiser' | 'compact';
+export type PropKind = 'sawhorse' | 'cart' | 'fence' | 'scooter' | 'car' | 'van' | 'barricade' | 'dozer' | 'cruiser' | 'compact';
 
 /** A prop in a lane, in track space: `s` along the road, `d` across it from the left edge. */
 export interface Prop {
@@ -19,6 +19,8 @@ export interface Prop {
   h: number;
   variant: number;
   alive: boolean;
+  /** Impact pass: already judged as passed (dodge or not). */
+  judged?: boolean;
   /** Segment index it belongs to (for streaming). */
   segment: number;
 }
@@ -115,6 +117,8 @@ export type SimEvent =
   /** A cruiser swerves into the giant's lane. */
   | { type: 'ram'; id: number; hit: boolean }
   | { type: 'nearMiss'; id: number }
+  /** Passed close by something that would have bounced him (impact pass). */
+  | { type: 'dodge'; propId: number; s: number; d: number; gap: number }
   | { type: 'lostTrack'; id: number; kind: UnitKind }
   | { type: 'spiked'; id: number }
   | { type: 'ratings'; delta: number; cause: GainType; ratings: number }

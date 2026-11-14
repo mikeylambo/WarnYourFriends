@@ -77,6 +77,9 @@ export class GiantView {
   private shoulderAnim = 0;
   private tierFlare = 0;
   private stumbleWobble = 0;
+  private smashKick = 0;
+  private smashSide = 1;
+  private recoil = 0;
   private time = 0;
   private tmp = new THREE.Vector3();
 
@@ -239,6 +242,12 @@ export class GiantView {
   }
   onBounce() {
     this.stumbleWobble = 1;
+    this.recoil = 1;
+  }
+  /** Impact pass: he drives his shoulder into what he smashes (side: +1 = it was on his right). */
+  onSmash(heavy: boolean, side: number) {
+    this.smashKick = heavy ? 1 : 0.6;
+    this.smashSide = side;
   }
 
   /** A leg pulled up under the hip (knee forward and up, foot under the seat) by `t` (0..1). */
@@ -294,7 +303,12 @@ export class GiantView {
     // Torso twist with the stride (opposite shoulder drives forward).
     const ph = p.stepPos * Math.PI;
     const twist = Math.sin(ph) * 0.14 * (0.6 + p.tier * 0.35); // shoulders roll against the hips
-    this.torso.rotation.set(this.bank + wob, twist + (sh > 0 ? -0.5 * sh : 0), -this.lean);
+    // Smash: a quick shoulder drive into the hit; bounce: thrown back upright.
+    this.smashKick = Math.max(0, this.smashKick - dt / 0.22);
+    this.recoil = Math.max(0, this.recoil - dt / 0.4);
+    const kick = Math.sin(Math.PI * this.smashKick) * this.smashKick;
+    const rec = Math.sin(Math.PI * Math.min(1, this.recoil * 1.2)) * this.recoil;
+    this.torso.rotation.set(this.bank + wob + kick * 0.3 * this.smashSide, twist + (sh > 0 ? -0.5 * sh : 0) - kick * 0.35 * this.smashSide, -this.lean - kick * 0.18 + rec * 0.55);
     this.hips.rotation.set(this.bank * 0.4, -twist * 0.5, -this.lean * 0.2);
 
     // Head steady: counter the lean and most of the plant drop so the eyes stay level.

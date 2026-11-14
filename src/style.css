@@ -330,3 +330,10 @@ html.touch #abil { display: none; }
 #abilpop.show { opacity: 1; transform: none; }
 #abilpop.dud { background: rgba(10, 8, 20, 0.8); color: var(--bone); }
 html.attract #abilpop { display: none; }
+
+/* Impact pass: Ratings gains pop under the meter as they land. */
+#gainpop { position: absolute; top: calc(80px + env(safe-area-inset-top)); left: 10px; padding: 3px 8px; background: #f2cc8f; color: #140824; font: 800 13px/1.2 ui-sans-serif, system-ui, sans-serif; letter-spacing: 0.06em; text-transform: uppercase; pointer-events: none; opacity: 0; transform: translateY(-4px) scale(0.9); transform-origin: left center; transition: opacity 0.12s, transform 0.12s; }
+#gainpop.show { opacity: 1; transform: none; animation: gainpunch 0.18s ease-out; }
+@keyframes gainpunch { 0% { transform: scale(1.25); } 100% { transform: none; } }
+html.attract #gainpop { display: none; }
+@media (prefers-reduced-motion: reduce) { #gainpop.show { animation: none; } }

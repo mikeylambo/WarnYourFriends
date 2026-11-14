@@ -126,7 +126,7 @@ export const TUNING = {
     braidFollow: 0.05,
   },
 
-  /** Momentum tiers: v0.2 speeds and timings, v0.3 lane-change times and run cycle. */
+  /** Momentum tiers: v0.2 speeds, v0.3 lane-change times and run cycle. Impact pass: smashes and dodges also feed the tier-up timer (collision.tierFeed). */
   tiers: [
     // Pose pass (Mike's reference stills + clip): deep lean, legs cycling under a gliding torso
     // (little bob), knee drive and heel kick, a big exaggerated arm pump (Mike: "exaggerated a bit"). Speeds, cadence
@@ -183,16 +183,45 @@ export const TUNING = {
     bounceSpeedKeep: 0.55,
     /** Speed lost on a smash, by class. Smash "must never stall momentum" (§10). */
     smashSpeedLoss: { light: 0, medium: 0.02, heavy: 0.06, immovable: 0 } as Record<MassClass, number>,
+    /** Impact pass: passing within this gap (m) of something that would have bounced him is a dodge (scores as a near-miss). */
+    dodgeGap: 1.2,
+    /** Impact pass: seconds added to the tier-up timer per smash / dodge, so playing rough is the fast way to Rampage. */
+    tierFeed: {} as Partial<Record<'medium' | 'heavy' | 'nearMiss', number>>, // off until Mike's call; { medium: 0.5, heavy: 1.0, nearMiss: 1.0 } tested: needs a Head-On framing fix first
   },
 
   /** §10 impact scale (hitstop in 60 Hz frames, shake in px, haptic ms). */
   impact: {
+    // Impact pass: every hit at least 3× the 2px footfall pulse (Medium was 2px, the same as a step).
     light: { hitstop: 0, shake: 0, flashFrames: 0, haptic: 0, hapticStrength: 0 },
-    medium: { hitstop: 3, shake: 2, flashFrames: 0, haptic: 60, hapticStrength: 0.35 },
-    heavy: { hitstop: 6, shake: 5, flashFrames: 1, haptic: 120, hapticStrength: 0.9 },
-    landmark: { hitstop: 10, shake: 8, flashFrames: 2, haptic: 250, hapticStrength: 1 },
-    bounce: { hitstop: 2, shake: 3, flashFrames: 0, haptic: 90, hapticStrength: 0.5 },
+    medium: { hitstop: 4, shake: 6, flashFrames: 0, haptic: 70, hapticStrength: 0.45 },
+    heavy: { hitstop: 7, shake: 11, flashFrames: 1, haptic: 140, hapticStrength: 0.95 },
+    landmark: { hitstop: 10, shake: 14, flashFrames: 2, haptic: 250, hapticStrength: 1 },
+    bounce: { hitstop: 7, shake: 10, flashFrames: 0, haptic: 160, hapticStrength: 0.8 },
+    /** A dodge: a small kick and a buzz, no freeze (it must not interrupt the line he's taking). */
+    dodge: { hitstop: 0, shake: 3, flashFrames: 0, haptic: 40, hapticStrength: 0.25 },
+    /** Ratings pops under the meter: gains this close together add up into one pop (s); pop shows this long. */
+    popMerge: 0.6,
+    popTime: 1.3,
     wall: { hitstop: 0, shake: 2, flashFrames: 0, haptic: 50, hapticStrength: 0.3 },
+    /**
+     * Impact pass (Mike: hits "don't have much impact"): a smashed body is swatted off his line
+     * instead of vanishing. Speeds in m/s: forward is a share of his speed (under 1, so he passes it),
+     * lateral flings it out of his lane, up lofts it; spin in rad/s.
+     */
+    wreck: {
+      medium: { forward: 0.55, lateral: [9, 13] as [number, number], up: [7, 10] as [number, number], spin: 9 },
+      heavy: { forward: 0.5, lateral: [6, 9] as [number, number], up: [5, 7] as [number, number], spin: 6 },
+      gravity: 26,
+      bounce: 0.35,
+      /** Ground friction (1/s) on speed and spin. */
+      friction: 3.2,
+      /** Squash on impact (height scale): it reads as crumpled. */
+      crumple: 0.72,
+      /** Wrecks stay this long (s) unless culled behind; at most this many at once. */
+      life: 10,
+      max: 24,
+      cullDistance: 160,
+    },
   },
 
   /** v0.3 procedural highway. */
@@ -246,6 +275,12 @@ export const TUNING = {
     /** Weight of Medium vs Heavy when filling a lane slot. */
     mediumWeight: 0.55,
     heavyWeight: 0.45,
+    /**
+     * Impact pass: chance a blocked lane slot is a dozer (immovable: bounces him at any tier),
+     * from this far in. Before it, Rampage made every obstacle confetti, so dodging meant nothing.
+     */
+    immovableChance: 0, // off until Mike's call (option B); 0.2 tested: soak camera shortfall at Head-On to fix first
+    immovableFrom: 250,
     /** Max fraction of lanes a row may block (always leaves ≥1 lane open). */
     maxBlockedShare: 0.67,
   },
@@ -409,6 +444,8 @@ export const TUNING = {
     max: 100,
     /** §12 gains. Sustained Rampage is per second. */
     gain: { medium: 2, heavy: 5, nearMiss: 3, lostTrack: 6, rampage: 1 },
+    /** HUD: viewers shown per Ratings point ("370K WATCHING" at the starting 20). */
+    viewersPerPoint: 18_500,
     /** §12 decay: after 3s with no gain; segment 1 rate (2.0/2.75/3.5/4.25/5.0 by segment). */
     decayAfter: 3,
     decayRate: [2.0, 2.75, 3.5, 4.25, 5.0],

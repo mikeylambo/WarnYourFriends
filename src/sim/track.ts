@@ -50,7 +50,7 @@ interface PropDef {
   variants: number;
 }
 
-/** Lane props: Medium and Heavy only (v0.3). */
+/** Lane props: Medium and Heavy (v0.3), plus the immovable dozer (impact pass). */
 export const PROP_DEFS: Record<PropKind, PropDef> = {
   sawhorse: { cls: 'medium', mat: 'wood', hl: 0.3, hw: 1.4, h: 1.1, variants: 2 },
   cart: { cls: 'medium', mat: 'fruit', hl: 0.9, hw: 0.6, h: 1.3, variants: 3 },
@@ -59,6 +59,8 @@ export const PROP_DEFS: Record<PropKind, PropDef> = {
   car: { cls: 'heavy', mat: 'metal', hl: 2.2, hw: 0.95, h: 1.5, variants: 5 },
   van: { cls: 'heavy', mat: 'metal', hl: 2.7, hw: 1.1, h: 2.3, variants: 3 },
   barricade: { cls: 'heavy', mat: 'concrete', hl: 0.35, hw: 1.8, h: 0.95, variants: 1 },
+  // Impact pass: the one lane prop nothing smashes (bounces him at any tier). Leap clears it.
+  dozer: { cls: 'immovable', mat: 'metal', hl: 2.3, hw: 1.35, h: 2.4, variants: 1 },
   // Phase 2 police units (never placed as lane props; pursuit spawns them).
   cruiser: { cls: 'heavy', mat: 'metal', hl: 2.4, hw: 0.98, h: 1.7, variants: 1 },
   compact: { cls: 'medium', mat: 'metal', hl: 1.8, hw: 0.85, h: 1.4, variants: 1 },
@@ -298,10 +300,14 @@ export class Track {
         const j = rng.int(0, i);
         [order[i], order[j]] = [order[j], order[i]];
       }
+      let dozers = 0;
       for (const lane of order.slice(0, k)) {
         const mw = TUNING.zones.mediumWeight[seg.zone];
         const heavy = rng.next() >= mw;
-        const kind = rng.pick(heavy ? HEAVY : MEDIUM);
+        // One immovable per row at most, never in the opening stretch.
+        const immovable = dozers === 0 && P.immovableChance > 0 && rowS >= P.immovableFrom && rng.chance(P.immovableChance);
+        if (immovable) dozers++;
+        const kind: PropKind = immovable ? 'dozer' : rng.pick(heavy ? HEAVY : MEDIUM);
         const def = PROP_DEFS[kind];
         this.props.push({
           id: this.propId++,

@@ -169,6 +169,7 @@ export class Sim {
     this.advance(dt);
     this.stepLateral(dt);
     this.collide();
+    this.judgePasses();
     const seg = this.track.segmentAt(this.giant.s);
     if (seg.index !== segBefore && seg.kind === 'merge') this.emit({ type: 'merge', from: seg.lanes0, to: seg.lanes1, s: seg.s0 });
     if (seg.index !== segBefore && seg.zoneStart) this.emit({ type: 'zone', zone: seg.zone, name: seg.zoneName });
@@ -214,6 +215,28 @@ export class Sim {
   /** §12 gain, with "outnumbered" applied. */
   award(type: GainType) {
     this.show.gain(type, this.time, this.pursuit.chasing >= TUNING.show.outnumberedAt, this.events);
+    // Impact pass: smashing and dodging drive him up the gears faster than just running.
+    const feed = (TUNING.collision.tierFeed as Partial<Record<GainType, number>>)[type];
+    if (feed && this.giant.tier < TUNING.tiers.length - 1) this.giant.tierTimer += feed;
+  }
+
+  /**
+   * Impact pass: a dodge is passing close by something that would have bounced him at his
+   * current tier, without touching it. Scores as a near-miss.
+   */
+  private judgePasses() {
+    const g = this.giant;
+    const r = TUNING.giant.radius;
+    const rank = this.smashRank();
+    for (const p of this.track.propsBetween(g.s - r - 12, g.s)) {
+      if (!p.alive || p.judged || p.s + p.hl > g.s - r) continue;
+      p.judged = true;
+      if (CLASS_RANK[p.cls] <= rank || g.air > 0) continue;
+      const gap = Math.abs(p.d - g.d) - p.hw - r;
+      if (gap < 0 || gap > TUNING.collision.dodgeGap) continue;
+      this.emit({ type: 'dodge', propId: p.id, s: p.s, d: p.d, gap });
+      this.award('nearMiss');
+    }
   }
 
   /** Another unit is already winding up (one tell at a time). */
@@ -509,7 +532,7 @@ export class Sim {
     const myC = this.track.laneCenter(g.lane);
     const free = (p: Prop, c: number) => !this.track.propsBetween(p.s - p.hl - 3, p.s + p.hl + 3).some((q) => q !== p && Math.abs(q.d - c) < q.hw + p.hw + 0.4);
     // Nearest lanes first, so a car next to him can move out before one in his lane moves in beside it.
-    const props = this.track.propsBetween(g.s, g.s + A.reach).filter((p) => p.alive && Math.abs(p.d - myC) <= W * A.lanesEitherSide + p.hw);
+    const props = this.track.propsBetween(g.s, g.s + A.reach).filter((p) => p.alive && p.cls !== 'immovable' && Math.abs(p.d - myC) <= W * A.lanesEitherSide + p.hw);
     props.sort((a, b) => Math.abs(b.d - myC) - Math.abs(a.d - myC));
     for (const p of props) {
       const lanes = this.track.lanesAt(p.s);
@@ -677,6 +700,7 @@ export class Sim {
       const moving = unit === 'cruiser' || unit === 'rolling';
       if (!moving && g.s < p.s) g.s = Math.min(g.s, p.s - p.hl - Math.sqrt(Math.max(0, r * r - dd * dd)) - 0.01);
       if (unit) (p as Unit).hit = true;
+      p.judged = true; // touched it: never a dodge
       if (g.stumble > 0 || g.move === 'knock') continue; // already reeling: no double penalty
 
       // −1 tier, 0.3s stumble, knocked back to the previous lane (v0.3).

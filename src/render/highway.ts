@@ -85,6 +85,9 @@ export function partsFor(p: Prop): Part[] {
       return [[0, 1.25, 0, L, 1.9, W, 'kind'], [L * 0.42, 1.55, 0, L * 0.18, 0.6, W * 0.9, 0xa9cfe0], [0, 1.0, 0, L * 1.01, 0.2, W * 1.01, 0xd94f4f]];
     case 'barricade':
       return [[0, 0.38, 0, L, 0.75, W, 'kind'], [0, 0.86, 0, L * 0.8, 0.2, W, 0xf08a24]];
+    case 'dozer':
+      // Tracked body, cab, and a wide blade facing the giant: reads as "not going through that".
+      return [[0, 0.35, W * 0.38, L * 0.95, 0.7, W * 0.22, 0x2b2b2e], [0, 0.35, -W * 0.38, L * 0.95, 0.7, W * 0.22, 0x2b2b2e], [0.1, 1.05, 0, L * 0.7, 0.75, W * 0.7, 'kind'], [-0.35, 1.9, 0, L * 0.35, 0.95, W * 0.5, 'kind'], [-0.35, 2.4, 0, L * 0.4, 0.08, W * 0.56, 0x2b2b2e], [-L * 0.55, 0.6, 0, 0.22, 1.1, W * 1.12, 0x8c939b]];
     case 'cruiser':
     case 'compact':
       // Black-and-white police car (white doors and roof read from the chopper).
@@ -124,6 +127,8 @@ export class HighwayView {
   })();
   private pos = { x: 0, z: 0 };
   private cars = new Map<number, CarFx>();
+  /** Smashed props and units: the real body tumbles off his line and comes to rest as a wreck. */
+  private wrecks: { g: THREE.Object3D; vx: number; vy: number; vz: number; wx: number; wy: number; wz: number; half: number; t: number; bounced: number }[] = [];
   private lampList: LampPos[] = [];
   private overpasses: { s: number; mat: THREE.MeshToonMaterial }[] = [];
   private lampsDirty = true;
@@ -190,8 +195,10 @@ export class HighwayView {
     const liveProps = new Set<number>();
     const lastReady = ready.length ? ready[ready.length - 1].index : -1;
     for (const p of track.props) {
-      if (!p.alive || p.segment > lastReady) continue;
+      if (p.segment > lastReady) continue;
+      // A prop that just died keeps its view: its smash/hijack event claims the body this frame.
       liveProps.add(p.id);
+      if (!p.alive) continue;
       if (!this.propViews.has(p.id)) {
         const g = this.buildProp(p);
         this.propViews.set(p.id, g);
@@ -878,21 +885,95 @@ export class HighwayView {
     if (this.debrisMesh.instanceColor) this.debrisMesh.instanceColor.needsUpdate = true;
   }
 
-  /** A prop is smashed: hide its view, spray debris in the direction of the hit. */
-  smash(propId: number, dirX: number, dirZ: number, speed: number) {
+  /** A prop is smashed: its body is swatted off his line (a wreck), with debris sprayed to the side. */
+  smash(propId: number, dirX: number, dirZ: number, speed: number, side = 1) {
     const p = this.sim.track.props.find((q) => q.id === propId);
     const g = this.propViews.get(propId);
     if (g) {
-      this.group.remove(g);
       this.propViews.delete(propId);
       this.cars.delete(propId);
     }
-    if (!p) return;
+    if (!p) {
+      if (g) this.group.remove(g);
+      return;
+    }
     this.sim.track.posAt(p.s, p.d, this.pos);
     const colors = [...((g?.userData.colors as number[]) ?? []), ...MATERIAL_DEBRIS[p.mat]];
     const heavy = p.cls === 'heavy';
-    this.spawnDebris(this.pos.x, this.pos.z, dirX, dirZ, speed, heavy ? 32 : 16, colors, heavy ? [0.3, 0.9] : [0.2, 0.6], p.h);
-    if (heavy) this.spawnDebris(this.pos.x, this.pos.z, dirX, dirZ, speed * 0.5, 10, MATERIAL_DEBRIS.glass, [0.1, 0.25], p.h);
+    if (g) this.launchWreck(g, dirX, dirZ, speed, heavy, side, p.h);
+    const sx = -dirZ * side, sz = dirX * side;
+    this.spawnDebris(this.pos.x, this.pos.z, dirX + sx * 1.4, dirZ + sz * 1.4, speed * 0.5, heavy ? 28 : 14, colors, heavy ? [0.3, 0.9] : [0.2, 0.6], p.h);
+    if (heavy) this.spawnDebris(this.pos.x, this.pos.z, dirX - sx * 0.8, dirZ - sz * 0.8, speed * 0.35, 10, MATERIAL_DEBRIS.glass, [0.1, 0.25], p.h);
+  }
+
+  /**
+   * Swat a body off the giant's line: it flies out to `side` (slower forward than he runs, so he
+   * passes it), tumbles, bounces and slides to rest. Units hand their body over here too.
+   */
+  launchWreck(g: THREE.Object3D, dirX: number, dirZ: number, speed: number, heavy: boolean, side: number, height = 1.5) {
+    const W = TUNING.impact.wreck;
+    const L = heavy ? W.heavy : W.medium;
+    if (g.parent !== this.group) this.group.add(g);
+    const sx = -dirZ * side, sz = dirX * side;
+    const fwd = speed * L.forward;
+    const lat = L.lateral[0] + Math.random() * (L.lateral[1] - L.lateral[0]);
+    g.scale.y *= W.crumple;
+    this.wrecks.push({
+      g,
+      vx: dirX * fwd + sx * lat,
+      vz: dirZ * fwd + sz * lat,
+      vy: L.up[0] + Math.random() * (L.up[1] - L.up[0]),
+      // Roll away from him about the travel axis, with some yaw.
+      wx: dirX * L.spin * side + (Math.random() - 0.5) * 2,
+      wz: dirZ * L.spin * side + (Math.random() - 0.5) * 2,
+      wy: (Math.random() - 0.5) * L.spin,
+      half: Math.max(0.3, height * 0.5 * W.crumple),
+      t: 0,
+      bounced: 0,
+    });
+    if (this.wrecks.length > W.max) {
+      const old = this.wrecks.shift()!;
+      this.group.remove(old.g);
+    }
+  }
+
+  private updateWrecks(dt: number, focusX: number, focusZ: number) {
+    const W = TUNING.impact.wreck;
+    const q = new THREE.Quaternion();
+    const axis = new THREE.Vector3();
+    for (let i = this.wrecks.length - 1; i >= 0; i--) {
+      const w = this.wrecks[i];
+      w.t += dt;
+      const g = w.g;
+      const airborne = g.position.y > w.half + 0.01 || w.vy > 0;
+      if (airborne) w.vy -= W.gravity * dt;
+      g.position.x += w.vx * dt;
+      g.position.y += w.vy * dt;
+      g.position.z += w.vz * dt;
+      if (g.position.y < w.half) {
+        g.position.y = w.half;
+        if (w.vy < -2 && w.bounced < 2) {
+          w.vy = -w.vy * W.bounce;
+          w.bounced++;
+        } else w.vy = 0;
+        const f = Math.max(0, 1 - W.friction * dt);
+        w.vx *= f;
+        w.vz *= f;
+        w.wx *= f;
+        w.wy *= f;
+        w.wz *= f;
+      }
+      const spin = Math.hypot(w.wx, w.wy, w.wz);
+      if (spin > 1e-3) {
+        q.setFromAxisAngle(axis.set(w.wx / spin, w.wy / spin, w.wz / spin), spin * dt);
+        g.quaternion.premultiply(q);
+      }
+      const far = Math.hypot(g.position.x - focusX, g.position.z - focusZ) > W.cullDistance;
+      if (far || w.t > W.life) {
+        this.group.remove(g);
+        this.wrecks.splice(i, 1);
+      }
+    }
   }
 
   /** Expanding ground ring: footfall dust, Shoulder Check shockwave. */
@@ -919,6 +1000,7 @@ export class HighwayView {
     this.ground.position.x = focusX;
     this.ground.position.z = focusZ;
     if (dt > 0) this.updateTraffic(dt, giantS, giantD);
+    if (dt > 0) this.updateWrecks(dt, focusX, focusZ);
     for (let i = this.slides.length - 1; i >= 0; i--) {
       const m = this.slides[i];
       m.t = Math.min(1, m.t + dt / 0.5);

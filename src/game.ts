@@ -283,6 +283,27 @@ function abilityPop(text: string, dud = false) {
   abilPopT = TUNING.abilities.popTime;
 }
 
+/** Impact pass: Ratings gains pop under the meter as they land, so every hit and dodge pays visibly. */
+const VIEWERS_PER_POINT = TUNING.show.viewersPerPoint;
+const gainPopEl = $('gainpop');
+let gainPopT = 0;
+let gainPopSum = 0;
+let gainPopLabel = '';
+const GAIN_LABEL: Partial<Record<string, string>> = { nearMiss: 'Close call', lostTrack: 'Shook one', medium: '', heavy: '' };
+function gainPop(delta: number, cause: string) {
+  if (attract) return;
+  const I = TUNING.impact;
+  const merging = gainPopT > I.popTime - I.popMerge;
+  gainPopSum = merging ? gainPopSum + delta : delta;
+  const label = GAIN_LABEL[cause] ?? '';
+  if (!merging || label) gainPopLabel = label;
+  gainPopEl.textContent = `${gainPopLabel ? gainPopLabel + ' ' : ''}+${Math.round((gainPopSum * VIEWERS_PER_POINT) / 1000)}K`;
+  gainPopEl.classList.remove('show');
+  void gainPopEl.offsetWidth;
+  gainPopEl.classList.add('show');
+  gainPopT = I.popTime;
+}
+
 /** The Stare: a pale glare sweeps up his lane and the lanes either side, then fades. */
 const glares: { mesh: THREE.Mesh; t: number }[] = [];
 const glareMat = new THREE.MeshBasicMaterial({ color: 0xbfd6ff, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending });
@@ -327,6 +348,7 @@ function updateAbilityFx(dt: number) {
     }
   }
   if (abilPopT > 0 && (abilPopT -= dt) <= 0) abilPop.classList.remove('show');
+  if (gainPopT > 0 && (gainPopT -= dt) <= 0) gainPopEl.classList.remove('show');
 }
 
 /** A new recap/meeting card ignores accept for a moment: one press must not open it and choose on it. */
@@ -378,7 +400,7 @@ function showRecap() {
   const anchorLine = lines[Math.floor(Math.random() * lines.length)];
   const last = news.history[news.history.length - 1];
   const best = runStats.best;
-  const viewers = (r: number) => (r * 18_500 >= 1e6 ? `${((r * 18_500) / 1e6).toFixed(2)}M` : `${Math.round((r * 18_500) / 1000)}K`);
+  const viewers = (r: number) => (r * VIEWERS_PER_POINT >= 1e6 ? `${((r * VIEWERS_PER_POINT) / 1e6).toFixed(2)}M` : `${Math.round((r * VIEWERS_PER_POINT) / 1000)}K`);
   const t = Math.floor(sim.time);
   const N = TUNING.run.segments;
   const segLabel = run ? ` · SEGMENT ${run.segment + 1} OF ${N}` : '';
@@ -486,11 +508,14 @@ function present(e: SimEvent) {
         runStats.heavy++;
         pip.trigger(sim, sim.show.tier);
       }
+      // Swat it off his line: out to whichever side of him it was on.
+      const side = Math.sign(e.d - g.d) || (Math.random() < 0.5 ? -1 : 1);
       if (e.propId >= 1_000_000) {
         runStats.units++;
-        units.smash(e.propId, dirX, dirZ, e.speed);
+        units.smash(e.propId, dirX, dirZ, e.speed, side);
       }
-      else highway.smash(e.propId, dirX, dirZ, e.speed);
+      else highway.smash(e.propId, dirX, dirZ, e.speed, side);
+      giant.onSmash(e.cls === 'heavy', side);
       audio.smash(e.cls);
       hitstop = Math.max(hitstop, k.hitstop);
       rig.jolt(k.shake, e.cls === 'heavy' ? TUNING.camera.joltTime : 0.08);
@@ -525,6 +550,19 @@ function present(e: SimEvent) {
     case 'nearMiss':
       runStats.nearMiss++;
       pip.trigger(sim, sim.show.tier);
+      audio.whoosh();
+      break;
+    case 'dodge': {
+      runStats.nearMiss++;
+      audio.whoosh();
+      rig.jolt(I.dodge.shake, 0.1);
+      haptic(I.dodge.haptic, I.dodge.hapticStrength);
+      sim.track.posAt(e.s, e.d, pos);
+      highway.ring(pos.x, pos.z, 3.5, 0xffffff, 0.35, 0.45);
+      break;
+    }
+    case 'ratings':
+      if (e.cause !== 'rampage' && e.cause !== 'pose' && e.delta > 0) gainPop(e.delta, e.cause);
       break;
     case 'ram':
       if (!e.hit) runStats.dodged++;
@@ -1137,7 +1175,7 @@ function updateHud(dt: number) {
   clockEl.classList.toggle('count', counting);
   // Ratings as a viewer count (§21), with its tier colour, decay arrow and danger pulse.
   const sh = sim.show;
-  const viewers = Math.round(sh.ratings * 18_500);
+  const viewers = Math.round(sh.ratings * VIEWERS_PER_POINT);
   viewersEl.textContent = viewers >= 1e6 ? `${(viewers / 1e6).toFixed(2)}M` : `${Math.round(viewers / 1000)}K`;
   ratingsBar.style.width = `${sh.ratings.toFixed(1)}%`;
   for (let k = 1; k <= 3; k++) ratingsEl.classList.toggle(`t${k}`, sh.tier === k);
@@ -1260,6 +1298,10 @@ window.__GAME = {
   viewerVideo: () => pip.trigger(sim, 3, true),
   setTimescale(v: number) {
     flags.timescale = v;
+  },
+  /** Dev: leave (or enter) step mode, e.g. to fast-forward to an event and then watch it in slow motion. */
+  setStepMode(v: boolean) {
+    flags.stepMode = v;
   },
   facing: () => rig.facing,
   setCuts(on: boolean) {

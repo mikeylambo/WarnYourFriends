@@ -56,6 +56,7 @@ export const KIND_COLORS: Record<PropKind, number[]> = {
   car: [0xcf4b3e, 0x3b8ea5, 0xd9a43b, 0x6b8f5a, 0x4a5d8c],
   van: [0xf2efe8, 0xd3dbe0, 0xe9d7a8],
   barricade: [0xd3cec4],
+  dozer: [0xf2b51d],
   cruiser: [0x15151b],
   compact: [0x1c2a4a],
 };

@@ -132,14 +132,17 @@ export class UnitViews {
   }
 
   /** A unit was smashed: drop its view, spray debris. */
-  smash(id: number, dirX: number, dirZ: number, speed: number) {
+  smash(id: number, dirX: number, dirZ: number, speed: number, side = 1) {
     const v = this.views.get(id);
     if (!v) return;
-    this.group.remove(v.root);
     if (v.glow) this.group.remove(v.glow);
     this.views.delete(id);
-    const p = v.root.position;
-    this.highway.spawnDebris(p.x, p.z, dirX, dirZ, speed, 34, [0x15151b, 0xf1f1ee, 0x1d2633, 0xff2030, 0x2a5cff, ...MATERIAL_DEBRIS.glass], [0.3, 0.9], 1.6);
+    const p = v.root.position.clone();
+    // The cruiser itself is swatted off his line (the highway owns wrecks from here).
+    this.group.remove(v.root);
+    this.highway.launchWreck(v.root, dirX, dirZ, speed, true, side, 1.5);
+    const sx = -dirZ * side, sz = dirX * side;
+    this.highway.spawnDebris(p.x, p.z, dirX + sx * 1.4, dirZ + sz * 1.4, speed * 0.5, 30, [0x15151b, 0xf1f1ee, 0x1d2633, 0xff2030, 0x2a5cff, ...MATERIAL_DEBRIS.glass], [0.3, 0.9], 1.6);
   }
 
   update(dt: number) {
