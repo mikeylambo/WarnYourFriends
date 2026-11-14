@@ -496,29 +496,36 @@ export class Sim {
     this.emit({ type: 'leapLand', s: g.s, d: g.d, smashed });
   }
 
-  /** The Stare: stopped traffic ahead in his lane pulls over; police winding up back off. */
+  /**
+   * The Stare: the road parts. Traffic ahead in his lane pulls over, and traffic in the lanes
+   * either side moves one lane further out (where it's free), so an open strip runs ahead of him.
+   * Police winding up back off.
+   */
   private stare() {
     const g = this.giant;
     const A = TUNING.abilities.stare;
     const W = TUNING.lanes.width;
     const moved: { id: number; from: number; to: number }[] = [];
     const myC = this.track.laneCenter(g.lane);
-    for (const p of this.track.propsBetween(g.s, g.s + A.reach)) {
-      if (Math.abs(p.d - myC) > p.hw + 1) continue;
+    const free = (p: Prop, c: number) => !this.track.propsBetween(p.s - p.hl - 3, p.s + p.hl + 3).some((q) => q !== p && Math.abs(q.d - c) < q.hw + p.hw + 0.4);
+    // Nearest lanes first, so a car next to him can move out before one in his lane moves in beside it.
+    const props = this.track.propsBetween(g.s, g.s + A.reach).filter((p) => p.alive && Math.abs(p.d - myC) <= W * A.lanesEitherSide + p.hw);
+    props.sort((a, b) => Math.abs(b.d - myC) - Math.abs(a.d - myC));
+    for (const p of props) {
       const lanes = this.track.lanesAt(p.s);
-      for (const dir of [1, -1]) {
-        const lane = g.lane + dir;
+      const off = Math.round((p.d - myC) / W);
+      const dirs = off === 0 ? [1, -1] : [Math.sign(off)];
+      for (const dir of dirs) {
+        const lane = g.lane + off + dir;
         if (lane < 0 || lane >= lanes) continue;
         const c = this.track.laneCenter(lane);
-        const busy = this.track.propsBetween(p.s - p.hl - 3, p.s + p.hl + 3).some((q) => q !== p && Math.abs(q.d - c) < q.hw + p.hw + 0.4);
-        if (busy) continue;
+        if (!free(p, c)) continue;
         moved.push({ id: p.id, from: p.d, to: c });
         p.d = c;
         break;
       }
     }
     const backedOff = this.pursuit.backOff();
-    void W;
     this.emit({ type: 'stare', moved, backedOff });
   }
 

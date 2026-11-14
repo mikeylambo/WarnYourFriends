@@ -235,19 +235,17 @@ describe('smash-across and unsmashable hits (v0.3)', () => {
 });
 
 describe('run cycle (v0.3)', () => {
-  it('cadence stays within 2.0–2.3 steps/s at every speed, and step length = speed ÷ cadence', () => {
+  it('cadence stays within the band at every speed, and step length = speed ÷ cadence', () => {
     for (let v = 2; v <= 18; v += 0.25) {
       const c = cadenceAt(v);
-      expect(c).toBeGreaterThanOrEqual(2.0);
-      expect(c).toBeLessThanOrEqual(2.3);
+      expect(c).toBeGreaterThanOrEqual(TUNING.gait.cadenceMin);
+      expect(c).toBeLessThanOrEqual(TUNING.gait.cadenceMax);
       expect(stepLengthAt(v) * c).toBeCloseTo(v, 9);
     }
-    expect(cadenceAt(6)).toBeCloseTo(2.0, 9);
-    expect(cadenceAt(10)).toBeCloseTo(2.1, 9);
-    expect(cadenceAt(15)).toBeCloseTo(2.3, 9);
+    for (const T of TUNING.tiers) expect(cadenceAt(T.topSpeed)).toBeCloseTo(T.cadence, 9);
   });
 
-  it('measured footfall cadence stays in 2.0–2.3 at every tier (bot runs, 20 seeds)', () => {
+  it('measured footfall cadence stays in the band at every tier (bot runs, 20 seeds)', () => {
     const byTier: number[][] = [[], [], []];
     for (let seed = 1; seed <= 20; seed++) {
       const sim = new Sim({ seed });
@@ -263,8 +261,8 @@ describe('run cycle (v0.3)', () => {
     }
     for (let t = 0; t < 3; t++) {
       expect(byTier[t].length, `tier ${t} sampled`).toBeGreaterThan(50);
-      expect(Math.min(...byTier[t])).toBeGreaterThanOrEqual(2.0 - 1e-6);
-      expect(Math.max(...byTier[t])).toBeLessThanOrEqual(2.3 + 1e-6);
+      expect(Math.min(...byTier[t])).toBeGreaterThanOrEqual(TUNING.gait.cadenceMin - 1e-6);
+      expect(Math.max(...byTier[t])).toBeLessThanOrEqual(TUNING.gait.cadenceMax + 1e-6);
     }
   });
 });

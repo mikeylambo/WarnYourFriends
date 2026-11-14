@@ -5,7 +5,7 @@
  *   - speed never below 2 m/s (Law 1, LOCKED); no NaN; giant stays on the road
  *   - never stalls: path travelled over any 3s ≥ 75% of what the speed floor implies
  * Run cycle (v0.3)
- *   - cadence within 2.0–2.3 steps/s at every tier; foot slide < 5cm per plant
+ *   - cadence within the gait band (TUNING.gait) at every tier; foot slide < 5cm per plant
  * Camera (v0.3)
  *   - screen-up law (LOCKED): travel within ±35° of screen-up, every frame
  *   - Phase 0c director: cut-aways only on Rampage / Heavy smash / merge, each

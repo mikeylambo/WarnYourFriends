@@ -270,6 +270,65 @@ function showCamTag() {
 function hideRecap() {
   recapEl.hidden = true;
 }
+/** What an ability just did, beside its chip: the payoff has to read even when the chopper is far out. */
+const abilPop = $('abilpop');
+let abilPopT = 0;
+function abilityPop(text: string, dud = false) {
+  if (attract) return;
+  abilPop.textContent = text;
+  abilPop.classList.toggle('dud', dud);
+  abilPop.classList.remove('show');
+  void abilPop.offsetWidth;
+  abilPop.classList.add('show');
+  abilPopT = TUNING.abilities.popTime;
+}
+
+/** The Stare: a pale glare sweeps up his lane and the lanes either side, then fades. */
+const glares: { mesh: THREE.Mesh; t: number }[] = [];
+const glareMat = new THREE.MeshBasicMaterial({ color: 0xbfd6ff, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending });
+function glare(s0: number, d: number) {
+  const A = TUNING.abilities.stare;
+  const W = TUNING.lanes.width * (A.lanesEitherSide + 0.5);
+  const N = 24;
+  const verts = new Float32Array((N + 1) * 2 * 3);
+  const p = new THREE.Vector3();
+  for (let i = 0; i <= N; i++) {
+    const s = s0 + 3 + (A.reach * i) / N;
+    for (let k = 0; k < 2; k++) {
+      sim.track.posAt(s, d + (k ? W : -W), p);
+      verts.set([p.x, 0.12, p.z], (i * 2 + k) * 3);
+    }
+  }
+  const idx: number[] = [];
+  for (let i = 0; i < N; i++) idx.push(i * 2, i * 2 + 1, i * 2 + 2, i * 2 + 1, i * 2 + 3, i * 2 + 2);
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(verts, 3));
+  geo.setIndex(idx);
+  const mesh = new THREE.Mesh(geo, glareMat.clone());
+  mesh.renderOrder = 2;
+  scene.add(mesh);
+  glares.push({ mesh, t: 0 });
+}
+function updateAbilityFx(dt: number) {
+  const A = TUNING.abilities.stare;
+  for (let i = glares.length - 1; i >= 0; i--) {
+    const gl = glares[i];
+    gl.t += dt;
+    const k = gl.t / A.glareTime;
+    // Sweeps in from the giant (draw range grows), then fades.
+    const total = gl.mesh.geometry.index!.count;
+    gl.mesh.geometry.setDrawRange(0, Math.ceil(Math.min(1, k * 3) * total / 6) * 6);
+    (gl.mesh.material as THREE.MeshBasicMaterial).opacity = (settings.reduceFlashes ? 0.18 : 0.35) * Math.max(0, 1 - k);
+    if (k >= 1) {
+      scene.remove(gl.mesh);
+      gl.mesh.geometry.dispose();
+      (gl.mesh.material as THREE.Material).dispose();
+      glares.splice(i, 1);
+    }
+  }
+  if (abilPopT > 0 && (abilPopT -= dt) <= 0) abilPop.classList.remove('show');
+}
+
 /** A new recap/meeting card ignores accept for a moment: one press must not open it and choose on it. */
 let recapArmedAt = 0;
 const recapArmed = () => performance.now() >= recapArmedAt;
@@ -492,10 +551,14 @@ function present(e: SimEvent) {
       bot = null;
       break;
     case 'ability':
-      if (!e.ok) audio.dud();
+      if (!e.ok) {
+        audio.dud();
+        if (e.id === 'hijack') abilityPop('No car in reach', true);
+      }
       else if (e.id === 'leap') {
         audio.leap();
         rig.jolt(1.5, 0.1);
+        rig.tierUpPulse(); // the chopper pulls out so the arc reads
       }
       abilEl.classList.remove('fire');
       void abilEl.offsetWidth;
@@ -513,6 +576,7 @@ function present(e: SimEvent) {
       flash(TUNING.impact.heavy.flashFrames);
       haptic(160, 0.9);
       if (e.smashed) pip.trigger(sim, sim.show.tier);
+      abilityPop(e.smashed ? `Flattened ×${e.smashed}` : 'Stuck the landing');
       break;
     }
     case 'stare': {
@@ -520,6 +584,11 @@ function present(e: SimEvent) {
       for (const m of e.moved) highway.slide(m.id);
       sim.track.posAt(g.s + 10, g.d, pos);
       highway.ring(pos.x, pos.z, 9, 0xbfd6ff, 0.8, 0.35);
+      glare(g.s, sim.track.laneCenter(g.lane));
+      hitstop = Math.max(hitstop, TUNING.impact.heavy.hitstop);
+      rig.jolt(2, 0.15);
+      haptic(80, 0.5);
+      abilityPop([e.moved.length ? `Road clears ×${e.moved.length}` : 'Road already clear', e.backedOff ? `Police back off ×${e.backedOff}` : ''].filter(Boolean).join(' · '));
       break;
     }
     case 'hijack': {
@@ -532,6 +601,7 @@ function present(e: SimEvent) {
       }
       rig.jolt(2, 0.12);
       haptic(90, 0.6);
+      abilityPop('Car commandeered');
       break;
     }
     case 'hijackBail': {
@@ -550,6 +620,7 @@ function present(e: SimEvent) {
     case 'pose':
       audio.pose();
       pip.trigger(sim, sim.show.tier, true);
+      abilityPop(`Ratings +${Math.round(e.gain)} · Heat −${TUNING.abilities.pose.heatCost}`);
       break;
     case 'laneChange':
       audio.capeWhip(0.5 + g.tier * 0.25);
@@ -889,13 +960,14 @@ function frame(now: number) {
     const roof = rideMesh ? (rideMesh.userData.roof as number) : 0;
     const lift = u > 0 ? 4 * A.leap.height * u * (1 - u) : roof;
     poseAnim += ((g.pose > 0 ? 1 : 0) - poseAnim) * Math.min(1, animDt / 0.08);
-    giant.update(animDt, { x: t.x, z: t.z, heading, travel: t.travel, lateralVel, speed: g.speed, tier: g.tier, braking: g.braking, stumble: g.stumble, stepPos, lift, pose: poseAnim }, gf);
+    giant.update(animDt, { x: t.x, z: t.z, heading, travel: t.travel, lateralVel, speed: g.speed, tier: g.tier, braking: g.braking, stumble: g.stumble, stepPos, lift, leap: u, pose: poseAnim }, gf);
     if (rideMesh) {
       rideMesh.position.set(t.x, 0, t.z);
       rideMesh.rotation.y = -heading;
     }
     // Pose: flash bulbs from the crowd and the press. A soft pulse, at most 3 a second (photosensitivity).
     bulbT = Math.max(0, bulbT - animDt);
+    updateAbilityFx(animDt);
     if (g.pose > 0 && bulbT === 0 && !settings.reduceFlashes) {
       bulbT = 1 / 3;
       bulbFrames = 3;
@@ -1204,7 +1276,7 @@ window.__GAME = {
       worst[r.tier] = Math.max(worst[r.tier], r.slide);
       plants[r.tier]++;
     }
-    return { worstSlide: worst, plants, cadence: measure.cadence.map((c) => ({ ...c })) };
+    return { worstSlide: worst, plants, cadence: measure.cadence.map((c) => ({ ...c })), band: [TUNING.gait.cadenceMin, TUNING.gait.cadenceMax] };
   },
   state() {
     const g = sim.giant;

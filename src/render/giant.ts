@@ -40,6 +40,8 @@ export interface GiantPose {
   stepPos: number;
   /** Phase 3: height off the road (Leap arc, riding a hijacked car's roof). */
   lift?: number;
+  /** Leap progress 0..1 while airborne (0 on the ground): legs tuck, the shadow shrinks. */
+  leap?: number;
   /** Phase 3: Pose for the Camera, 0..1 (arms up, chest out, facing the chopper). */
   pose?: number;
 }
@@ -239,6 +241,18 @@ export class GiantView {
     this.stumbleWobble = 1;
   }
 
+  /** A leg pulled up under the hip (knee forward and up, foot under the seat) by `t` (0..1). */
+  private tucked(L: GaitFrame['legs'][number], t: number): GaitFrame['legs'][number] {
+    const mix = (a: number, b: number) => a + (b - a) * t;
+    const fx = L.hip.x + (L.knee.x - L.hip.x) * 0.2, fz = L.hip.z + (L.knee.z - L.hip.z) * 0.2;
+    return {
+      ...L,
+      knee: { x: mix(L.knee.x, L.hip.x + (L.knee.x - L.hip.x) * 1.4), y: mix(L.knee.y, L.hip.y - 0.35), z: mix(L.knee.z, L.knee.z) },
+      foot: { x: mix(L.foot.x, fx), y: mix(L.foot.y, L.hip.y - 0.9), z: mix(L.foot.z, fz) },
+      planted: false,
+    };
+  }
+
   private placeSegment(mesh: THREE.Mesh, a: Vec3, b: Vec3) {
     const dir = this.tmp.set(b.x - a.x, b.y - a.y, b.z - a.z);
     const len = dir.length();
@@ -258,6 +272,10 @@ export class GiantView {
     this.root.rotation.y = -p.heading;
     this.hips.position.y = gait.hipY;
     this.shadow.position.set(p.x + 0.4, 0.07, p.z + 0.4);
+    // Off the ground (Leap): the shadow shrinks and fades, so height reads from straight above.
+    const air = p.leap ? Math.min(1, lift / 4) : 0;
+    this.shadow.scale.setScalar(3.2 * (1 - 0.45 * air)).setY(1);
+    (this.shadow.material as THREE.MeshBasicMaterial).opacity = 1 - 0.5 * air;
 
     // Low, forward-driving lean; more while braking upright; shoulder windup then lunge.
     this.shoulderAnim = Math.max(0, this.shoulderAnim - dt / 0.35);
@@ -312,9 +330,11 @@ export class GiantView {
 
     this.root.updateMatrixWorld(true);
 
-    // Legs from the gait IK (world space).
+    // Legs from the gait IK (world space). In the air (Leap) the feet tuck up under him.
+    const tuck = p.leap ? Math.min(1, Math.sin(Math.PI * p.leap) * 1.6) : 0;
     for (let i = 0; i < 2; i++) {
-      const L = gait.legs[i];
+      const G = gait.legs[i];
+      const L = tuck > 0 ? this.tucked(G, tuck) : G;
       const P = this.legParts[i];
       this.placeSegment(P.thigh, L.hip, L.knee);
       this.placeSegment(P.shin, L.knee, L.foot);

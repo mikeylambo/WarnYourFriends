@@ -28,7 +28,7 @@ export interface TierTuning {
   laneChangeTime: number;
   /**
    * v0.3 run cycle: cadence (steps/s) at this tier's top speed. Cadence is
-   * interpolated by speed between tiers, so it never leaves 2.0–2.3.
+   * interpolated by speed between tiers, so it never leaves the gait band (2.6–3.1).
    */
   cadence: number;
   /**
@@ -131,9 +131,9 @@ export const TUNING = {
     // Pose pass (Mike's reference stills + clip): deep lean, legs cycling under a gliding torso
     // (little bob), knee drive and heel kick, a big exaggerated arm pump (Mike: "exaggerated a bit"). Speeds, cadence
     // and stride are unchanged.
-    { name: 'Jog', topSpeed: 6, accel: 8, tierUpAfter: 2.0, smashes: 'light', laneChangeTime: 0.22, cadence: 2.0, specStrideLength: 2.5, leanDeg: 20, hipHeight: 1.68, bodyDrop: 0.12, footLift: 0.45, cameraDistanceScale: 0.9, armSwing: 0.9, armBase: -0.1, flightLift: 0.03, elbowBend: 1.2, capeAngle: 20, capeFlutterHz: 1.3, capeFlutterAmp: 0.05 },
-    { name: 'Stride', topSpeed: 10, accel: 6, tierUpAfter: 3.0, smashes: 'medium', laneChangeTime: 0.3, cadence: 2.1, specStrideLength: 4.0, leanDeg: 30, hipHeight: 1.64, bodyDrop: 0.18, footLift: 0.75, cameraDistanceScale: 1.0, armSwing: 1.25, armBase: -0.05, flightLift: 0.07, elbowBend: 1.4, capeAngle: 52, capeFlutterHz: 3.2, capeFlutterAmp: 0.12 },
-    { name: 'Rampage', topSpeed: 15, accel: 4, tierUpAfter: Infinity, smashes: 'heavy', laneChangeTime: 0.4, cadence: 2.3, specStrideLength: 6.0, leanDeg: 40, hipHeight: 1.6, bodyDrop: 0.24, footLift: 1.05, cameraDistanceScale: 1.15, armSwing: 1.6, armBase: 0, flightLift: 0.11, elbowBend: 1.6, capeAngle: 80, capeFlutterHz: 6.5, capeFlutterAmp: 0.2 },
+    { name: 'Jog', topSpeed: 6, accel: 8, tierUpAfter: 2.0, smashes: 'light', laneChangeTime: 0.22, cadence: 2.6, specStrideLength: 2.5, leanDeg: 20, hipHeight: 1.68, bodyDrop: 0.12, footLift: 0.45, cameraDistanceScale: 0.9, armSwing: 0.9, armBase: -0.1, flightLift: 0.03, elbowBend: 1.2, capeAngle: 20, capeFlutterHz: 1.3, capeFlutterAmp: 0.05 },
+    { name: 'Stride', topSpeed: 10, accel: 6, tierUpAfter: 3.0, smashes: 'medium', laneChangeTime: 0.3, cadence: 2.8, specStrideLength: 4.0, leanDeg: 30, hipHeight: 1.64, bodyDrop: 0.18, footLift: 0.75, cameraDistanceScale: 1.0, armSwing: 1.25, armBase: -0.05, flightLift: 0.07, elbowBend: 1.4, capeAngle: 52, capeFlutterHz: 3.2, capeFlutterAmp: 0.12 },
+    { name: 'Rampage', topSpeed: 15, accel: 4, tierUpAfter: Infinity, smashes: 'heavy', laneChangeTime: 0.4, cadence: 3.1, specStrideLength: 6.0, leanDeg: 40, hipHeight: 1.6, bodyDrop: 0.24, footLift: 1.05, cameraDistanceScale: 1.15, armSwing: 1.6, armBase: 0, flightLift: 0.11, elbowBend: 1.6, capeAngle: 80, capeFlutterHz: 6.5, capeFlutterAmp: 0.2 },
   ] as TierTuning[],
 
   tierDrop: {
@@ -252,9 +252,9 @@ export const TUNING = {
 
   /** v0.3 run cycle. Feet are pinned while planted; phase is locked to distance. */
   gait: {
-    /** Cadence never leaves this band (steps/s). */
-    cadenceMin: 2.0,
-    cadenceMax: 2.3,
+    /** Cadence never leaves this band (steps/s). Step-rate pass (Mike, 2026-11-14): 2.6–3.1, up from 2.0–2.3, toward his reference clip (~3.1). */
+    cadenceMin: 2.6,
+    cadenceMax: 3.1,
     /** Thigh and shin lengths (m): the giant's legs. */
     thigh: 0.95,
     shin: 0.92,
@@ -498,14 +498,16 @@ export const TUNING = {
   /** Phase 3 abilities (lane-runner versions of §17's pool). 5f input buffer (§8). */
   abilities: {
     bufferFrames: 5,
-    /** Leap: airborne this long (no collisions), apex height (m), landing shockwave radius (m) smashing up to Heavy. */
-    leap: { time: 0.9, height: 3.2, shockRadius: 4.5, cooldown: 6 },
-    /** The Stare: vehicles in your lane up to this far ahead pull over into a free neighbouring lane; police winding up back off. */
-    stare: { reach: 70, time: 0.6, cooldown: 10 },
+    /** Leap: airborne this long (no collisions), apex height (m), landing shockwave radius (m) smashing up to Heavy. Mike's playtest: 3.2m / 0.9s didn't read from the chopper. */
+    leap: { time: 1.1, height: 5.5, shockRadius: 6.5, cooldown: 6 },
+    /** The Stare: the road parts this far ahead: his lane pulls over, the lanes either side move one further out; police winding up back off. */
+    stare: { reach: 90, lanesEitherSide: 1, time: 0.6, cooldown: 10, glareTime: 0.9 },
     /** Hijack Hop: a vehicle within this far ahead (your lane or next to it); ride speed (just under Rampage top so every camera keeps ≥2s of road ahead), reached at `accel`, ride time, then bail at Rampage. */
-    hijack: { reach: 14, speed: 14, accel: 8, time: 3, cooldown: 12 },
+    hijack: { reach: 20, speed: 14, accel: 8, time: 3, cooldown: 12 },
     /** Pose: speed held at the floor this long (a deliberate stop, §2: ≤1s); Ratings per Heat level; Heat spent. */
     pose: { time: 0.8, ratingsPerHeat: 7, heatCost: 1, cooldown: 12 },
+    /** How long the "what it did" callout stays beside the ability chip (s). */
+    popTime: 1.8,
   },
 
   /** Phase 3 passives. */

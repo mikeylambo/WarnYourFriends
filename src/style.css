@@ -324,3 +324,9 @@ html.touch #abil { display: none; }
 #recap .padhint { margin-top: 10px; font-size: 12px; opacity: 0.7; display: flex; gap: 6px; align-items: center; justify-content: center; }
 #recap .padhint:empty { display: none; }
 @media (max-width: 560px) { #controls { gap: 8px; font-size: 10px; } }
+
+/* What an ability just did, above its chip. */
+#abilpop { position: absolute; left: 16px; bottom: calc(156px + env(safe-area-inset-bottom)); padding: 4px 10px; background: #f2cc8f; color: #140824; font-size: 13px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; pointer-events: none; opacity: 0; transform: translateY(6px); transition: opacity 0.15s, transform 0.15s; }
+#abilpop.show { opacity: 1; transform: none; }
+#abilpop.dud { background: rgba(10, 8, 20, 0.8); color: var(--bone); }
+html.attract #abilpop { display: none; }

@@ -229,7 +229,7 @@ try {
     });
     for (let t = 0; t < 3; t++) {
       const k = gt.cadence[t];
-      if (k.n && (k.min < 2.0 - 1e-6 || k.max > 2.3 + 1e-6)) fail(`cadence out of band at tier ${t}: ${k.min}–${k.max}`);
+      if (k.n && (k.min < gt.band[0] - 1e-6 || k.max > gt.band[1] + 1e-6)) fail(`cadence out of band at tier ${t}: ${k.min}–${k.max}`);
       if (gt.worstSlide[t] >= 0.05) fail(`foot slide ${gt.worstSlide[t]}m at tier ${t}`);
     }
     if (gt.plants[2] < 10) fail('too few Rampage plants measured');
