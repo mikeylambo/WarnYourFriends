@@ -15,7 +15,7 @@ import { ViewerVideo } from './render/pip';
 import { Coverage } from './broadcast/coverage';
 import VIEWERS from './broadcast/viewers.json';
 import { measureSilhouette } from './render/silhouette';
-import { Newsroom, type Headline } from './broadcast/headlines';
+import { Newsroom, compass, type Headline } from './broadcast/headlines';
 import type { PropKind } from './sim/types';
 import { Gait } from './anim/gait';
 import { Audio } from './audio';
@@ -901,7 +901,7 @@ app = await createGameApp({
 });
 registerGlyphs(app.shell.production.glyphs);
 // Only what exists: no challenges or credits yet; the tagline is approved fiction (§21).
-app.ui.updateScreen('title', { subtitle: 'Giant At Large. Warn Your Friends.' });
+app.ui.updateScreen('title', { title: 'Giant', subtitle: 'Giant at large. Warn your friends.', choices: [{ id: 'start', label: 'Press Start' }] });
 app.ui.updateScreen('main-menu', { choices: [{ id: 'play', label: 'Play' }, { id: 'settings', label: 'Settings' }] });
 // Core settings drive the game: reduced motion, shake, vibration, volume.
 const applyCore = (c: CoreSettings) => {
@@ -1075,7 +1075,8 @@ function frame(now: number) {
     poseCam.position.set(t.x + rx * 9 + Math.cos(t.travel) * 0.5, 2.0, t.z + rz * 9 + Math.sin(t.travel) * 0.5);
     poseCam.lookAt(t.x + Math.cos(t.travel) * 0.5, 1.5, t.z + Math.sin(t.travel) * 0.5);
     renderer.render(scene, poseCam);
-  } else renderer.render(scene, rig.camera);
+  } else if (updateTitleShot(realDt, t)) renderer.render(scene, titleCam);
+  else renderer.render(scene, rig.camera);
   pip.render(renderer, scene);
   updateHud(realDt);
   updateGlyphs();
@@ -1108,6 +1109,51 @@ function updateGlyphs() {
     recapEl.dataset.fam = fam;
     hint.innerHTML = fam === 'touch' ? '' : `<kbd>${esc(glyph('move'))}</kbd> Move <kbd>${esc(glyph('accept'))}</kbd> Choose`;
   }
+}
+
+/**
+ * Title screen (Mike's chopper-feed direction): the attract broadcast behind the title is shot
+ * close from behind and above, the giant in the right third under the spotlight, the night look,
+ * a LIVE traffic-report bug. Leaving the title, the camera glides down into the chase.
+ */
+const titleCam = new THREE.PerspectiveCamera(TUNING.title.fov, 16 / 9, 0.5, 900);
+const titleTmp = { q: new THREE.Quaternion(), p: new THREE.Vector3(), m: new THREE.Matrix4(), up: new THREE.Vector3(0, 1, 0) };
+const titleBug = $('titlebug');
+const titleRoad = $('titleroad');
+let titleK = 0;
+let wasTitle = false;
+function updateTitleShot(dt: number, t: CameraTarget): boolean {
+  const T = TUNING.title;
+  const onTitle = attract && !!document.querySelector('#ui [data-screen-id="title"]');
+  document.documentElement.classList.toggle('title', onTitle);
+  if (onTitle !== wasTitle) {
+    wasTitle = onTitle;
+    if (onTitle) {
+      if (!forcedLook) lighting.setMode('night');
+    } else applyLook();
+  }
+  if (onTitle) {
+    titleK = 1;
+    const seg = sim.track.segmentAt(sim.giant.s);
+    titleRoad.textContent = `${seg.zoneName} ${compass(t.travel)}bound`;
+  } else titleK = Math.max(0, titleK - dt / T.glideTime);
+  titleBug.hidden = !onTitle;
+  if (titleK <= 0) return false;
+  // The shot, relative to his travel: behind, up, and off to his left, looking ahead past him.
+  const fx = Math.cos(t.travel), fz = Math.sin(t.travel);
+  const rx = -fz, rz = fx; // his right
+  const pos = titleTmp.p.set(t.x - fx * T.back - rx * T.left, T.height, t.z - fz * T.back - rz * T.left);
+  const look = new THREE.Vector3(t.x + fx * T.lookAhead - rx * T.lookLeft, T.lookHeight, t.z + fz * T.lookAhead - rz * T.lookLeft);
+  titleTmp.m.lookAt(pos, look, titleTmp.up);
+  const want = titleTmp.q.setFromRotationMatrix(titleTmp.m);
+  // Glide: ease from the chase camera to the title shot by titleK (1 = all title).
+  const k = titleK * titleK * (3 - 2 * titleK);
+  titleCam.position.lerpVectors(rig.camera.position, pos, k);
+  titleCam.quaternion.copy(rig.camera.quaternion).slerp(want, k);
+  titleCam.fov = rig.camera.fov + (T.fov - rig.camera.fov) * k;
+  titleCam.aspect = rig.camera.aspect;
+  titleCam.updateProjectionMatrix();
+  return true;
 }
 
 /** Render one frame now and measure the giant's silhouette (E2E / evidence). */

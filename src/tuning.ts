@@ -623,6 +623,19 @@ export const TUNING = {
     sirenHz: 2.2,
   },
 
+  /** Title screen chopper shot (Mike's visual direction): metres relative to the giant's travel. */
+  title: {
+    back: 14,
+    left: 6,
+    height: 12,
+    lookAhead: 7,
+    lookLeft: 6.5,
+    lookHeight: 1,
+    fov: 42,
+    /** Leaving the title, the camera glides down into the chase over this long (s). */
+    glideTime: 1.6,
+  },
+
   /** Input gestures (v0.3). */
   input: {
     /** Stick flick: crossing this x deflection fires one lane change; must return under release. */
