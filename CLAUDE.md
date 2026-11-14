@@ -4,7 +4,7 @@ This file is the law for anyone (human or agent) building this repo. The design 
 
 ## Current phase
 
-**Phase 2 — Core playable** (one full broadcast: pursuit, Ratings/Heat/Pin, exit-ramp sign-off, busted, recap), plus broadcast escalation and road variety. The 0c feel check passed (Mike, 2026-11-12). Phase 1 Foundation: the game now runs inside the SLU Web Shell (private repo, pinned by commit; see DECISIONS 2026-11-13). The shell's AGENTS.md constitution applies. Never vendor the shell into this public repo.
+**Phase 3 — Depth**: the five-segment run with the Producer's Meeting, and the §17 upgrade pool (Leap, The Stare, Hijack Hop, Pose for the Camera; Iron Shins, Second Wind, Showman, Tailwind). Phase 2 (one full broadcast: pursuit, Ratings/Heat/Pin, sign-off, busted, recap), broadcast escalation and road variety are done. The 0c feel check passed (Mike, 2026-11-12). Phase 1 Foundation: the game now runs inside the SLU Web Shell (private repo, pinned by commit; see DECISIONS 2026-11-13). The shell's AGENTS.md constitution applies. Never vendor the shell into this public repo.
 
 ## Rules
 
@@ -23,7 +23,7 @@ This file is the law for anyone (human or agent) building this repo. The design 
 
 ```
 src/tuning.ts        every number, with reasons
-src/sim/             pure TS simulation (no three/DOM): sim.ts, track.ts (road zones + props), pursuit.ts (police units), show.ts (Ratings/Heat/Pin), escort.ts, bot.ts, rng.ts
+src/sim/             pure TS simulation (no three/DOM): sim.ts, track.ts (road zones + props), pursuit.ts (police units), show.ts (Ratings/Heat/Pin), run.ts (five-segment run, meeting offers, budget), escort.ts, bot.ts, rng.ts
 src/anim/gait.ts     run cycle: pinned feet, two-bone IK, phase locked to distance (pure math, tested)
 src/render/          three.js views: highway (zones, ramp), units (police), giant, cruisers, pip (viewer video), camera rig + director, lighting (night/dusk/day), glow, silhouette test, palette, toon
 src/broadcast/       headline generator (§21) + headlines.json word bank (pure TS, tested); coverage.ts (escalation ladder), viewers.json
@@ -35,6 +35,7 @@ tools/soak.ts        headless N-seed soak: sim + gait + camera invariants (caden
 tools/e2e-smoke.mjs  headless Chromium smoke against the production build (E2E_URL= for a deployed URL)
 tools/shots.mjs      evidence screenshots + silhouette numbers per angle and look
 tools/shots-phase2.mjs  Phase 2 evidence: tells, zones, exit, recap
+tools/shots-phase3.mjs  Phase 3 evidence: each ability mid-action
 ```
 
 ## Commands

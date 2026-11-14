@@ -690,6 +690,42 @@ export class HighwayView {
     return this.lampList;
   }
 
+  /** Phase 3: a stand-alone vehicle body (the hijacked car under the giant). Not tracked as a prop. */
+  vehicleMesh(p: Prop): THREE.Group {
+    const g = new THREE.Group();
+    const colors = KIND_COLORS[p.kind];
+    const kc = colors[p.variant % colors.length];
+    for (const [x, y, z, w, h, d, c] of partsFor(p)) {
+      const m = new THREE.Mesh(this.box, toon(c === 'kind' ? kc : c));
+      m.position.set(x, y, z);
+      m.scale.set(w, h, d);
+      g.add(m);
+    }
+    g.userData.colors = [kc];
+    g.userData.roof = Math.max(...partsFor(p).map((q) => q[1] + q[4] / 2));
+    return g;
+  }
+
+  /** Phase 3: remove a prop's view without debris (the hijacked car becomes the ride mesh). */
+  drop(propId: number) {
+    const g = this.propViews.get(propId);
+    if (g) this.group.remove(g);
+    this.propViews.delete(propId);
+    this.cars.delete(propId);
+  }
+
+  /** Phase 3 The Stare: a prop the sim moved over a lane glides there (0.5s) with its hazards on. */
+  private slides: { g: THREE.Group; fx: number; fz: number; tx: number; tz: number; t: number }[] = [];
+  slide(propId: number) {
+    const g = this.propViews.get(propId);
+    const p = this.sim.track.props.find((q) => q.id === propId);
+    if (!g || !p) return;
+    this.sim.track.posAt(p.s, p.d, this.pos);
+    this.slides.push({ g, fx: g.position.x, fz: g.position.z, tx: this.pos.x, tz: this.pos.z, t: 0 });
+    const car = this.cars.get(propId);
+    if (car) for (const h of car.hazards) h.visible = true;
+  }
+
   private buildProp(p: Prop): THREE.Group {
     const g = new THREE.Group();
     // Parts sit on a body group so cars can swerve and bounce without moving the prop's root.
@@ -883,6 +919,14 @@ export class HighwayView {
     this.ground.position.x = focusX;
     this.ground.position.z = focusZ;
     if (dt > 0) this.updateTraffic(dt, giantS, giantD);
+    for (let i = this.slides.length - 1; i >= 0; i--) {
+      const m = this.slides[i];
+      m.t = Math.min(1, m.t + dt / 0.5);
+      const e = m.t * m.t * (3 - 2 * m.t);
+      m.g.position.x = m.fx + (m.tx - m.fx) * e;
+      m.g.position.z = m.fz + (m.tz - m.fz) * e;
+      if (m.t >= 1) this.slides.splice(i, 1);
+    }
     // Overpasses fade while the giant is near them so the chopper never loses him.
     for (const o of this.overpasses) {
       const near = Math.abs(o.s - giantS) < 16;

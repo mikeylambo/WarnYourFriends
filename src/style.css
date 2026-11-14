@@ -83,7 +83,9 @@ html, body {
   border: 3px solid rgba(255,255,255,0.7); color: #fff; font-weight: 900; font-size: 12px;
 }
 #btn-shoulder { right: 24px; bottom: calc(28px + env(safe-area-inset-bottom)); width: 92px; height: 92px; background: rgba(215, 38, 61, 0.55); }
-#btn-ability { right: 124px; bottom: calc(110px + env(safe-area-inset-bottom)); width: 64px; height: 64px; background: rgba(20, 8, 36, 0.45); opacity: 0.5; }
+#btn-ability { right: 124px; bottom: calc(110px + env(safe-area-inset-bottom)); width: 72px; height: 72px; background: rgba(20, 8, 36, 0.55); opacity: 0.55; font-size: 12px; }
+#btn-ability:disabled { display: none; }
+#btn-ability.ready { opacity: 1; background: rgba(242, 204, 143, 0.6); color: #140824; }
 
 /* Phase 0 live tuning panel (T). */
 #tune {
@@ -286,3 +288,30 @@ html:not(.coldopen).playing #hud { animation: slam 0.35s cubic-bezier(.2,1.4,.4,
 /* Attract: the bot's broadcast plays behind the menus; no touch controls. */
 html.attract #touch-ui { display: none; }
 #recap .row { flex-wrap: wrap; }
+
+/* Phase 3: segment number, ability chip, Producer's Meeting. */
+#live #segno { background: rgba(10, 8, 20, 0.7); padding: 5px 7px 4px; font-variant-numeric: tabular-nums; letter-spacing: 0.08em; }
+#abil { position: absolute; left: 16px; bottom: calc(118px + env(safe-area-inset-bottom)); display: flex; align-items: center; gap: 8px; padding: 6px 10px; background: rgba(10, 8, 20, 0.72); border-left: 3px solid #6b5a86; color: var(--bone); font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase; pointer-events: none; }
+#abil[hidden] { display: none; }
+#abil .key { border: 1px solid currentColor; padding: 1px 5px; font-size: 10px; opacity: 0.8; }
+#abil .key:empty { display: none; }
+#abil .cd { width: 54px; height: 5px; background: rgba(255, 255, 255, 0.15); position: relative; }
+#abil .cd i { position: absolute; inset: 0 auto 0 0; background: #6b5a86; }
+#abil.ready { border-left-color: #f2cc8f; }
+#abil.ready .cd i { background: #f2cc8f; }
+#abil.fire { animation: flick 0.35s steps(2) 1; }
+html.touch #abil { display: none; }
+#recap .meeting { max-width: 760px; }
+#recap .purse { margin: 10px 0 14px; font-size: 14px; letter-spacing: 0.08em; text-transform: uppercase; opacity: 0.85; }
+#recap .purse b { font-size: 22px; margin-left: 6px; color: #8a4b0f; font-variant-numeric: tabular-nums; }
+#recap .pitches { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 10px; margin-bottom: 14px; }
+#recap .pitch { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; text-align: left; padding: 12px; min-height: 150px; background: rgba(20, 14, 40, 0.9); color: var(--bone); border: 2px solid rgba(255, 255, 255, 0.12); font: inherit; cursor: pointer; }
+#recap .pitch .tag { font-size: 10px; letter-spacing: 0.16em; padding: 2px 6px; background: #0d1530; }
+#recap .pitch.ability .tag { background: #d7263d; }
+#recap .pitch b { font-size: 18px; text-transform: uppercase; letter-spacing: 0.02em; }
+#recap .pitch .blurb { font-size: 13px; opacity: 0.85; line-height: 1.35; flex: 1; }
+#recap .pitch .swap { font-size: 11px; opacity: 0.7; font-style: italic; }
+#recap .pitch .price { font-size: 16px; color: #f2cc8f; font-variant-numeric: tabular-nums; }
+#recap .pitch:hover:not(:disabled), #recap .pitch:focus-visible, #recap .pitch:focus { border-color: #f2cc8f; outline: none; transform: translateY(-2px); }
+#recap .pitch:disabled { opacity: 0.4; cursor: not-allowed; }
+#recap .pitch:disabled .price::after { content: ' · over budget'; font-size: 11px; color: var(--bone); }

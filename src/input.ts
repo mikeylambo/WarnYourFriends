@@ -8,6 +8,7 @@ export type Device = 'keyboard' | 'mouse' | 'gamepad' | 'touch';
  *   Lane left/right: A/D, ←/→ · stick flick or d-pad · swipe left/right
  *   Brake:           S / Space · LT · swipe down and hold
  *   Shoulder Check:  Shift / W / LMB · RB · tap the right button
+ *   Ability (§17):   E / Q · LB or Y · the ability button
  *   Pause:           Esc · Start · II
  * Lane presses are edges; the sim buffers (5f) and queues (one max) them.
  */
@@ -16,13 +17,14 @@ export class Input {
   private keys = new Set<string>();
   private laneEdge = 0;
   private shoulderEdge = false;
+  private abilityEdge = false;
   private pauseEdge = false;
   private touch: { id: number; sx: number; sy: number; x: number; y: number; t0: number; fired: boolean } | null = null;
-  private pad = { flickArmed: true, left: false, right: false, rb: false, start: false, brake: false };
+  private pad = { flickArmed: true, left: false, right: false, rb: false, lb: false, start: false, brake: false };
   onPadDisconnect: (() => void) | null = null;
   onAnyInput: (() => void) | null = null;
 
-  constructor(el: HTMLElement, shoulderBtn: HTMLElement, pauseBtn: HTMLElement) {
+  constructor(el: HTMLElement, shoulderBtn: HTMLElement, pauseBtn: HTMLElement, abilityBtn: HTMLElement) {
     window.addEventListener('keydown', (e) => {
       if (e.repeat) return;
       this.keys.add(e.code);
@@ -30,6 +32,7 @@ export class Input {
       if (e.code === 'KeyD' || e.code === 'ArrowRight') this.laneEdge = 1;
       if (e.code === 'ShiftLeft' || e.code === 'ShiftRight' || e.code === 'KeyW') this.shoulderEdge = true;
       if (e.code === 'Escape' || e.code === 'KeyP') this.pauseEdge = true;
+      if (e.code === 'KeyE' || e.code === 'KeyQ') this.abilityEdge = true;
       if (e.code === 'Space' || e.code.startsWith('Arrow')) e.preventDefault();
       this.device = 'keyboard';
       this.onAnyInput?.();
@@ -53,6 +56,16 @@ export class Input {
       (e) => {
         e.preventDefault();
         this.shoulderEdge = true;
+        this.device = 'touch';
+        this.onAnyInput?.();
+      },
+      { passive: false },
+    );
+    abilityBtn.addEventListener(
+      'touchstart',
+      (e) => {
+        e.preventDefault();
+        this.abilityEdge = true;
         this.device = 'touch';
         this.onAnyInput?.();
       },
@@ -136,6 +149,9 @@ export class Input {
     const rb = pressed(5);
     if (rb && !P.rb) this.shoulderEdge = true;
     P.rb = rb;
+    const lb = pressed(4) || pressed(3);
+    if (lb && !P.lb) this.abilityEdge = true;
+    P.lb = lb;
     // Stick flick: one lane per flick; re-arms when the stick comes back.
     const lx = gp.axes[0] ?? 0;
     if (P.flickArmed && Math.abs(lx) >= I.flickThreshold) {
@@ -151,7 +167,7 @@ export class Input {
     P.left = left;
     P.right = right;
     P.brake = (gp.buttons[6]?.value ?? 0) > 0.3;
-    if (Math.abs(lx) > 0.3 || P.brake || rb || left || right) {
+    if (Math.abs(lx) > 0.3 || P.brake || rb || lb || left || right) {
       this.device = 'gamepad';
       this.onAnyInput?.();
     }
@@ -162,8 +178,10 @@ export class Input {
     const brake = this.keys.has('Space') || this.keys.has('KeyS') || this.keys.has('ArrowDown') || this.pad.brake || this.touchBrake;
     const lane = this.laneEdge;
     const shoulder = this.shoulderEdge;
+    const ability = this.abilityEdge;
     this.laneEdge = 0;
     this.shoulderEdge = false;
-    return { lane, brake, shoulder };
+    this.abilityEdge = false;
+    return { lane, brake, shoulder, ability };
   }
 }

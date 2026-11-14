@@ -1,5 +1,6 @@
 import * as THREE from 'three';
-import { TUNING } from './tuning';
+import { TUNING, type UpgradeId } from './tuning';
+import { RunState, ABILITIES } from './sim/run';
 import { Sim } from './sim/sim';
 import { Bot } from './sim/bot';
 import { NO_INPUT, type SimEvent, type SimInput } from './sim/types';
@@ -54,6 +55,12 @@ const heatStars = [...document.querySelectorAll('#heat em')] as HTMLElement[];
 const signoffEl = $('signoff');
 const exitDistEl = $('exitdist');
 const signoffArrow = signoffEl.querySelector('.arrow') as HTMLElement;
+const segEl = $('segno');
+const abilEl = $('abil');
+const abilName = abilEl.querySelector('.nm') as HTMLElement;
+const abilKey = abilEl.querySelector('.key') as HTMLElement;
+const abilCd = abilEl.querySelector('.cd i') as HTMLElement;
+const abilBtn = $<HTMLButtonElement>('btn-ability');
 
 // --- Renderer ---------------------------------------------------------------
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
@@ -116,7 +123,14 @@ const cutLog: { t: number; reason: CutDecision['reason']; index: number; laneBus
 const triggerLog: { t: number; kind: string }[] = [];
 let bot: Bot | null = null;
 const audio = new Audio();
-const input = new Input(canvas, $('btn-shoulder'), $('btn-pause'));
+const input = new Input(canvas, $('btn-shoulder'), $('btn-pause'), $('btn-ability'));
+/** Phase 3: the five-segment run (null in a single broadcast or the attract loop). */
+let run: RunState | null = null;
+/** Phase 3: the hijacked car under the giant while he rides it. */
+let rideMesh: THREE.Group | null = null;
+let poseAnim = 0;
+let bulbT = 0;
+let bulbFrames = 0;
 
 const prev = { s: 0, d: 0, stepPos: 0 };
 let started = false;
@@ -149,11 +163,14 @@ function targetAt(s: number, d: number): CameraTarget {
   return { x: pos.x, z: pos.z, travel: sim.track.headingAt(s), speed: sim.giant.speed, tier: sim.giant.tier };
 }
 
-function newRun(seed: number) {
+function newRun(seed: number, segment = 0, upgrades: UpgradeId[] = []) {
   if (highway) scene.remove(highway.group);
   if (giant) for (const o of giant.objects) scene.remove(o);
   if (cruisers) scene.remove(cruisers.group);
   if (units) scene.remove(units.group);
+  if (rideMesh) scene.remove(rideMesh);
+  rideMesh = null;
+  poseAnim = 0;
   endedAt = -1;
   recapShown = false;
   document.documentElement.classList.remove('ended');
@@ -162,7 +179,7 @@ function newRun(seed: number) {
   pip.reset();
   Object.assign(runStats, { heavy: 0, units: 0, lost: 0, dodged: 0, nearMiss: 0, best: null, bestRatings: -1 });
   $('coldts').textContent = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-  sim = new Sim({ seed });
+  sim = new Sim({ seed, segment, upgrades });
   highway = new HighwayView(sim);
   highway.onHonk = (v) => audio.honk(v);
   giant = new GiantView();
@@ -173,7 +190,7 @@ function newRun(seed: number) {
   cruisers.reduceFlashes = settings.reduceFlashes;
   units = new UnitViews(sim, highway);
   units.reduceFlashes = settings.reduceFlashes;
-  news = new Newsroom(seed);
+  news = new Newsroom(seed, sim.show.heat);
   propKinds.clear();
   cutLog.length = 0;
   triggerLog.length = 0;
@@ -251,6 +268,45 @@ function showCamTag() {
 function hideRecap() {
   recapEl.hidden = true;
 }
+/** A new recap/meeting card ignores accept for a moment: one press must not open it and choose on it. */
+let recapArmedAt = 0;
+const recapArmed = () => performance.now() >= recapArmedAt;
+const esc = (x: string) => x.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
+
+/** Phase 3 (§4, §17): the Producer's Meeting. Three pitches paid from the purse, or skip. */
+function showMeeting() {
+  if (!run) return;
+  const r = run;
+  const offers = r.offers();
+  const held = r.ability;
+  recapEl.innerHTML = `<div class="card meeting">
+    <div class="kicker">PRODUCER'S MEETING · BEFORE SEGMENT ${r.segment + 2} OF ${TUNING.run.segments}</div>
+    <div class="purse">Budget <b>${r.purse.toLocaleString()}</b></div>
+    <div class="pitches">${offers
+      .map((id) => {
+        const u = TUNING.upgrades[id];
+        const swap = u.kind === 'ability' && held ? `<small class="swap">Replaces ${esc(TUNING.upgrades[held].label)}</small>` : '';
+        return `<button class="pitch ${u.kind}" data-id="${id}" ${r.canAfford(id) ? '' : 'disabled'}>
+          <span class="tag">${u.kind === 'ability' ? 'ABILITY' : 'PASSIVE'}</span>
+          <b>${esc(u.label)}</b><span class="blurb">${esc(u.blurb)}</span>${swap}<span class="price">${u.price.toLocaleString()}</span></button>`;
+      })
+      .join('')}</div>
+    <div class="row"><button class="go alt" id="skip">Skip</button></div>
+  </div>`;
+  recapArmedAt = performance.now() + 250;
+  for (const b of recapEl.querySelectorAll<HTMLButtonElement>('.pitch')) b.onclick = () => r.buy(b.dataset.id as UpgradeId) && nextSegment();
+  ($('skip') as HTMLButtonElement).onclick = () => r.nextSegment() && nextSegment();
+  (recapEl.querySelector<HTMLButtonElement>('.pitch:not([disabled])') ?? $<HTMLButtonElement>('skip')).focus();
+}
+
+/** The next segment of the run: a new road, Heat starts higher, the upgrades come along. */
+function nextSegment() {
+  if (!run) return;
+  newRun(run.segmentSeed(), run.segment, run.owned);
+  bot = flags.bot ? new Bot(sim) : null;
+  menuGuard = 10;
+}
+
 /** The 11 O'Clock Recap (§20: results as the evening news). */
 function showRecap() {
   const sh = sim.show;
@@ -262,27 +318,40 @@ function showRecap() {
   const best = runStats.best;
   const viewers = (r: number) => (r * 18_500 >= 1e6 ? `${((r * 18_500) / 1e6).toFixed(2)}M` : `${Math.round((r * 18_500) / 1000)}K`);
   const t = Math.floor(sim.time);
-  const esc = (x: string) => x.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
+  const N = TUNING.run.segments;
+  const segLabel = run ? ` · SEGMENT ${run.segment + 1} OF ${N}` : '';
+  const runStatsHtml = run && run.phase !== 'meeting'
+    ? `<span>Run score <b>${Math.round(run.earned).toLocaleString()}</b></span><span>Segments cleared <b>${run.results.filter((x) => x.cleared).length} / ${N}</b></span>`
+    : run ? `<span>Run so far <b>${Math.round(run.earned).toLocaleString()}</b></span><span>Budget <b>${run.purse.toLocaleString()}</b></span>` : '';
+  const buttons = run?.phase === 'meeting'
+    ? `<button class="go" id="meet">Producer's Meeting</button>`
+    : run
+      ? `<button class="go" id="again">Run it again</button><button class="go alt" id="tomenu">Menu</button>`
+      : `<button class="go" id="again">Run it again</button><button class="go alt" id="same">Same road</button><button class="go alt" id="tomenu">Menu</button>`;
   recapEl.innerHTML = `<div class="card">
-    <div class="kicker">THE 11 O'CLOCK RECAP · WYF 6</div>
+    <div class="kicker">THE 11 O'CLOCK RECAP · WYF 6${segLabel}</div>
     <h2>${esc(last?.text ?? (cleared ? 'Giant Takes The Exit' : 'Suspect In Custody'))}</h2>
-    <span class="outcome ${cleared ? 'cleared' : ''}">${cleared ? 'SIGNED OFF' : reason === 'pin' ? 'BUSTED · BOXED IN' : reason === 'ratings' ? 'BUSTED · CUT TO COMMERCIAL' : 'BUSTED · MISSED THE EXIT'}</span>
+    <span class="outcome ${cleared ? 'cleared' : ''}">${run?.phase === 'won' ? 'FULL BROADCAST · SIGNED OFF' : cleared ? 'SIGNED OFF' : reason === 'pin' ? 'BUSTED · BOXED IN' : reason === 'ratings' ? 'BUSTED · CUT TO COMMERCIAL' : 'BUSTED · MISSED THE EXIT'}</span>
     ${best ? `<div class="best"><small>TONIGHT'S TOP STORY</small>${esc(best.text)}</div>` : ''}
     <div class="stats">
       <span>Peak audience <b>${viewers(sh.peak)}</b></span><span>Score banked <b>${Math.round(sh.banked).toLocaleString()}</b></span>
       <span>On air <b>${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}</b></span><span>Rampage time <b>${Math.round(sim.stats.timeAtTier[2])}s</b></span>
       <span>Things flattened <b>${sim.stats.smashes}</b></span><span>Police cars smashed <b>${runStats.units}</b></span>
       <span>Pursuers shaken <b>${runStats.lost}</b></span><span>Heat reached <b>${'★'.repeat(sh.heat)}</b></span>
-      ${lastBest ? `<span>Best score <b>${lastBest.bestBanked.toLocaleString()}</b></span><span>Signed off <b>${lastBest.signOffs} / ${lastBest.broadcasts}</b></span>` : ''}
+      ${runStatsHtml}
+      ${!run && lastBest ? `<span>Best score <b>${lastBest.bestBanked.toLocaleString()}</b></span><span>Signed off <b>${lastBest.signOffs} / ${lastBest.broadcasts}</b></span>` : ''}
     </div>
     <p class="anchor">${esc(anchorLine)}</p>
-    <div class="row"><button class="go" id="again">Run it again</button><button class="go alt" id="same">Same road</button><button class="go alt" id="tomenu">Menu</button></div>
+    <div class="row">${buttons}</div>
   </div>`;
   recapEl.hidden = false;
-  ($('again') as HTMLButtonElement).onclick = () => restart(false);
-  ($('same') as HTMLButtonElement).onclick = () => restart(true);
-  ($('tomenu') as HTMLButtonElement).onclick = () => recapToMenu();
-  ($('again') as HTMLButtonElement).focus();
+  recapArmedAt = performance.now() + 250;
+  const btn = (id: string) => document.getElementById(id) as HTMLButtonElement | null;
+  if (btn('meet')) btn('meet')!.onclick = () => showMeeting();
+  if (btn('again')) btn('again')!.onclick = () => restart(false);
+  if (btn('same')) btn('same')!.onclick = () => restart(true);
+  if (btn('tomenu')) btn('tomenu')!.onclick = () => recapToMenu();
+  (recapEl.querySelector('.row button') as HTMLButtonElement).focus();
 }
 
 /** Recap buttons go through the shell's results flow (retry / menu). */
@@ -418,6 +487,66 @@ function present(e: SimEvent) {
       if (e.type === 'busted') document.documentElement.classList.add('ended');
       bot = null;
       break;
+    case 'ability':
+      if (!e.ok) audio.dud();
+      else if (e.id === 'leap') {
+        audio.leap();
+        rig.jolt(1.5, 0.1);
+      }
+      abilEl.classList.remove('fire');
+      void abilEl.offsetWidth;
+      abilEl.classList.add('fire');
+      break;
+    case 'leapLand': {
+      sim.track.posAt(e.s, e.d, pos);
+      highway.ring(pos.x, pos.z, 11, 0xffffff, 0.55, 0.9);
+      highway.ring(pos.x, pos.z, 6, PALETTE.dust, 0.7, 0.7);
+      highway.crack(pos.x, pos.z, h);
+      highway.spawnDebris(pos.x, pos.z, Math.cos(h), Math.sin(h), 4, 14, [PALETTE.dust, 0x8d8579], [0.15, 0.4], 1.5);
+      audio.land();
+      hitstop = Math.max(hitstop, TUNING.impact.heavy.hitstop);
+      rig.jolt(TUNING.impact.heavy.shake * 1.3, TUNING.camera.joltTime);
+      flash(TUNING.impact.heavy.flashFrames);
+      haptic(160, 0.9);
+      if (e.smashed) pip.trigger(sim, sim.show.tier);
+      break;
+    }
+    case 'stare': {
+      audio.stare();
+      for (const m of e.moved) highway.slide(m.id);
+      sim.track.posAt(g.s + 10, g.d, pos);
+      highway.ring(pos.x, pos.z, 9, 0xbfd6ff, 0.8, 0.35);
+      break;
+    }
+    case 'hijack': {
+      audio.hijack();
+      const p = sim.track.props.find((q) => q.id === e.propId);
+      if (p) {
+        highway.drop(e.propId); // the parked view goes: it's under him now
+        rideMesh = highway.vehicleMesh(p);
+        scene.add(rideMesh);
+      }
+      rig.jolt(2, 0.12);
+      haptic(90, 0.6);
+      break;
+    }
+    case 'hijackBail': {
+      if (rideMesh) {
+        sim.track.posAt(e.s, e.d, pos);
+        highway.spawnDebris(pos.x, pos.z, Math.cos(h), Math.sin(h), g.speed, 16, rideMesh.userData.colors ?? [0x888888], [0.2, 0.55], 1.2);
+        scene.remove(rideMesh);
+        rideMesh = null;
+      }
+      audio.smash('heavy');
+      rig.jolt(TUNING.impact.heavy.shake, TUNING.camera.joltTime);
+      flash(TUNING.impact.heavy.flashFrames);
+      haptic(120, 0.8);
+      break;
+    }
+    case 'pose':
+      audio.pose();
+      pip.trigger(sim, sim.show.tier, true);
+      break;
     case 'laneChange':
       audio.capeWhip(0.5 + g.tier * 0.25);
       break;
@@ -513,11 +642,18 @@ function start() {
 }
 
 /** Shell "load level": a new broadcast with the player at the controls. */
-function beginBroadcast() {
+function beginBroadcast(mode = 'broadcast') {
   attract = false;
   document.documentElement.classList.remove('attract');
-  newRun(nextSeed ?? (Math.random() * 1e9) | 0);
+  const seed = nextSeed ?? (Math.random() * 1e9) | 0;
   nextSeed = null;
+  if (mode === 'run') {
+    run = new RunState(seed);
+    newRun(run.segmentSeed(), 0, []);
+  } else {
+    run = null;
+    newRun(seed, Math.max(0, Math.min(TUNING.run.segments - 1, flags.seg ?? 0)), flags.ability ? [flags.ability] : []);
+  }
   bot = flags.bot ? new Bot(sim) : null;
   start();
 }
@@ -526,7 +662,10 @@ function beginBroadcast() {
 function enterAttract() {
   attract = true;
   document.documentElement.classList.add('attract');
-  newRun((Math.random() * 1e9) | 0);
+  run = null;
+  // Behind the menus the bot shows off a random ability.
+  const seed = (Math.random() * 1e9) | 0;
+  newRun(seed, 0, [ABILITIES[seed % ABILITIES.length]]);
   bot = new Bot(sim);
   start();
   audio.setPaused(false);
@@ -561,7 +700,9 @@ window.addEventListener('keydown', (e) => {
   if (e.code === 'KeyT') tunePanel.toggle();
   if (!recapEl.hidden && (e.code === 'Enter' || e.code === 'Space')) {
     e.preventDefault();
-    restart(false);
+    // The shell's accept action clicks the focused button; this only covers nothing being focused.
+    const focused = document.activeElement;
+    if (!(focused instanceof HTMLButtonElement && recapEl.contains(focused)) && recapArmed() && !e.repeat) (recapEl.querySelector('button:not([disabled])') as HTMLButtonElement | null)?.click();
     return;
   }
   const playing = started && !paused && !attract;
@@ -569,7 +710,7 @@ window.addEventListener('keydown', (e) => {
   if (e.code === 'KeyC' && playing) setAngle(director.current + 1, director.side); // dev: next angle (held until C comes back to Chase High)
   if (e.code === 'KeyR' && playing) {
     nextSeed = flags.seedFixed ? flags.seed : null;
-    beginBroadcast();
+    beginBroadcast(run ? 'run' : 'broadcast');
   }
 });
 
@@ -579,7 +720,10 @@ const wyfAssembly = (shell: SLUWebShell<CoreSettings>): FrameAssembly => {
     id: 'arcade',
     label: 'Live Broadcast',
     menuFlow: [],
-    modes: [{ id: 'broadcast', label: 'Live Broadcast', description: 'Keep the ratings up. Take the exit before the chopper runs out of fuel.', leaderboardKey: 'banked' }],
+    modes: [
+      { id: 'run', label: 'Full Broadcast', description: 'Five segments. Spend your ratings between them.', leaderboardKey: 'runScore' },
+      { id: 'broadcast', label: 'Single Segment', description: 'Keep the ratings up. Take the exit before the chopper runs out of fuel.', leaderboardKey: 'banked' },
+    ],
     statKeys: ['broadcasts', 'signOffs', 'bestBanked', 'bestPeak'],
     challengeCategories: [],
     recommendedModules: [],
@@ -589,7 +733,7 @@ const wyfAssembly = (shell: SLUWebShell<CoreSettings>): FrameAssembly => {
 const onOff = (b: boolean) => (b ? 'On' : 'Off');
 const rendererAdapter: RendererAdapter = {
   id: 'wyf-three',
-  loadLevel: () => beginBroadcast(),
+  loadLevel: (id) => beginBroadcast(id),
   unloadLevel: () => enterAttract(),
   suspend: () => setPaused(true),
   resume: () => setPaused(false),
@@ -657,13 +801,13 @@ applyCore(app.settings.snapshot());
 app.settings.events.on('changed', applyCore);
 // Pause → Restart replays the same road; the recap's "Run it again" asks for a fresh one.
 app.shell.events.on('game:restart', () => {
-  nextSeed = restartFresh ? null : sim.seed;
+  nextSeed = restartFresh ? null : (run?.seed ?? sim.seed);
   restartFresh = false;
 });
 // Dev/test flags skip the menus straight into a broadcast.
 if (flags.bot || flags.autostart) {
   app.flow.onActivate('title', 'start');
-  app.flow.onActivate('mode-select', 'broadcast');
+  app.flow.onActivate('mode-select', flags.mode);
 }
 
 // --- Loop -----------------------------------------------------------------------
@@ -734,7 +878,23 @@ function frame(now: number) {
         haptic(30, 0.15); // §27 light pulse per footfall at Rampage only
       }
     }
-    giant.update(animDt, { x: t.x, z: t.z, heading, travel: t.travel, lateralVel, speed: g.speed, tier: g.tier, braking: g.braking, stumble: g.stumble, stepPos }, gf);
+    // Phase 3: Leap arc, standing on the hijacked car's roof, the pose.
+    const A = TUNING.abilities;
+    const u = g.airDur > 0 && g.air > 0 ? 1 - g.air / g.airDur : 0;
+    const roof = rideMesh ? (rideMesh.userData.roof as number) : 0;
+    const lift = u > 0 ? 4 * A.leap.height * u * (1 - u) : roof;
+    poseAnim += ((g.pose > 0 ? 1 : 0) - poseAnim) * Math.min(1, animDt / 0.08);
+    giant.update(animDt, { x: t.x, z: t.z, heading, travel: t.travel, lateralVel, speed: g.speed, tier: g.tier, braking: g.braking, stumble: g.stumble, stepPos, lift, pose: poseAnim }, gf);
+    if (rideMesh) {
+      rideMesh.position.set(t.x, 0, t.z);
+      rideMesh.rotation.y = -heading;
+    }
+    // Pose: flash bulbs from the crowd and the press. A soft pulse, at most 3 a second (photosensitivity).
+    bulbT = Math.max(0, bulbT - animDt);
+    if (g.pose > 0 && bulbT === 0 && !settings.reduceFlashes) {
+      bulbT = 1 / 3;
+      bulbFrames = 3;
+    }
   }
   highway.update(animDt, t.x, t.z, s, d);
   cruisers.update(animDt);
@@ -753,18 +913,21 @@ function frame(now: number) {
     recapShown = true;
     if (attract) enterAttract(); // behind the menus: just roll another broadcast
     else {
-      app?.shell.session.setPhase('results');
-      void recordStats();
+      if (run) run.finishSegment(sim.show);
+      if (run?.phase !== 'meeting') {
+        app?.shell.session.setPhase('results');
+        void recordStats();
+      }
       showRecap();
     }
   }
   // Controller parity on the recap: left/right to move, A to choose.
   if (!recapEl.hidden && app) {
-    const btns = [...recapEl.querySelectorAll('button')] as HTMLButtonElement[];
+    const btns = ([...recapEl.querySelectorAll('button')] as HTMLButtonElement[]).filter((b) => !b.disabled);
     const i = Math.max(0, btns.indexOf(document.activeElement as HTMLButtonElement));
     if (app.shell.input.wasPressed('ui_right') || app.shell.input.wasPressed('ui_down')) btns[(i + 1) % btns.length].focus();
     if (app.shell.input.wasPressed('ui_left') || app.shell.input.wasPressed('ui_up')) btns[(i + btns.length - 1) % btns.length].focus();
-    if (app.shell.input.wasPressed('ui_accept') && document.activeElement instanceof HTMLButtonElement && btns.includes(document.activeElement)) document.activeElement.click();
+    if (app.shell.input.wasPressed('ui_accept') && recapArmed() && document.activeElement instanceof HTMLButtonElement && btns.includes(document.activeElement)) document.activeElement.click();
   }
   rig.update(paused ? 0 : realDt * flags.timescale, t);
   lighting.update(animDt, { giantX: t.x, giantZ: t.z, travel: t.travel, speed: g.speed, camera: rig.camera, lamps: highway.lamps, sirens: cruisers.sirens, facing: rig.facing });
@@ -782,7 +945,8 @@ function frame(now: number) {
     }
   }
 
-  flashEl.style.opacity = flashFrames > 0 ? '0.85' : '0';
+  flashEl.style.opacity = flashFrames > 0 ? '0.85' : bulbFrames > 0 ? '0.18' : '0';
+  if (bulbFrames > 0) bulbFrames--;
   if (flashFrames > 0) flashFrames--;
   camTagT = Math.max(0, camTagT - realDt);
   if (camTagT === 0) camTag.classList.remove('show');
@@ -815,15 +979,22 @@ async function recordStats() {
   if (!app) return;
   const st = app.storage;
   const sh = sim.show;
-  const best = (await st.get<{ broadcasts: number; signOffs: number; bestBanked: number; bestPeak: number }>('wyf.stats')) ?? { broadcasts: 0, signOffs: 0, bestBanked: 0, bestPeak: 0 };
+  const best = (await st.get<Stats>('wyf.stats')) ?? { broadcasts: 0, signOffs: 0, bestBanked: 0, bestPeak: 0 };
   best.broadcasts++;
   if (sh.state === 'cleared') best.signOffs++;
   best.bestBanked = Math.max(best.bestBanked, Math.round(sh.banked));
   best.bestPeak = Math.max(best.bestPeak, sh.peak);
+  if (run) {
+    best.runs = (best.runs ?? 0) + 1;
+    if (run.phase === 'won') best.runsWon = (best.runsWon ?? 0) + 1;
+    best.bestRun = Math.max(best.bestRun ?? 0, Math.round(run.earned));
+  }
   await st.set('wyf.stats', best);
   lastBest = best;
 }
-let lastBest: { broadcasts: number; signOffs: number; bestBanked: number; bestPeak: number } | null = null;
+/** Stored bests. Phase 3 fields are optional so older saves load unchanged. */
+type Stats = { broadcasts: number; signOffs: number; bestBanked: number; bestPeak: number; runs?: number; runsWon?: number; bestRun?: number };
+let lastBest: Stats | null = null;
 let lastCoverage = performance.now();
 
 /** Edge arrow to the sign-off ramp (§21), pointing at the gore from wherever it is. */
@@ -868,6 +1039,26 @@ function updateHud(dt: number) {
   trendEl.textContent = falling ? '▼' : '';
   lastRatings = sh.ratings;
   heatStars.forEach((el, i) => el.classList.toggle('on', i < sh.heat));
+  // Phase 3: segment number and the ability chip (cooldown fills back up).
+  segEl.hidden = !run;
+  if (run) segEl.textContent = `${run.segment + 1}/${TUNING.run.segments}`;
+  const ab = sim.ability;
+  abilEl.hidden = !ab || attract;
+  abilBtn.disabled = !ab;
+  if (ab) {
+    const A = TUNING.abilities[ab];
+    const label = TUNING.upgrades[ab].label;
+    if (abilName.textContent !== label) {
+      abilName.textContent = label;
+      abilBtn.textContent = label.split(' ')[0].toUpperCase().slice(0, 5);
+      abilBtn.setAttribute('aria-label', label);
+    }
+    abilKey.textContent = input.device === 'gamepad' ? 'LB' : input.device === 'touch' ? '' : 'E';
+    const ready = g.abilityCd <= 0;
+    abilCd.style.width = `${((1 - g.abilityCd / A.cooldown) * 100).toFixed(1)}%`;
+    abilEl.classList.toggle('ready', ready);
+    abilBtn.classList.toggle('ready', ready);
+  }
   updateSignOff();
   const T = TUNING.tiers[g.tier];
   tierName.textContent = T.name.toUpperCase();
@@ -986,4 +1177,8 @@ window.__GAME = {
     return { time: sim.time, tick: sim.tick, s: g.s, d: g.d, lane: g.lane, lanes: sim.track.lanesAt(g.s), laneBusy: sim.laneBusy, speed: g.speed, tier: g.tier, stats: sim.stats, fps: perf.fps };
   },
   events: recentEvents,
+  /** Phase 3: the run (null in a single broadcast). */
+  run: () => (run ? { segment: run.segment, phase: run.phase, purse: run.purse, earned: run.earned, owned: [...run.owned], offers: run.phase === 'meeting' ? run.offers() : [], results: run.results.slice() } : null),
+  meeting: () => (recapEl.querySelector('.meeting') ? [...recapEl.querySelectorAll<HTMLButtonElement>('.pitch')].map((b) => ({ id: b.dataset.id, disabled: b.disabled })) : null),
+  ability: () => ({ id: sim.ability, cd: sim.giant.abilityCd, air: sim.giant.air, ride: sim.giant.ride, pose: sim.giant.pose, chip: !abilEl.hidden }),
 };

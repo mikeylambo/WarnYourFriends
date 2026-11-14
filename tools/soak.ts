@@ -23,7 +23,8 @@ import { Bot } from '../src/sim/bot';
 import { Gait } from '../src/anim/gait';
 import { CameraRig, Director, cutTriggerFor, type CutTrigger } from '../src/render/camera';
 import * as THREE from 'three';
-import { TUNING } from '../src/tuning';
+import { TUNING, type UpgradeId } from '../src/tuning';
+import { ABILITIES } from '../src/sim/run';
 
 const seeds = Number(process.argv[2] ?? 200);
 // Phase 2: one full segment (150s + 15s grace, LOCKED) per seed.
@@ -49,13 +50,19 @@ const ndc = new THREE.Vector3();
 // A few seeds with cuts switched off: Chase High must hold the whole run.
 const OFF_SEEDS = new Set([7, 77, 177]);
 const swoop = { n: 0, frames: 0, maxLen: 0 };
+const p3 = { segments: [0, 0, 0, 0, 0], uses: {} as Record<string, number>, duds: 0, leapLands: 0, leapSmash: 0, stareMoved: 0, hijackBails: 0, poseGain: 0, maxPose: 0, maxAir: 0 };
 const p2 = { tellsOffscreen: 0, spawns: {} as Record<string, number>, tells: {} as Record<string, number>, minSpawnDist: Infinity, spawnOnCamera: 0, maxTells: 0, ramHits: 0, ramMisses: 0, spiked: 0, nearMiss: 0, lostTrack: 0, maxPin: 0, ends: {} as Record<string, number>, endTime: 0, peak: 0, banked: 0 };
 const stepSamples: number[] = [];
 let maxStepMs = 0;
 const t0 = performance.now();
 
 for (let seed = 1; seed <= seeds; seed++) {
-  const sim = new Sim({ seed });
+  // Phase 3: every seed plays a segment of the run with an ability and a seeded set of passives.
+  const passives: UpgradeId[] = (['ironShins', 'secondWind', 'showman', 'tailwind'] as UpgradeId[]).filter((_, k) => ((seed >> 2) >> k) & 1);
+  const loadout: UpgradeId[] = seed % 9 === 0 ? passives : [ABILITIES[seed % 4], ...passives];
+  const sim = new Sim({ seed, segment: seed % TUNING.run.segments, upgrades: loadout });
+  p3.segments[seed % TUNING.run.segments]++;
+  if (sim.show.heat !== Math.min(5, 1 + (seed % TUNING.run.segments))) fail(`seed ${seed}: segment ${seed % 5} started at Heat ${sim.show.heat}`);
   const bot = new Bot(sim);
   const gait = new Gait();
   const rig = new CameraRig();
@@ -182,7 +189,7 @@ for (let seed = 1; seed <= seeds; seed++) {
     cam.minAhead = Math.min(cam.minAhead, info.aheadSeconds);
     if (info.aheadSeconds < TUNING.camera.minRoadAheadSeconds) {
       cam.aheadUnder2++;
-      const key = `${info.angle}/${TUNING.tiers[g.tier].name}${sim.laneBusy ? '/lane' : ''}`;
+      const key = `${info.angle}/${TUNING.tiers[g.tier].name}${sim.laneBusy ? '/lane' : ''}${g.ride > 0 ? '/ride' : ''}${g.air > 0 ? '/air' : ''}${g.pose > 0 ? '/pose' : ''}${g.abilityCd > 0 ? '/cd:' + sim.ability : ''}`;
       aheadBy[key] = Math.min(aheadBy[key] ?? Infinity, info.aheadSeconds);
     }
     }
@@ -241,6 +248,17 @@ for (let seed = 1; seed <= seeds; seed++) {
     p2.maxTells = Math.max(p2.maxTells, tells.size);
     if (tells.size > 1) fail(`seed ${seed}: ${tells.size} tells at once at t=${sim.time.toFixed(2)}`);
     for (const e of events) {
+      if (e.type === 'ability') {
+        if (e.ok) p3.uses[e.id] = (p3.uses[e.id] ?? 0) + 1;
+        else p3.duds++;
+      }
+      if (e.type === 'leapLand') {
+        p3.leapLands++;
+        p3.leapSmash += e.smashed;
+      }
+      if (e.type === 'stare') p3.stareMoved += e.moved.length;
+      if (e.type === 'hijackBail') p3.hijackBails++;
+      if (e.type === 'pose') p3.poseGain += e.gain;
       if (e.type === 'tell') {
         p2.tells[e.kind] = (p2.tells[e.kind] ?? 0) + 1;
         // A tell nobody can see isn't a tell: it must start inside the frame.
@@ -267,9 +285,14 @@ for (let seed = 1; seed <= seeds; seed++) {
     }
     const sh = sim.show;
     if (sh.ratings < 0 || sh.ratings > 100 || sh.pin < 0 || sh.pin > 100 || !Number.isFinite(sh.banked)) fail(`seed ${seed}: meter out of range (ratings ${sh.ratings}, pin ${sh.pin})`);
-    if (sh.heat < lastHeat) fail(`seed ${seed}: Heat fell ${lastHeat} → ${sh.heat}`);
+    // Heat never falls within a segment (§12), except when Pose for the Camera spends it (§17).
+    if (sh.heat < lastHeat && !events.some((e) => e.type === 'pose')) fail(`seed ${seed}: Heat fell ${lastHeat} → ${sh.heat}`);
     lastHeat = sh.heat;
     p2.maxPin = Math.max(p2.maxPin, sh.pin);
+    // Phase 3: the pose is a deliberate stop of at most 1s (§2) and never below the LOCKED floor.
+    p3.maxPose = Math.max(p3.maxPose, g.pose);
+    p3.maxAir = Math.max(p3.maxAir, g.air);
+    if (g.pose > 1) fail(`seed ${seed}: pose held ${g.pose.toFixed(2)}s`);
     if (!inSwoop && Math.abs(info.screenUpDeg) > TUNING.camera.screenUpMaxDeg) fail(`seed ${seed}: screen-up law broken (${info.screenUpDeg.toFixed(1)}°, ${info.angle}) at tick ${i}`);
     if (!inSwoop && info.giantScreenY > TUNING.camera.giantMaxScreenY + 0.005) fail(`seed ${seed}: giant at ${info.giantScreenY.toFixed(3)} of screen (${info.angle}) at tick ${i}`);
   }
@@ -326,6 +349,7 @@ console.log(
     `spawns ${JSON.stringify(p2.spawns)}, nearest spawn ${p2.minSpawnDist.toFixed(1)}m, on camera ${p2.spawnOnCamera}; tells ${JSON.stringify(p2.tells)}, max at once ${p2.maxTells}, off screen ${p2.tellsOffscreen}; ` +
     `rams hit ${p2.ramHits} / missed ${p2.ramMisses}; spiked ${p2.spiked}; near-misses ${p2.nearMiss}; lost track ${p2.lostTrack}; max Pin ${p2.maxPin.toFixed(0)}`,
 );
+console.log(`  run (Phase 3): segments ${p3.segments.join('/')}; ability uses ${JSON.stringify(p3.uses)}, no-target presses ${p3.duds}; leap landings ${p3.leapLands} (smashed ${p3.leapSmash}); stare pulled over ${p3.stareMoved}; hijack bails ${p3.hijackBails}; pose Ratings +${p3.poseGain.toFixed(0)}`);
 console.log(`  escort: ${esc.joins} joins, nearest join ${esc.minJoinBehind.toFixed(1)}m back, ${esc.joinsOnCamera} on camera; closest gap ever ${esc.minGap.toFixed(2)}m (floor ${TUNING.escort.minGap}m)`);
 if (Object.keys(aheadBy).length) console.log('  road-ahead shortfalls (min s by angle/tier):', JSON.stringify(Object.fromEntries(Object.entries(aheadBy).map(([k, v]) => [k, +v.toFixed(2)]))));
 for (let t = 0; t < 3; t++) {
@@ -341,6 +365,7 @@ if (cuts.minAwayHold < TUNING.camera.awayHold[0] - 1e-6) fail(`returned home aft
 if (cuts.maxAwayHold > TUNING.camera.awayHold[1] + 2) fail(`stayed away ${cuts.maxAwayHold.toFixed(2)}s`);
 if (swoop.n < seeds / 4) fail(`too few swoops to test (${swoop.n})`);
 for (const k of ['cruiser', 'spike', 'rolling', 'roadblock']) if (!p2.tells[k]) fail(`no ${k} tell in ${seeds} seeds`);
+for (const k of ABILITIES) if (!p3.uses[k]) fail(`ability ${k} never used in ${seeds} seeds`);
 if (cuts.offCuts > 0) fail(`${cuts.offCuts} cuts with Camera cuts: Off`);
 if (esc.joins < seeds) fail(`too few escort joins (${esc.joins})`);
 if (cam.aheadUnder2 > 0) fail(`road ahead under 2s in ${cam.aheadUnder2} frames (min ${cam.minAhead.toFixed(2)}s)`);

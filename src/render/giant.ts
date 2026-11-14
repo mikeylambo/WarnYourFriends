@@ -37,6 +37,10 @@ export interface GiantPose {
   braking: boolean;
   stumble: number;
   stepPos: number;
+  /** Phase 3: height off the road (Leap arc, riding a hijacked car's roof). */
+  lift?: number;
+  /** Phase 3: Pose for the Camera, 0..1 (arms up, chest out, facing the chopper). */
+  pose?: number;
 }
 
 function box(w: number, h: number, d: number, color: number): THREE.Mesh {
@@ -229,7 +233,9 @@ export class GiantView {
     const T = TUNING.tiers[p.tier];
     const k = (tau: number) => 1 - Math.exp(-dt / tau);
 
-    this.root.position.set(p.x, 0, p.z);
+    const lift = p.lift ?? 0;
+    this.root.position.set(p.x, lift, p.z);
+    this.legs.position.y = lift;
     this.root.rotation.y = -p.heading;
     this.hips.position.y = gait.hipY;
     this.shadow.position.set(p.x + 0.4, 0.07, p.z + 0.4);
@@ -271,6 +277,15 @@ export class GiantView {
     // The arm driving forward folds (fist up near the chin); the arm swinging back straightens.
     this.elbowL.rotation.set(0, 0, T.elbowBend * 0.5 + Math.max(0, aL) * 0.65);
     this.elbowR.rotation.set(0, 0, T.elbowBend * 0.5 + Math.max(0, aR) * 0.65);
+    const po = p.pose ?? 0;
+    if (po > 0) {
+      // Double flex for the chopper: upper arms out and up, forearms folded to the head.
+      this.armL.rotation.set(1.5 * po, 0, 0.25 * po);
+      this.armR.rotation.set(-1.5 * po, 0, 0.25 * po);
+      this.elbowL.rotation.set(0, 0, 1.9 * po);
+      this.elbowR.rotation.set(0, 0, 1.9 * po);
+      this.torso.rotation.z += this.lean * po * 0.8; // stand up for it
+    }
     if (sh > 0) {
       this.armL.rotation.set(0.6 * sh, 0, 0.9 * sh);
       this.elbowL.rotation.set(0, 0, 0.3 * (1 - sh));

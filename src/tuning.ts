@@ -11,6 +11,8 @@
  */
 
 export type MassClass = 'light' | 'medium' | 'heavy' | 'immovable';
+export type UpgradeId = 'leap' | 'stare' | 'hijack' | 'pose' | 'ironShins' | 'secondWind' | 'showman' | 'tailwind';
+export type AbilityId = 'leap' | 'stare' | 'hijack' | 'pose';
 
 export interface TierTuning {
   name: 'Jog' | 'Stride' | 'Rampage';
@@ -425,17 +427,67 @@ export const TUNING = {
     /** Cruiser ram (v0.3: blinker + 0.6s drift, then swerve into your lane). */
     cruiser: { closeSpeed: 7, tell: 0.6, drift: 0.6, swerve: 0.35, fallBack: 6, sideSpeed: 5 },
     /** Rolling roadblock (v0.3: brake lights 1.5s, 2–3 cruisers abreast slowing). */
-    /** Tells start inside the visible road (the frame shows ≥2s ahead), or nobody sees them. */
-    rolling: { cruiseFactor: 0.55, tellAhead: 1.9, tellMin: 25, tell: 1.5, decel: 6, crawl: 3, actMax: 12 },
+    /** Tells start inside the visible road (the frame shows ≥2s ahead; capped at 28m for the faster Hijack ride), or nobody sees them. */
+    rolling: { cruiseFactor: 0.55, tellAhead: 1.9, tellMin: 25, tellMax: 28, tell: 1.5, decel: 6, crawl: 3, actMax: 12 },
     /** Spike strip (v0.3: officer kneels, 1.2s, covers one lane). Crossing it: −1 tier, keep 70% speed, stumble. */
-    spike: { aheadTime: 4.5, aheadMin: 60, tellAhead: 1.9, tell: 1.2, speedKeep: 0.7 },
+    spike: { aheadTime: 4.5, aheadMin: 60, tellAhead: 1.9, tellMax: 28, tell: 1.2, speedKeep: 0.7 },
     /** Static roadblock (v0.3: cars slide in 2.0s, all lanes but one; the gap glows). */
-    roadblock: { aheadTime: 7.5, slideAhead: 1.9, tell: 2.0 },
+    roadblock: { aheadTime: 7.5, slideAhead: 1.9, slideMax: 28, tell: 2.0 },
     /** Near-miss (§12): a pursuer passes within 1.5m without contact. */
     nearMiss: 1.5,
     /** A unit this far behind the giant has lost track (§12) and leaves. */
     lostBehind: 30,
     removeBehind: 60,
+  },
+
+  /**
+   * Phase 3 run (§4, §17): five segments with a Producer's Meeting between each.
+   * Later segments start one Heat higher (§19) and decay faster (§12 decayRate by segment).
+   */
+  run: {
+    segments: 5,
+    /** Offers per meeting (§17: pick 1 of 3). */
+    offers: 3,
+  },
+
+  /**
+   * §17 v1 upgrade pool (8). Abilities share the one ability slot (a new one replaces it);
+   * passives stack. Prices are paid from banked Ratings (the run score is what you earned,
+   * spending doesn't lower it). Working default: a cleared segment banks ~24k with the bot, so one
+   * segment affords the cheaper half; saving up for Leap/Hijack is a real choice.
+   */
+  upgrades: {
+    leap: { kind: 'ability', price: 26000, label: 'Leap', blurb: 'Hop lanes of trouble. The landing flattens what you land on.' },
+    stare: { kind: 'ability', price: 21000, label: 'The Stare', blurb: 'Traffic and police ahead pull out of your lane.' },
+    hijack: { kind: 'ability', price: 30000, label: 'Hijack Hop', blurb: 'Ride a car through everything, then bail at Rampage.' },
+    pose: { kind: 'ability', price: 21000, label: 'Pose for the Camera', blurb: 'Stop for the cameras. Heat becomes a Ratings spike.' },
+    ironShins: { kind: 'passive', price: 17000, label: 'Iron Shins', blurb: 'Medium objects never bounce you.' },
+    secondWind: { kind: 'passive', price: 17000, label: 'Second Wind', blurb: 'The box-in meter drains 50% faster.' },
+    showman: { kind: 'passive', price: 22000, label: 'Showman', blurb: 'Something new on air pays double.' },
+    tailwind: { kind: 'passive', price: 19000, label: 'Tailwind', blurb: 'Tier up 30% sooner.' },
+  } as Record<UpgradeId, { kind: 'ability' | 'passive'; price: number; label: string; blurb: string }>,
+
+  /** Phase 3 abilities (lane-runner versions of §17's pool). 5f input buffer (§8). */
+  abilities: {
+    bufferFrames: 5,
+    /** Leap: airborne this long (no collisions), apex height (m), landing shockwave radius (m) smashing up to Heavy. */
+    leap: { time: 0.9, height: 3.2, shockRadius: 4.5, cooldown: 6 },
+    /** The Stare: vehicles in your lane up to this far ahead pull over into a free neighbouring lane; police winding up back off. */
+    stare: { reach: 70, time: 0.6, cooldown: 10 },
+    /** Hijack Hop: a vehicle within this far ahead (your lane or next to it); ride speed (just under Rampage top so every camera keeps ≥2s of road ahead), reached at `accel`, ride time, then bail at Rampage. */
+    hijack: { reach: 14, speed: 14, accel: 8, time: 3, cooldown: 12 },
+    /** Pose: speed held at the floor this long (a deliberate stop, §2: ≤1s); Ratings per Heat level; Heat spent. */
+    pose: { time: 0.8, ratingsPerHeat: 7, heatCost: 1, cooldown: 12 },
+  },
+
+  /** Phase 3 passives. */
+  passives: {
+    /** Second Wind: Pin drain multiplier. */
+    secondWindDrain: 1.5,
+    /** Showman: a type unseen this segment pays this (instead of §12's ×1.5). */
+    showmanFresh: 2.0,
+    /** Tailwind: tier-up time multiplier. */
+    tailwindTierUp: 0.7,
   },
 
   /** Phase 0c traffic reactions (presentation): cars ahead brake, swerve and honk as he approaches. */

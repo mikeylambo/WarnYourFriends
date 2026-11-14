@@ -4,9 +4,11 @@
 
 A top-down chase roguelite: a giant fugitive barrels through a city on live TV, scoring ratings for spectacle. Design: [`docs/GDD.md`](docs/GDD.md). Rules for building: [`CLAUDE.md`](CLAUDE.md). Build-time calls: [`DECISIONS.md`](DECISIONS.md).
 
-## Status: Phase 2, core playable
+## Status: Phase 3, depth
 
-One full live broadcast, start to finish. The giant runs a procedural road at night: highway, avenues, bridges, tunnels. You pick lanes and smash across them while the station's coverage escalates with the Ratings.
+**Full Broadcast:** five segments, each opening hotter. Between them, the Producer's Meeting pitches three upgrades, paid from the Ratings you banked: abilities (Leap, The Stare, Hijack Hop, Pose for the Camera) and passives (Iron Shins, Second Wind, Showman, Tailwind). **Single Segment** is one broadcast.
+
+Each segment, start to finish: The giant runs a procedural road at night: highway, avenues, bridges, tunnels. You pick lanes and smash across them while the station's coverage escalates with the Ratings.
 
 - **Keep the Ratings up** (a viewer count, top left): smashes, near-misses and shaking off pursuers feed it; it decays when nothing happens. At 0 the network cuts to commercial.
 - **Police in your lanes:** cruisers swerve in after a blinker, spike strips unroll, roadblocks slide in (one lane stays open and glows), rolling roadblocks crawl ahead (smash the small car). Rampage smashes police cars.
@@ -28,6 +30,7 @@ npm run dev
 | Lane left / right | A / D, ← / → | Stick flick or d-pad | Swipe left / right |
 | Brake | S / Space | LT | Swipe down and hold |
 | Shoulder Check | Shift / W / click | RB | Red button |
+| Ability | E / Q | LB or Y | Ability button |
 | Pause | Esc | Start | II |
 
 Dev keys: **H** cut to Head-On / swoop home · **T** tuning panel · **`** debug overlay · **C** next camera angle · **R** new road.

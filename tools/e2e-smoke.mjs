@@ -305,12 +305,49 @@ try {
     const last = heads[heads.length - 1];
     if (!last || !['SIGN-OFF', 'BUSTED'].includes(last.kicker)) fail(`last headline isn't the ending (${JSON.stringify(last)})`);
     // Run it again: Enter restarts from the recap.
+    await page.waitForTimeout(400);
     await page.keyboard.press('Enter');
     await page.waitForTimeout(400);
     const again = await page.evaluate(() => ({ recap: window.__GAME.recap(), live: window.__GAME.show().live, t: window.__GAME.state().time }));
     if (again.recap || !again.live) fail(`Enter on the recap did not start a new broadcast (${JSON.stringify(again)})`);
     else ok('Enter on the recap starts a new broadcast');
     if (problems.length) fail(`full-segment problems:\n    ${problems.join('\n    ')}`);
+    await ctx.close();
+  }
+
+  // 8. Phase 3: the five-segment run. Segment 1 auto-played by the bot → recap (SEGMENT 1 OF 5)
+  //    → Producer's Meeting (3 pitches, keyboard) → buy → segment 2 starts hotter with the upgrade.
+  {
+    const ctx = await browser.newContext({ viewport: { width: 1280, height: 720 } });
+    const page = await ctx.newPage();
+    const problems = watch(page);
+    await page.goto(`${URL}?seed=10&bot=1&step=1&mode=run`);
+    await page.waitForFunction(() => window.__GAME && window.__GAME.started, null, { timeout: 15000 });
+    await page.evaluate(() => window.__GAME.step(60 * 170));
+    await page.waitForFunction(() => window.__GAME.recap(), null, { timeout: 15000 }).catch(() => {});
+    const r1 = await page.evaluate(() => ({ run: window.__GAME.run(), kicker: document.querySelector('#recap .kicker')?.textContent }));
+    if (r1.run?.phase !== 'meeting') fail(`run: segment 1 should lead to a meeting (${JSON.stringify(r1.run)})`);
+    else ok(`run: segment 1 ${r1.run.results[0].cleared ? 'cleared' : 'lost'}, budget ${r1.run.purse} · "${r1.kicker}"`);
+    if (!/SEGMENT 1 OF 5/.test(r1.kicker ?? '')) fail(`run: recap kicker lacks the segment (${r1.kicker})`);
+    await page.waitForTimeout(400); // a new card ignores accept for 250ms
+    await page.keyboard.press('Enter'); // focused: Producer's Meeting
+    await page.waitForTimeout(400);
+    const pitches = await page.evaluate(() => window.__GAME.meeting());
+    await page.screenshot({ path: 'test-results/e2e-meeting.png' });
+    // One press opens the meeting; it must not also pick a pitch.
+    if (!pitches) fail('run: one Enter opened the meeting and chose on it (double activation)');
+    if (!pitches || pitches.length !== 3) fail(`run: meeting should pitch 3 upgrades (${JSON.stringify(pitches)})`);
+    else ok(`run: Producer's Meeting pitches ${pitches.map((p) => p.id + (p.disabled ? ' (over budget)' : '')).join(', ')}`);
+    const pick = pitches?.find((p) => !p.disabled)?.id;
+    await page.keyboard.press('Enter'); // focused: the first affordable pitch (or Skip)
+    await page.waitForTimeout(300);
+    const r2 = await page.evaluate(() => ({ run: window.__GAME.run(), show: window.__GAME.show(), recap: window.__GAME.recap(), ability: window.__GAME.ability() }));
+    if (r2.run?.segment !== 1 || r2.run.phase !== 'live' || !r2.show.live || r2.recap) fail(`run: segment 2 didn't start (${JSON.stringify(r2.run)})`);
+    else ok(`run: segment 2 live at Heat ${r2.show.heat}, owns [${r2.run.owned.join(', ')}]`);
+    if (r2.show.heat !== 2) fail(`run: segment 2 should open at Heat 2 (${r2.show.heat})`);
+    if (pick && !r2.run?.owned.includes(pick)) fail(`run: bought ${pick} but it isn't owned`);
+    if (r2.ability.id && !r2.ability.chip) fail('run: ability equipped but no HUD chip');
+    if (problems.length) fail(`run problems:\n    ${problems.join('\n    ')}`);
     await ctx.close();
   }
 

@@ -393,6 +393,96 @@
           "Giant Back On {name}"
         ]
       ]
-    }
+    },
+    "leap": [
+      [
+        "Airborne",
+        "{subject} Airborne {place}"
+      ],
+      [
+        "Clears",
+        "{subject} Clears Traffic In Single Bound"
+      ],
+      [
+        "Leaps",
+        "{subject} Leaps {place}; Experts Unsure How"
+      ]
+    ],
+    "leapSmash": [
+      [
+        "Lands",
+        "{subject} Lands On {count} {nouns}"
+      ],
+      [
+        "Comes Down",
+        "{subject} Comes Down Hard On {count} {nouns}"
+      ]
+    ],
+    "leapSmashOne": [
+      [
+        "Lands",
+        "{subject} Lands On {noun}"
+      ],
+      [
+        "Flattens",
+        "{subject} Lands Squarely On {noun}"
+      ]
+    ],
+    "stare": [
+      [
+        "Yield",
+        "Motorists Yield To Giant {place}"
+      ],
+      [
+        "Parts",
+        "Traffic Parts {place}"
+      ],
+      [
+        "Pull Over",
+        "Drivers Pull Over After Giant Looks At Them"
+      ]
+    ],
+    "stareCops": [
+      [
+        "Fall Back",
+        "Police Fall Back After Long Look From Giant"
+      ],
+      [
+        "Reconsider",
+        "Pursuing Units Reconsider {place}"
+      ],
+      [
+        "Hesitate",
+        "Officers Hesitate; Giant Did Not Blink"
+      ]
+    ],
+    "hijack": [
+      [
+        "Boards",
+        "{subject} Boards {noun} {place}"
+      ],
+      [
+        "Rides",
+        "{subject} Rides {noun} Like A Surfboard"
+      ],
+      [
+        "Hitches",
+        "{subject} Hitches Ride On Roof Of {noun}"
+      ]
+    ],
+    "pose": [
+      [
+        "Poses",
+        "{subject} Stops To Pose For Cameras"
+      ],
+      [
+        "Pauses",
+        "{subject} Pauses {place}, Looks Directly At Chopper"
+      ],
+      [
+        "Strikes",
+        "{subject} Strikes A Pose; Police Unsure Of Protocol"
+      ]
+    ]
   }
 }

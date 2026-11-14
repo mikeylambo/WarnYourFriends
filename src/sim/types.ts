@@ -1,4 +1,4 @@
-import type { MassClass } from '../tuning';
+import type { AbilityId, MassClass } from '../tuning';
 
 export type Material = 'wood' | 'glass' | 'metal' | 'fruit' | 'concrete' | 'paper';
 
@@ -66,6 +66,17 @@ export interface GiantState {
   stepLen: number;
   /** Total distance run (m). */
   odometer: number;
+
+  // --- Phase 3 abilities ---
+  abilityCd: number;
+  abilityBuffer: number;
+  /** Leap: time left airborne (s), and its total. */
+  air: number;
+  airDur: number;
+  /** Hijack Hop: time left riding (s). */
+  ride: number;
+  /** Pose for the Camera: time left holding the pose (s). */
+  pose: number;
 }
 
 export interface SimInput {
@@ -74,9 +85,11 @@ export interface SimInput {
   brake: boolean;
   /** True on the frame the button was pressed. */
   shoulder: boolean;
+  /** Phase 3: ability button (edge), 5f buffer. */
+  ability?: boolean;
 }
 
-export const NO_INPUT: SimInput = { lane: 0, brake: false, shoulder: false };
+export const NO_INPUT: SimInput = { lane: 0, brake: false, shoulder: false, ability: false };
 
 export type TierDropReason = 'impact' | 'brake';
 
@@ -110,12 +123,19 @@ export type SimEvent =
   | { type: 'exitMissed'; s: number }
   | { type: 'signOff'; ratings: number; banked: number }
   | { type: 'busted'; reason: BustReason }
+  /** Phase 3: an ability fired (ok) or the button was pressed with nothing to do (e.g. no car to hijack). */
+  | { type: 'ability'; id: AbilityId; ok: boolean }
+  | { type: 'leapLand'; s: number; d: number; smashed: number }
+  | { type: 'stare'; moved: { id: number; from: number; to: number }[]; backedOff: number }
+  | { type: 'hijack'; propId: number; kind: PropKind; variant: number }
+  | { type: 'hijackBail'; s: number; d: number }
+  | { type: 'pose'; gain: number; heat: number }
   /** Phase 2 road variety: the giant enters a new stretch of road. */
   | { type: 'zone'; zone: 'highway' | 'avenue' | 'bridge' | 'tunnel'; name: string };
 
 export type UnitKind = 'cruiser' | 'rolling' | 'roadblock' | 'spike';
 /** §12 gain sources. */
-export type GainType = 'medium' | 'heavy' | 'nearMiss' | 'lostTrack' | 'rampage';
+export type GainType = 'medium' | 'heavy' | 'nearMiss' | 'lostTrack' | 'rampage' | 'pose';
 export type BustReason = 'ratings' | 'pin' | 'missed';
 export type ShowState = 'live' | 'cleared' | 'busted';
 

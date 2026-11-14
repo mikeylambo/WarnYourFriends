@@ -13,6 +13,26 @@ export class Bot {
 
   constructor(private sim: Sim) {}
 
+  /** Phase 3: when to use the equipped ability (so the soak exercises every one). */
+  private wantAbility(here: number, bestScore: number, best: number): boolean {
+    const sim = this.sim;
+    const g = sim.giant;
+    if (!sim.ability || g.abilityCd > 0) return false;
+    const trapped = here <= -60 && (best === g.lane || bestScore <= -60);
+    switch (sim.ability) {
+      case 'leap':
+        return trapped;
+      case 'stare':
+        return here <= -100;
+      case 'hijack':
+        return g.tier < 2 && sim.track.propsBetween(g.s, g.s + 12).some((p) => (p.kind === 'car' || p.kind === 'van') && Math.abs(p.d - g.d) < 6);
+      case 'pose': {
+        const calm = !sim.pursuit.units.some((u) => u.alive && Math.abs(u.s - g.s) < 40);
+        return sim.show.heat >= 3 && sim.show.ratings < 80 && calm && here > -60;
+      }
+    }
+  }
+
   input(): SimInput {
     const sim = this.sim;
     const g = sim.giant;
@@ -69,10 +89,11 @@ export class Bot {
       shoulder = true;
       this.shoulderCooldown = 3;
     }
+    const ability = this.wantAbility(here, bestScore, best);
     if (best !== g.lane) {
       this.decideCooldown = 0.15;
-      return { lane: Math.sign(best - g.lane), brake: false, shoulder };
+      return { lane: Math.sign(best - g.lane), brake: false, shoulder, ability };
     }
-    return { lane: 0, brake: false, shoulder };
+    return { lane: 0, brake: false, shoulder, ability };
   }
 }

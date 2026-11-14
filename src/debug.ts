@@ -26,6 +26,10 @@ export interface Flags {
   posecam: boolean;
   /** Phase 0c: force a look (?time=night|dusk|day), overriding LIVE TIME. */
   time: 'night' | 'dusk' | 'day' | null;
+  /** Phase 3: which mode ?autostart/?bot launches: 'run' (five segments) or 'broadcast' (one). */
+  mode: 'run' | 'broadcast';
+  /** Phase 3 dev: equip an ability in a single broadcast (?ability=leap|stare|hijack|pose). */
+  ability: 'leap' | 'stare' | 'hijack' | 'pose' | null;
 }
 
 function bool(q: URLSearchParams, k: string): boolean | null {
@@ -45,6 +49,8 @@ export function readFlags(search: string): Flags {
   const q = new URLSearchParams(search);
   const seed = num(q, 'seed');
   return {
+    mode: q.get('mode') === 'run' ? 'run' : 'broadcast',
+    ability: (['leap', 'stare', 'hijack', 'pose'] as const).find((a) => a === q.get('ability')) ?? null,
     seed: seed ?? (Math.random() * 1e9) | 0,
     seedFixed: seed !== null,
     timescale: Math.max(0.05, Math.min(8, num(q, 'timescale') ?? 1)),

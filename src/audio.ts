@@ -176,6 +176,51 @@ export class Audio {
     this.tone(t, 0.12, f, f * 1.4, 0.06, 'triangle');
   }
 
+  // --- Phase 3 abilities (§17): semantic calls, synth placeholders ---
+  /** Leap take-off: a heavy grunt of air. */
+  leap() {
+    if (!this.ready) return;
+    const t = this.ctx!.currentTime;
+    this.noise(t, 0.35, 'bandpass', 400, 1.2, 0.4, 1800);
+    this.tone(t, 0.25, 70, 140, 0.4);
+  }
+  /** Leap landing: the biggest thump in the game. */
+  land() {
+    if (!this.ready) return;
+    const t = this.ctx!.currentTime;
+    this.tone(t, 0.6, 55, 22, 1.0);
+    this.noise(t, 0.5, 'lowpass', 700, 0.8, 0.8, 120);
+  }
+  /** The Stare: a low swell, then silence. */
+  stare() {
+    if (!this.ready) return;
+    const t = this.ctx!.currentTime;
+    this.tone(t, 0.9, 110, 104, 0.35, 'triangle');
+    this.tone(t + 0.05, 0.9, 165, 156, 0.18, 'triangle');
+  }
+  /** Hijack Hop: roof dent and an engine rev. */
+  hijack() {
+    if (!this.ready) return;
+    const t = this.ctx!.currentTime;
+    this.noise(t, 0.18, 'bandpass', 900, 2, 0.5);
+    this.tone(t + 0.1, 0.8, 80, 220, 0.25, 'sawtooth');
+  }
+  /** Pose for the Camera: a run of camera shutters and flashes charging. */
+  pose() {
+    if (!this.ready) return;
+    const t = this.ctx!.currentTime;
+    for (let i = 0; i < 6; i++) {
+      this.noise(t + i * 0.11 + Math.random() * 0.04, 0.04, 'highpass', 3000, 1, 0.25);
+      this.tone(t + i * 0.11, 0.12, 2400, 5200, 0.03, 'sine');
+    }
+  }
+  /** Ability button with nothing to do (cooling down / no car near): a soft dud. */
+  dud() {
+    if (!this.ready) return;
+    const t = this.ctx!.currentTime;
+    this.tone(t, 0.1, 220, 180, 0.08, 'square');
+  }
+
   /** §13 cape whip on turns. */
   capeWhip(intensity: number) {
     if (!this.ready) return;

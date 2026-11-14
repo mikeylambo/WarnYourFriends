@@ -2,13 +2,13 @@ import { describe, expect, it } from 'vitest';
 import { Sim } from '../sim/sim';
 import { Bot } from '../sim/bot';
 import type { PropKind, SimEvent } from '../sim/types';
-import { TUNING } from '../tuning';
+import { TUNING, type UpgradeId } from '../tuning';
 import { Newsroom, compass, type Headline, type NewsContext } from './headlines';
 
-function run(seed: number, seconds: number) {
-  const sim = new Sim({ seed });
+function run(seed: number, seconds: number, upgrades: UpgradeId[] = [], segment = 0) {
+  const sim = new Sim({ seed, upgrades, segment });
   const bot = new Bot(sim);
-  const news = new Newsroom(seed);
+  const news = new Newsroom(seed, sim.show.heat);
   const kinds = new Map<number, PropKind>();
   const log = new Set<SimEvent>();
   const out: { h: Headline; ctx: NewsContext }[] = [];
@@ -38,11 +38,15 @@ describe('headlines (§21)', () => {
     expect(compass(Math.PI)).toBe('West');
   });
 
-  for (const seed of [1, 2, 3, 4, 5, 6, 7, 8]) {
-    it(`seed ${seed}: cadence, anti-repeat and the chyron never lies`, () => {
-      const { out, log, tiers } = run(seed, 170);
-      expect(out.length).toBeGreaterThan(10);
-      expect(out[0].h.text).toMatch(/Spotted/);
+  const ABIL: UpgradeId[] = ['leap', 'stare', 'hijack', 'pose'];
+  for (const seed of [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]) {
+    const ups: UpgradeId[] = seed > 8 ? [ABIL[seed - 9]] : [];
+    it(`seed ${seed}${ups.length ? ` (${ups[0]}, segment 3)` : ''}: cadence, anti-repeat and the chyron never lies`, () => {
+      const { out, log, tiers } = run(seed, 170, ups, ups.length ? 3 : 0);
+      // Segment-3 broadcasts start at Heat 4 and this test brakes on a timer: they can end early.
+      expect(out.length).toBeGreaterThan(ups.length ? 3 : 10);
+      // The first regular headline is the sighting (a Ratings tier can break in before it).
+      expect(out.find(({ h }) => !h.breaking)!.h.text).toMatch(/Spotted/);
       let last = -Infinity;
       out.forEach(({ h, ctx }, i) => {
         // Cadence: at most one every 4s, unless it's a BREAKING tier change.
@@ -69,6 +73,9 @@ describe('headlines (§21)', () => {
         if (x.tier > prev) expect(out.some(({ h }) => h.breaking && Math.abs(h.t - x.t) < 1e-9 && h.sources[0].type === 'ratings')).toBe(true);
         prev = Math.max(prev, x.tier);
       }
+      // Heat only makes news going up (a Pose spends it).
+      for (const { h } of out) if (h.sources[0]?.type === 'heat') expect((h.sources[0] as Extract<SimEvent, { type: 'heat' }>).heat).toBeGreaterThan(0);
+      if (ups.length && out.length > 10) expect(out.some(({ h }) => h.sources.some((e) => ['leapLand', 'stare', 'hijack', 'pose'].includes(e.type)))).toBe(true);
       // The broadcast ends with a sign-off or busted line, from the event that ended it.
       const final = out[out.length - 1].h;
       expect(["SIGN-OFF", "BUSTED"]).toContain(final.kicker);

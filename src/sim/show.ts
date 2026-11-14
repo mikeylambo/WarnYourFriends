@@ -14,8 +14,11 @@ export class Show {
   state: ShowState = 'live';
   reason: BustReason | null = null;
   peak: number = TUNING.show.startRatings;
-  /** Segment index (0-based): sets the decay rate. One segment per run until Phase 3. */
+  /** Segment index (0-based): sets the decay rate (§12) and the starting Heat (§19). */
   segment = 0;
+  /** Phase 3 passives: Showman's fresh-type multiplier, Second Wind's Pin drain multiplier. */
+  freshMult: number = TUNING.show.freshMult;
+  pinDrainMult = 1;
   /** Time of the last gain, for decay. */
   private lastGain = 0;
   private seen = new Set<GainType>();
@@ -31,15 +34,21 @@ export class Show {
     return k;
   }
 
+  /** Start of a segment: §19 later segments start one Heat higher. */
+  startSegment(segment: number) {
+    this.segment = segment;
+    this.heat = Math.min(5, 1 + segment);
+  }
+
   /** Apply a §12 gain with the variety rule; returns the delta actually added. */
-  gain(type: GainType, time: number, outnumbered: boolean, out: SimEvent[]): number {
+  gain(type: GainType, time: number, outnumbered: boolean, out: SimEvent[], base?: number): number {
     if (this.state !== 'live') return 0;
     const S = TUNING.show;
-    let amount: number = S.gain[type];
-    if (type !== 'rampage') {
+    let amount: number = base ?? (type === 'pose' ? 0 : S.gain[type]);
+    if (type !== 'rampage' && type !== 'pose') {
       this.recent = this.recent.filter((r) => time - r.t <= S.repeatWindow);
       const repeats = this.recent.filter((r) => r.type === type).length;
-      const mult = this.seen.has(type) ? S.repeatMult[Math.min(repeats, S.repeatMult.length - 1)] : S.freshMult;
+      const mult = this.seen.has(type) ? S.repeatMult[Math.min(repeats, S.repeatMult.length - 1)] : this.freshMult;
       amount *= mult;
       this.recent.push({ type, t: time });
       this.seen.add(type);
@@ -95,8 +104,19 @@ export class Show {
     if (this.state !== 'live') return;
     const S = TUNING.show;
     if (boxed && speed < S.pinBelow) this.pin = Math.min(100, this.pin + S.pinFill * dt);
-    else if (speed > S.pinDrainAbove) this.pin = Math.max(0, this.pin - S.pinDrain * dt);
+    else if (speed > S.pinDrainAbove) this.pin = Math.max(0, this.pin - S.pinDrain * this.pinDrainMult * dt);
     if (this.pin >= 100) this.bust('pin', out);
+  }
+
+  /** Phase 3 Pose for the Camera: spend Heat, take a Ratings spike (the one way Heat falls). */
+  pose(time: number, out: SimEvent[]): number {
+    const P = TUNING.abilities.pose;
+    const gain = P.ratingsPerHeat * this.heat;
+    const before = this.heat;
+    const delta = this.gain('pose', time, false, out, gain);
+    this.heat = Math.max(1, this.heat - P.heatCost);
+    if (this.heat !== before) out.push({ type: 'heat', heat: this.heat });
+    return delta;
   }
 
   bust(reason: BustReason, out: SimEvent[]) {

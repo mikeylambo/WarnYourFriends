@@ -43,10 +43,10 @@ export interface Headline {
   sources: SimEvent[];
 }
 
-type Kind = 'zone' | 'spotted' | 'ratingsTier' | 'tierUp' | 'tierDown' | 'smash' | 'bounce' | 'wall' | 'merge' | 'escort' | 'ramHit' | 'ramMiss' | 'lostTrack' | 'spiked' | 'heat' | 'tell' | 'exitOpen' | 'end';
+type Kind = 'zone' | 'spotted' | 'ratingsTier' | 'tierUp' | 'tierDown' | 'smash' | 'bounce' | 'wall' | 'merge' | 'escort' | 'ramHit' | 'ramMiss' | 'lostTrack' | 'spiked' | 'heat' | 'tell' | 'exitOpen' | 'end' | 'leap' | 'stare' | 'hijack' | 'pose';
 type Item = { kind: Kind; t: number; prio: number; events: SimEvent[] };
 
-const PRIO: Partial<Record<Kind, number>> = { zone: 66, spotted: 70, ratingsTier: 100, end: 200, exitOpen: 90, tell: 75, ramHit: 65, ramMiss: 58, lostTrack: 57, spiked: 62, heat: 52, escort: 60, merge: 55, tierUp: 50, bounce: 45, tierDown: 40, wall: 10 };
+const PRIO: Partial<Record<Kind, number>> = { zone: 66, spotted: 95, ratingsTier: 100, end: 200, exitOpen: 90, tell: 75, ramHit: 65, ramMiss: 58, lostTrack: 57, spiked: 62, heat: 52, escort: 60, merge: 55, leap: 64, stare: 61, hijack: 68, pose: 72, tierUp: 50, bounce: 45, tierDown: 40, wall: 10 };
 /** These break in immediately, ignoring the 4s cadence (§21: tier changes; and the end of the broadcast). */
 const IMMEDIATE: Kind[] = ['ratingsTier', 'end', 'exitOpen'];
 
@@ -70,9 +70,15 @@ export class Newsroom {
   private lastTier = 0;
   private lastRatings: SimEvent | null = null;
   private rampages = 0;
+  /** Heat as last reported: only a rise is news (the Pose spends Heat; that's the pose's story). */
+  private heatSeen = 0;
+  /** Smashes seen this instant (a leap landing's shockwave smashes arrive just before its leapLand). */
+  private nowSmashes: { t: number; e: SimEvent }[] = [];
+  private leapSmashes = new Map<SimEvent, number[]>();
 
-  constructor(seed: number) {
+  constructor(seed: number, startHeat = 0) {
     this.rng = new Rng((seed ^ 0x6e657773) >>> 0);
+    this.heatSeen = startHeat;
   }
 
   /** Feed every sim event. */
@@ -85,6 +91,8 @@ export class Newsroom {
       case 'tierUp': add('tierUp'); break;
       case 'tierDown': add('tierDown'); break;
       case 'smash': {
+        this.nowSmashes = this.nowSmashes.filter((x) => x.t === time);
+        this.nowSmashes.push({ t: time, e });
         const open = this.queue.find((q) => q.kind === 'smash' && time - q.t <= TUNING.broadcast.tallyWindow);
         if (open) open.events.push(e);
         else this.queue.push({ kind: 'smash', t: time, prio: 0, events: [e] });
@@ -97,7 +105,22 @@ export class Newsroom {
       case 'ram': add(e.hit ? 'ramHit' : 'ramMiss'); break;
       case 'lostTrack': add('lostTrack'); break;
       case 'spiked': add('spiked'); break;
-      case 'heat': add('heat'); break;
+      case 'heat':
+        if (this.heatSeen && e.heat > this.heatSeen) add('heat');
+        this.heatSeen = e.heat;
+        break;
+      case 'leapLand': {
+        // Claim this landing's shockwave smashes: the landing headline reports them, the tally doesn't.
+        const mine = e.smashed > 0 ? this.nowSmashes.filter((x) => x.t === time).slice(-e.smashed).map((x) => x.e) : [];
+        for (const q of this.queue) if (q.kind === 'smash') q.events = q.events.filter((x) => !mine.includes(x));
+        this.queue = this.queue.filter((q) => q.kind !== 'smash' || q.events.length);
+        this.leapSmashes.set(e, mine.map((x) => (x as Extract<SimEvent, { type: 'smash' }>).propId));
+        this.queue.push({ kind: 'leap', t: time, prio: PRIO.leap ?? 0, events: [e, ...mine] });
+        break;
+      }
+      case 'stare': if (e.moved.length || e.backedOff) add('stare'); break;
+      case 'hijack': add('hijack'); break;
+      case 'pose': add('pose'); break;
       case 'tell': if (e.kind !== 'cruiser') add('tell'); break;
       case 'exitOpen': add('exitOpen'); break;
       case 'zone': add('zone'); break;
@@ -126,6 +149,8 @@ export class Newsroom {
 
     const tierUp = this.queue.filter((q) => IMMEDIATE.includes(q.kind)).sort((a, b) => b.prio - a.prio)[0];
     if (!tierUp && now - this.lastPublish < B.headlineEvery) return null;
+    // Nothing is news before the sighting (a Ratings tier can still break in).
+    if (!tierUp && !this.spottedDone) return null;
     // Smash tallies keep counting until their window closes or the slot would otherwise go empty.
     const ready = this.queue.filter((q) => q.kind !== 'smash' || now - q.t >= B.tallyWindow || this.queue.length === 1 || now - q.t >= 1.5);
     const pick = tierUp ?? ready.sort((a, b) => this.prioOf(b) - this.prioOf(a) || b.t - a.t)[0];
@@ -305,6 +330,51 @@ export class Newsroom {
         const line = this.freshLine(e.to < e.from ? L.narrows : L.widens);
         if (!line) return mk(this.fill(L.mergeFallback, { lanes }), null, null);
         return mk(this.fill(line[1], { lanes }), line[0], null);
+      }
+      case 'leap': {
+        const e = q.events[0] as Extract<SimEvent, { type: 'leapLand' }>;
+        const subject = this.subject(ctx.tier);
+        if (e.smashed > 0) {
+          // The shockwave's smashes follow the landing; count them from the same instant (exact, or not at all).
+          const kinds = new Map<PropKind, number>();
+          for (const id of this.leapSmashes.get(e) ?? []) {
+            const k = propKind(id);
+            if (k) kinds.set(k, (kinds.get(k) ?? 0) + 1);
+          }
+          if (kinds.size === 1) {
+            const [[k, n]] = [...kinds.entries()];
+            const line = this.freshLine(n === 1 ? L.leapSmashOne : L.leapSmash);
+            if (line) {
+              const h = mk(this.fill(line[1], { subject, count: String(n), noun: BANK.nouns[k][0], nouns: BANK.nouns[k][1] }), line[0], null);
+              h.sources = q.events.slice(1);
+              return h;
+            }
+          }
+        }
+        const line = this.freshLine(L.leap);
+        if (!line) return null;
+        const place = line[1].includes('{place}') ? this.freshPlace(ctx) : null;
+        return mk(this.fill(line[1], { subject, place }), line[0], place);
+      }
+      case 'stare': {
+        const e = q.events[0] as Extract<SimEvent, { type: 'stare' }>;
+        const line = this.freshLine(e.backedOff > 0 ? L.stareCops : L.stare);
+        if (!line) return null;
+        const place = line[1].includes('{place}') ? this.freshPlace(ctx) : null;
+        return mk(this.fill(line[1], { place }), line[0], place);
+      }
+      case 'hijack': {
+        const e = q.events[0] as Extract<SimEvent, { type: 'hijack' }>;
+        const line = this.freshLine(L.hijack);
+        if (!line) return null;
+        const place = line[1].includes('{place}') ? this.freshPlace(ctx) : null;
+        return mk(this.fill(line[1], { subject: this.subject(ctx.tier), noun: BANK.nouns[e.kind][0], place }), line[0], place);
+      }
+      case 'pose': {
+        const line = this.freshLine(L.pose);
+        if (!line) return null;
+        const place = line[1].includes('{place}') ? this.freshPlace(ctx) : null;
+        return mk(this.fill(line[1], { subject: this.subject(ctx.tier), place }), line[0], place);
       }
       case 'escort': {
         const [verb, tpl] = L.escort[Math.min(this.escortCount++, L.escort.length - 1)];

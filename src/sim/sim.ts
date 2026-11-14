@@ -1,4 +1,4 @@
-import { TUNING, type MassClass } from '../tuning';
+import { TUNING, type AbilityId, type MassClass, type UpgradeId } from '../tuning';
 import { clamp } from './math';
 import { Rng } from './rng';
 import { Track } from './track';
@@ -49,6 +49,10 @@ export interface SimStats {
 
 export interface SimOptions {
   seed: number;
+  /** Phase 3: which segment of the run (0-based): decay rate and starting Heat. */
+  segment?: number;
+  /** Phase 3: upgrades owned (passives, and the equipped ability). */
+  upgrades?: UpgradeId[];
 }
 
 const smoothstep = (t: number) => t * t * (3 - 2 * t);
@@ -68,6 +72,9 @@ export class Sim {
   /** Phase 2: Ratings, Heat, Pin and how the segment ends (§12). */
   readonly show = new Show();
   readonly pursuit: Pursuit;
+  /** Phase 3: upgrades owned this run, and the one equipped ability (if any). */
+  readonly upgrades: Set<UpgradeId>;
+  readonly ability: AbilityId | null;
   /** Phase 2: the sign-off exit ramp, once open (v0.3 §4). */
   exit: { s: number; gore: number; segment: number; lane: number } | null = null;
   tick = 0;
@@ -83,6 +90,11 @@ export class Sim {
     this.track = new Track(opts.seed);
     this.escort = new Escort(opts.seed, this.track);
     this.pursuit = new Pursuit(opts.seed, this);
+    this.upgrades = new Set(opts.upgrades ?? []);
+    this.ability = (['leap', 'stare', 'hijack', 'pose'] as AbilityId[]).find((a) => this.upgrades.has(a)) ?? null;
+    this.show.startSegment(opts.segment ?? 0);
+    if (this.upgrades.has('showman')) this.show.freshMult = TUNING.passives.showmanFresh;
+    if (this.upgrades.has('secondWind')) this.show.pinDrainMult = TUNING.passives.secondWindDrain;
     const lane = Math.floor(TUNING.lanes.start / 2);
     const d = this.track.laneCenter(lane);
     const speed = TUNING.giant.startSpeed;
@@ -113,6 +125,12 @@ export class Sim {
       stepPos: 0,
       stepLen: stepLengthAt(speed),
       odometer: 0,
+      abilityCd: 0,
+      abilityBuffer: 0,
+      air: 0,
+      airDur: 0,
+      ride: 0,
+      pose: 0,
     };
   }
 
@@ -144,6 +162,7 @@ export class Sim {
       return this.events;
     }
     this.stepShoulder(input, dt);
+    this.stepAbility(input, dt);
     this.stepLanes(input);
     this.stepSpeed(input, dt);
     const segBefore = this.track.segmentAt(this.giant.s).index;
@@ -409,14 +428,126 @@ export class Sim {
     }
   }
 
+  // --- Phase 3 abilities -------------------------------------------------------
+
+  private stepAbility(input: SimInput, dt: number) {
+    const g = this.giant;
+    const A = TUNING.abilities;
+    g.abilityCd = Math.max(0, g.abilityCd - dt);
+    g.pose = Math.max(0, g.pose - dt);
+    if (g.air > 0) {
+      g.air = Math.max(0, g.air - dt);
+      if (g.air === 0) this.leapLand();
+    }
+    if (g.ride > 0) {
+      g.ride = Math.max(0, g.ride - dt);
+      if (g.ride === 0) {
+        this.setTier(TUNING.tiers.length - 1);
+        this.emit({ type: 'hijackBail', s: g.s, d: g.d });
+      }
+    }
+    if (input.ability) g.abilityBuffer = A.bufferFrames;
+    if (g.abilityBuffer <= 0 || !this.ability) return;
+    if (g.abilityCd > 0 || g.stumble > 0 || g.air > 0 || g.ride > 0 || g.pose > 0) {
+      g.abilityBuffer--;
+      return;
+    }
+    g.abilityBuffer = 0;
+    const id = this.ability;
+    let ok = true;
+    if (id === 'leap') {
+      g.air = g.airDur = A.leap.time;
+      g.abilityCd = A.leap.cooldown;
+    } else if (id === 'stare') {
+      this.stare();
+      g.abilityCd = A.stare.cooldown;
+    } else if (id === 'hijack') {
+      ok = this.hijack();
+      if (ok) {
+        // Riding is Rampage from the jump (the camera frames by tier; you bail at Rampage anyway).
+        this.setTier(TUNING.tiers.length - 1);
+        g.ride = A.hijack.time;
+        g.abilityCd = A.hijack.cooldown;
+      }
+    } else if (id === 'pose') {
+      g.pose = A.pose.time;
+      g.abilityCd = A.pose.cooldown;
+      const gain = this.show.pose(this.time, this.events);
+      this.emit({ type: 'pose', gain, heat: this.show.heat });
+    }
+    this.emit({ type: 'ability', id, ok });
+  }
+
+  /** Leap landing: the shockwave smashes everything up to Heavy around the landing (never land inside a car). */
+  private leapLand() {
+    const g = this.giant;
+    const R = TUNING.abilities.leap.shockRadius;
+    let smashed = 0;
+    const near: Prop[] = [...this.track.propsBetween(g.s - R - 3, g.s + R + 3), ...this.pursuit.solidBetween(g.s - R - 3, g.s + R + 3)];
+    for (const p of near) {
+      if (!p.alive || CLASS_RANK[p.cls] > CLASS_RANK.heavy) continue;
+      const ds = Math.max(0, Math.abs(p.s - g.s) - p.hl);
+      const dd = Math.max(0, Math.abs(p.d - g.d) - p.hw);
+      if (Math.hypot(ds, dd) > R) continue;
+      p.alive = false;
+      smashed++;
+      this.emit({ type: 'smash', propId: p.id, cls: p.cls, mat: p.mat, s: p.s, d: p.d, across: false, speed: g.speed });
+    }
+    this.emit({ type: 'leapLand', s: g.s, d: g.d, smashed });
+  }
+
+  /** The Stare: stopped traffic ahead in his lane pulls over; police winding up back off. */
+  private stare() {
+    const g = this.giant;
+    const A = TUNING.abilities.stare;
+    const W = TUNING.lanes.width;
+    const moved: { id: number; from: number; to: number }[] = [];
+    const myC = this.track.laneCenter(g.lane);
+    for (const p of this.track.propsBetween(g.s, g.s + A.reach)) {
+      if (Math.abs(p.d - myC) > p.hw + 1) continue;
+      const lanes = this.track.lanesAt(p.s);
+      for (const dir of [1, -1]) {
+        const lane = g.lane + dir;
+        if (lane < 0 || lane >= lanes) continue;
+        const c = this.track.laneCenter(lane);
+        const busy = this.track.propsBetween(p.s - p.hl - 3, p.s + p.hl + 3).some((q) => q !== p && Math.abs(q.d - c) < q.hw + p.hw + 0.4);
+        if (busy) continue;
+        moved.push({ id: p.id, from: p.d, to: c });
+        p.d = c;
+        break;
+      }
+    }
+    const backedOff = this.pursuit.backOff();
+    void W;
+    this.emit({ type: 'stare', moved, backedOff });
+  }
+
+  /** Hijack Hop: take the nearest vehicle just ahead (his lane or next to it). */
+  private hijack(): boolean {
+    const g = this.giant;
+    const A = TUNING.abilities.hijack;
+    let best: Prop | null = null;
+    for (const p of this.track.propsBetween(g.s - 1, g.s + A.reach)) {
+      if (p.kind !== 'car' && p.kind !== 'van') continue;
+      if (Math.abs(p.d - g.d) > TUNING.lanes.width * 1.5) continue;
+      if (!best || p.s < best.s) best = p;
+    }
+    if (!best) return false;
+    best.alive = false;
+    this.emit({ type: 'hijack', propId: best.id, kind: best.kind, variant: best.variant });
+    return true;
+  }
+
   // --- Speed and gait ----------------------------------------------------------
 
   private stepSpeed(input: SimInput, dt: number) {
     const g = this.giant;
     const tier = this.tierTuning;
     const top = tier.topSpeed + (g.shoulderT > 0 ? TUNING.shoulderCheck.burstSpeed : 0);
-    g.braking = input.brake;
-    if (input.brake) {
+    // Riding a hijacked car: the brake does nothing.
+    const brake = input.brake && g.ride <= 0;
+    g.braking = brake;
+    if (brake) {
       g.speed -= TUNING.brake.decel * dt;
       g.brakeHeld += dt;
       g.tierTimer = 0;
@@ -438,10 +569,15 @@ export class Sim {
     g.stumble = Math.max(0, g.stumble - dt);
 
     const t = this.tierTuning;
-    if (!input.brake && g.stumble <= 0 && g.speed >= t.topSpeed * TUNING.giant.topSpeedEpsilon) {
+    if (!brake && g.stumble <= 0 && g.pose <= 0 && g.speed >= t.topSpeed * TUNING.giant.topSpeedEpsilon) {
       g.tierTimer += dt;
-      if (g.tierTimer >= t.tierUpAfter) this.setTier(g.tier + 1);
+      const after = t.tierUpAfter * (this.upgrades.has('tailwind') ? TUNING.passives.tailwindTierUp : 1);
+      if (g.tierTimer >= after) this.setTier(g.tier + 1);
     }
+    // Phase 3 abilities override speed: the pose holds the floor (a deliberate stop, never below
+    // the LOCKED 2 m/s); the hijack ride holds ride speed.
+    if (g.pose > 0) g.speed = Math.max(TUNING.giant.speedFloor, g.speed - TUNING.brake.decel * 2 * dt);
+    if (g.ride > 0) g.speed = Math.min(TUNING.abilities.hijack.speed, g.speed + TUNING.abilities.hijack.accel * dt);
   }
 
   private advance(dt: number) {
@@ -479,7 +615,10 @@ export class Sim {
   smashRank(): number {
     const g = this.giant;
     const base = this.tierTuning.smashes ? CLASS_RANK[this.tierTuning.smashes] : -1;
-    return Math.min(base + (g.shoulderT > 0 ? 1 : 0), CLASS_RANK.heavy);
+    let rank = Math.min(base + (g.shoulderT > 0 ? 1 : 0), CLASS_RANK.heavy);
+    if (this.upgrades.has('ironShins')) rank = Math.max(rank, CLASS_RANK.medium); // Medium never bounces you
+    if (g.ride > 0) rank = CLASS_RANK.heavy; // riding a car through everything
+    return rank;
   }
 
   /** Is `lane` free of things the giant can't smash over [s0, s1]? */
@@ -503,6 +642,7 @@ export class Sim {
 
   private collide() {
     const g = this.giant;
+    if (g.air > 0) return; // Leap: airborne over everything
     const r = TUNING.giant.radius;
     const rank = this.smashRank();
     const near: Prop[] = this.track.propsBetween(g.s - r - 4, g.s + r + 4, this.near);

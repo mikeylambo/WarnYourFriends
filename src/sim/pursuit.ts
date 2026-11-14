@@ -45,6 +45,19 @@ export class Pursuit {
     return this.units.filter((u) => u.alive && !u.lost && u.unit !== 'spike').length;
   }
 
+  /** The Stare: cruisers closing in or winding up back off (they've lost their nerve, not him). */
+  backOff(): number {
+    let n = 0;
+    for (const u of this.units) {
+      if (!u.alive || u.unit !== 'cruiser' || u.phase === 'leave') continue;
+      if (u.phase === 'approach' && u.s < this.sim.giant.s - 15) continue;
+      this.setPhase(u, 'leave');
+      u.target = -1; // didn't engage: no "lost track" award
+      n++;
+    }
+    return n;
+  }
+
   solidBetween(s0: number, s1: number, out: Unit[] = []): Unit[] {
     out.length = 0;
     for (const u of this.units) if (u.alive && u.solid && u.s + u.hl >= s0 && u.s - u.hl <= s1) out.push(u);
@@ -278,7 +291,7 @@ export class Pursuit {
     const lead = this.units.find((x) => x.alive && x.group === u.group) === u;
     switch (u.phase) {
       case 'approach':
-        if (u.s - g.s <= Math.max(R.tellMin, g.speed * R.tellAhead)) {
+        if (u.s - g.s <= Math.min(R.tellMax, Math.max(R.tellMin, g.speed * R.tellAhead))) {
           for (const x of this.units) if (x.group === u.group && x.alive) this.setPhase(x, 'tell');
           if (lead) sim.emitPublic({ type: 'tell', id: u.id, kind: 'rolling', lane: u.lane, time: R.tell });
         }
@@ -319,7 +332,7 @@ export class Pursuit {
     const sim = this.sim;
     const g = sim.giant;
     const S = TUNING.pursuit.spike;
-    if (u.phase === 'approach' && u.s - g.s <= g.speed * S.tellAhead + 2) {
+    if (u.phase === 'approach' && u.s - g.s <= Math.min(S.tellMax, g.speed * S.tellAhead + 2)) {
       // Targets you: unrolls across whichever lane you're in now.
       const lane = clamp(g.lane, 0, sim.track.lanesAt(u.s) - 1);
       if (!this.propIn(lane, u.s - 6, u.s + 6)) {
@@ -329,7 +342,8 @@ export class Pursuit {
       this.setPhase(u, 'tell');
       sim.emitPublic({ type: 'tell', id: u.id, kind: 'spike', lane: u.lane, time: S.tell });
     } else if (u.phase === 'tell' && u.phaseT >= S.tell) this.setPhase(u, 'act');
-    if (u.phase === 'act' && !u.hit && Math.abs(g.s - u.s) < u.hl + 0.5 && Math.abs(g.d - u.d) < u.hw + 0.3) {
+    // Leaping over it or riding a hijacked car through it: no effect.
+    if (u.phase === 'act' && !u.hit && g.air <= 0 && g.ride <= 0 && Math.abs(g.s - u.s) < u.hl + 0.5 && Math.abs(g.d - u.d) < u.hw + 0.3) {
       u.hit = true;
       sim.spikeHit(u);
     }
@@ -377,7 +391,7 @@ export class Pursuit {
     const sim = this.sim;
     const g = sim.giant;
     const B = TUNING.pursuit.roadblock;
-    if (u.phase === 'approach' && u.s - g.s <= g.speed * B.slideAhead + 2) {
+    if (u.phase === 'approach' && u.s - g.s <= Math.min(B.slideMax, g.speed * B.slideAhead + 2)) {
       const first = this.units.find((x) => x.alive && x.group === u.group) === u;
       for (const x of this.units) if (x.group === u.group && x.alive && x.phase === 'approach') {
         this.setPhase(x, 'act');
