@@ -105,10 +105,16 @@ try {
   // 1–2. Desktop: click the real start button.
   {
     const { ctx, page, problems } = await bootAndStart(browser, 'desktop click', { viewport: { width: 1280, height: 720 } }, async (p) => {
-      for (const id of ['start', 'play', 'broadcast']) {
+      // One menu: the mode is on it. A first broadcast shows How to Play; Go live starts it.
+      for (const id of ['start', 'broadcast']) {
         await p.click(`[data-choice-id="${id}"]`);
         await p.waitForTimeout(150);
       }
+      await p.waitForSelector('#recap .briefing', { timeout: 3000 }).catch(() => {});
+      if (!(await p.isVisible('#recap .briefing'))) fail('How to Play did not show before the first broadcast');
+      else ok('How to Play shows before the first broadcast');
+      if (await p.evaluate(() => window.__GAME.started)) fail('broadcast started behind How to Play');
+      await p.click('#brief-go');
     });
     // v0.3: A changes lane left; D changes lane right.
     const lane0 = await page.evaluate(() => window.__GAME.state().lane);
@@ -132,10 +138,12 @@ try {
   // 2. Mobile: tap the start button.
   {
     const { ctx, problems } = await bootAndStart(browser, 'mobile tap', { viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true }, async (p) => {
-      for (const id of ['start', 'play', 'broadcast']) {
+      for (const id of ['start', 'broadcast']) {
         await p.tap(`[data-choice-id="${id}"]`);
         await p.waitForTimeout(150);
       }
+      await p.waitForSelector('#recap .briefing', { timeout: 3000 }).catch(() => {});
+      await p.tap('#brief-go');
     });
     if (problems.length) fail(`mobile boot problems:\n    ${problems.join('\n    ')}`);
     await ctx.close();
@@ -144,7 +152,7 @@ try {
   // 2b. Keyboard start ("press any key").
   {
     const { ctx } = await bootAndStart(browser, 'keyboard', { viewport: { width: 1280, height: 720 } }, async (p) => {
-      // Keyboard only: Enter through title, main menu (Play) and mode select.
+      // Keyboard only: Enter through the title, the main menu (Full Broadcast) and How to Play (Go live).
       for (let i = 0; i < 3; i++) {
         await p.keyboard.press('Enter');
         await p.waitForTimeout(200);
@@ -388,6 +396,15 @@ try {
     const q = await page.evaluate(() => ({ screen: document.querySelector('#ui [data-screen-id]')?.dataset.screenId, attract: window.__GAME.attract, started: window.__GAME.started }));
     if (q.screen !== 'main-menu' || !q.attract || q.started) fail(`quit did not return to the menu over the attract broadcast (${JSON.stringify(q)})`);
     else ok('quit to menu: attract broadcast runs behind the main menu');
+    // Menus show the chopper shot only: no broadcast HUD, and the modes are on the main menu.
+    const m = await page.evaluate(() => ({
+      hud: !!document.getElementById('hud')?.checkVisibility?.(),
+      asks: !!document.getElementById('asks')?.checkVisibility?.(),
+      choices: [...document.querySelectorAll('#ui [data-choice-id]')].map((e) => e.dataset.choiceId).join('|'),
+    }));
+    if (m.hud || m.asks) fail(`broadcast HUD shows behind the menu (${JSON.stringify(m)})`);
+    else if (m.choices !== 'run|broadcast|howto|settings') fail(`main menu choices: ${m.choices}`);
+    else ok(`main menu over a clean chopper shot: ${m.choices}`);
     await ctx.close();
   }
   await browser.close();

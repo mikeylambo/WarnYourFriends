@@ -346,6 +346,15 @@ html.attract #abilpop { display: none; }
 html.attract #gainpop { display: none; }
 @media (prefers-reduced-motion: reduce) { #gainpop.show { animation: none; } }
 
+/* Menus (html.title is on for every menu behind the title too): the chopper shot, no broadcast HUD,
+   the panel on the left like the wordmark so the giant stays in view on the right. */
+html.title #ui .slu-screen:not([data-screen-id="title"]) { place-items: center start; padding: 0 0 0 clamp(16px, 7vw, 110px); background: linear-gradient(90deg, rgba(5, 3, 12, 0.85) 0%, rgba(5, 3, 12, 0.45) 40%, rgba(5, 3, 12, 0) 65%); }
+html.title #ui [data-screen-id="main-menu"] .slu-header { display: none; }
+@media (max-width: 640px) { html.title #ui .slu-screen:not([data-screen-id="title"]) { place-items: center; padding: 16px; } }
+/* How to Play: on its own, nothing of the cold open or the controls strip behind it. */
+html.briefing #hud, html.briefing #controls, html.briefing #coldopen, html.briefing #camtag, html.briefing #btn-pause, html.briefing #abil, html.briefing #tip { display: none !important; }
+html.briefing #recap { background: rgba(7, 5, 13, 0.92); }
+
 /* Title screen (Mike's chopper-feed direction): wordmark left, the live chase right, LIVE bug. */
 html.title #hud, html.title #abil, html.title #controls, html.title #camtag, html.title #btn-pause { display: none !important; }
 #ui [data-screen-id="title"].slu-screen { place-items: center start; padding: 0 0 0 clamp(20px, 7vw, 110px); background: linear-gradient(90deg, rgba(5, 3, 12, 0.88) 0%, rgba(5, 3, 12, 0.55) 38%, rgba(5, 3, 12, 0) 62%); }

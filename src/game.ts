@@ -483,9 +483,11 @@ function openBriefing(goLive: boolean): Promise<void> {
   </div>`;
   recapEl.hidden = false;
   recapArmedAt = performance.now() + 250;
+  document.documentElement.classList.add('briefing');
   return new Promise((resolve) => {
     briefingClose = () => {
       briefingClose = null;
+      document.documentElement.classList.remove('briefing');
       hideRecap();
       resolve();
     };
@@ -1290,12 +1292,23 @@ app = await createGameApp({
 registerGlyphs(app.shell.production.glyphs);
 // Only what exists: no challenges or credits yet; the tagline is approved fiction (§21).
 app.ui.updateScreen('title', { title: 'Giant\nat Large', subtitle: 'Warn your friends.', choices: [{ id: 'start', label: 'Press Start' }] });
-app.ui.updateScreen('main-menu', { choices: [{ id: 'play', label: 'Play' }, { id: 'howto', label: 'How to Play' }, { id: 'settings', label: 'Settings' }] });
-// The shell's main menu doesn't know How to Play: catch it before the flow does.
+// One menu (Mike: "clean up main menu/UX flow"): the two modes sit on it directly, so there's no
+// separate mode screen between Start and the broadcast.
+app.ui.updateScreen('main-menu', {
+  title: '',
+  choices: [
+    { id: 'run', label: 'Full Broadcast', description: 'Five segments, upgrades between them' },
+    { id: 'broadcast', label: 'Single Segment' },
+    { id: 'howto', label: 'How to Play' },
+    { id: 'settings', label: 'Settings' },
+  ],
+});
+// The shell's main menu knows neither the modes nor How to Play: catch them before the flow does.
 {
   const flowActivate = app.flow.onActivate.bind(app.flow);
   app.flow.onActivate = (screen: string, choice: string) => {
     if (screen === 'main-menu' && choice === 'howto') void openBriefing(false).then(() => app!.ui.show('main-menu'));
+    else if (screen === 'main-menu' && (choice === 'run' || choice === 'broadcast')) flowActivate('mode-select', choice);
     else flowActivate(screen, choice);
   };
 }
@@ -1554,11 +1567,14 @@ let titleK = 0;
 let wasTitle = false;
 function updateTitleShot(dt: number, t: CameraTarget): boolean {
   const T = TUNING.title;
+  // The title screen shows the cover art; every menu behind it (attract) keeps the chopper shot
+  // with no broadcast HUD, so the game only goes live when a broadcast starts (Mike, 2026-11-15).
   const onTitle = attract && !!document.querySelector('#ui [data-screen-id="title"]');
-  document.documentElement.classList.toggle('title', onTitle);
-  if (onTitle !== wasTitle) {
-    wasTitle = onTitle;
-    if (onTitle) {
+  const inMenus = attract;
+  document.documentElement.classList.toggle('title', inMenus);
+  if (inMenus !== wasTitle) {
+    wasTitle = inMenus;
+    if (inMenus) {
       if (!forcedLook) lighting.setMode('night');
     } else applyLook();
   }
@@ -1567,12 +1583,12 @@ function updateTitleShot(dt: number, t: CameraTarget): boolean {
   coverEl.hidden = !onTitle; // leaving the title, the camera glide is the transition: the art cuts away
   coverEl.classList.toggle('away', !cover);
   document.documentElement.classList.toggle('cover', cover);
-  if (onTitle) {
+  if (inMenus) {
     titleK = 1;
     const seg = sim.track.segmentAt(sim.giant.s);
     titleRoad.textContent = `${seg.zoneName} ${compass(t.travel)}bound`;
   } else titleK = Math.max(0, titleK - dt / T.glideTime);
-  titleBug.hidden = !onTitle;
+  titleBug.hidden = !inMenus;
   if (titleK <= 0) return false;
   // The shot, relative to his travel: behind, up, and off to his left, looking ahead past him.
   const fx = Math.cos(t.travel), fz = Math.sin(t.travel);
