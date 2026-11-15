@@ -34,6 +34,11 @@ applyStoredTuning();
 
 const flags = readFlags(location.search);
 const settings = loadSettings();
+/** HUD colours: one layout, two palettes (CSS variables keyed off html[data-palette]). */
+function applyHudColors() {
+  document.documentElement.dataset.palette = settings.hudColors;
+}
+applyHudColors();
 if (flags.reducedMotion !== null) settings.reducedMotion = flags.reducedMotion;
 if (flags.reduceFlashes !== null) settings.reduceFlashes = flags.reduceFlashes;
 if (flags.debug !== null) settings.debug = flags.debug;
@@ -1196,6 +1201,7 @@ app = await createGameApp({
         { id: 'wyf-cuts', label: `Camera Cuts: ${onOff(settings.cameraCuts)}`, description: 'Off holds the Chase High shot' },
         { id: 'wyf-livetime', label: `LIVE TIME: ${onOff(settings.liveTime)}`, description: 'Lighting follows your clock; off is always night' },
         { id: 'wyf-flashes', label: `Reduce Flashes: ${onOff(settings.reduceFlashes)}` },
+        { id: 'wyf-colors', label: `HUD Colours: ${settings.hudColors === 'network' ? 'Network' : 'WYF 6'}`, description: 'The station\'s purple and cream, or network red, blue and white' },
         { id: 'wyf-tips', label: `Producer Tips: ${onOff(settings.producerTips)}`, description: 'Turning them back on replays them' },
         { id: 'wyf-debug', label: `Debug Overlay: ${onOff(settings.debug)}` },
       ],
@@ -1206,7 +1212,10 @@ app = await createGameApp({
           forcedLook = null;
           applyLook();
         } else if (id === 'wyf-flashes') settings.reduceFlashes = lighting.reduceFlashes = cruisers.reduceFlashes = units.reduceFlashes = !settings.reduceFlashes;
-        else if (id === 'wyf-tips') {
+        else if (id === 'wyf-colors') {
+          settings.hudColors = settings.hudColors === 'network' ? 'wyf' : 'network';
+          applyHudColors();
+        } else if (id === 'wyf-tips') {
           settings.producerTips = !settings.producerTips;
           if (settings.producerTips) tips.reset();
         } else if (id === 'wyf-debug') {

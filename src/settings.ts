@@ -9,12 +9,14 @@ export interface Settings {
   liveTime: boolean;
   /** Onboarding: one-line producer notes the first time each thing matters. */
   producerTips: boolean;
+  /** HUD colours (Mike, 2026-11-15): 'wyf' = the station's own (purple, ink, cream, red 6), 'network' = red / blue / white. */
+  hudColors: 'wyf' | 'network';
   /** Set when the player turns the debug overlay on themselves (older saves defaulted it on). */
   debugChosen?: boolean;
 }
 
 const KEY = 'wyf.settings.v1';
-const DEFAULTS: Settings = { reducedMotion: false, reduceFlashes: false, debug: false, cameraCuts: true, liveTime: false, producerTips: true };
+const DEFAULTS: Settings = { reducedMotion: false, reduceFlashes: false, debug: false, cameraCuts: true, liveTime: false, producerTips: true, hudColors: 'wyf' };
 
 export function loadSettings(): Settings {
   try {
@@ -30,6 +32,7 @@ export function loadSettings(): Settings {
       cameraCuts: typeof parsed.cameraCuts === 'boolean' ? parsed.cameraCuts : DEFAULTS.cameraCuts,
       liveTime: typeof parsed.liveTime === 'boolean' ? parsed.liveTime : DEFAULTS.liveTime,
       producerTips: typeof parsed.producerTips === 'boolean' ? parsed.producerTips : DEFAULTS.producerTips,
+      hudColors: parsed.hudColors === 'network' ? 'network' : 'wyf',
     };
   } catch {
     console.warn('Settings were unreadable and have been reset to defaults.');
