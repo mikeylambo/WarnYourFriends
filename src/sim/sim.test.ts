@@ -3,7 +3,7 @@ import { Sim, cadenceAt, stepLengthAt } from './sim';
 import { Bot } from './bot';
 import { TUNING } from '../tuning';
 import { NO_INPUT, type Prop, type SimEvent, type SimInput } from './types';
-import { Track } from './track';
+import { PROP_DEFS, Track } from './track';
 import { DEG } from './math';
 
 const HZ = TUNING.sim.hz;
@@ -220,6 +220,36 @@ describe('lanes', () => {
     sim.step({ ...NO_INPUT, lane: 1 });
     for (let f = 0; f < 10 && sim.show.state === 'live'; f++) sim.step(NO_INPUT);
     expect(sim.show.state).toBe('cleared');
+  });
+
+  it('never bounces in place off a bulldozer when the next row blocks the open lane (Law 1; seed 100 stall)', () => {
+    for (const growth of [false, true]) {
+      const sim = emptySim(3);
+      const g = sim.giant;
+      sim.track.ensure(2000);
+      const s = 600;
+      const lanes = sim.track.lanesAt(s);
+      expect(lanes).toBeGreaterThanOrEqual(3);
+      // His lane: a bulldozer; next lane over: a barrier (same row, lane 0 open). 7.8m on: cars in lanes 0 and 1 (lane 2 open).
+      const mk = (kind: 'dozer' | 'barricade' | 'car', at: number, lane: number) => {
+        const d = PROP_DEFS[kind];
+        sim.track.props.push({ id: 900000 + sim.track.props.length, kind, cls: d.cls, mat: d.mat, s: at, d: sim.track.laneCenter(lane), hl: d.hl, hw: d.hw, h: d.h, variant: 0, alive: true, segment: sim.track.segmentAt(at).index });
+      };
+      mk('dozer', s, 1);
+      mk('barricade', s + 1.6, 2);
+      mk('car', s + 7.8, 0);
+      mk('car', s + 7.8, 1);
+      sim.track.props.sort((a, b) => a.s - b.s);
+      const sim2 = sim as unknown as { growth: boolean };
+      sim2.growth = growth;
+      g.s = s - 12;
+      g.lane = g.prevLane = 1;
+      g.d = sim.track.laneCenter(1);
+      g.tier = 0;
+      g.speed = 5;
+      run(sim, 8);
+      expect(g.s).toBeGreaterThan(s + 12);
+    }
   });
 
   it('never drops below the 2 m/s floor, even braking forever (Law 1, LOCKED)', () => {

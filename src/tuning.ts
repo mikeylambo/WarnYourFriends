@@ -217,6 +217,8 @@ export const TUNING = {
     knockbackTime: 0.22,
     /** Wall bump: how far toward the wall before bouncing back (m), no stumble. */
     wallBumpDepth: 0.9,
+    /** A knock-back needs its lane clear this far past what he hit (m): just enough to get by, not the next row. */
+    knockClearPast: 1,
   },
 
   collision: {

@@ -876,7 +876,9 @@ export class Sim {
   private knockLane(p: Prop): number {
     const g = this.giant;
     const s0 = g.s - 2;
-    const s1 = Math.max(p.s + p.hl, g.s) + 4;
+    // Clear beside what he hit, not beyond it: reaching past it caught the next row and refused the one lane
+    // that was open here (Mike's playtest: he bounced in place off a bulldozer until busted).
+    const s1 = Math.max(p.s + p.hl, g.s) + TUNING.lanes.knockClearPast;
     const candidates: number[] = [];
     if (g.move === 'change') candidates.push(g.moveFromLane);
     candidates.push(g.prevLane);
@@ -886,7 +888,31 @@ export class Sim {
       if (lane === here && g.move !== 'change') continue;
       if (this.laneClear(lane, s0, s1, false)) return lane;
     }
-    // Nowhere clear (rows always leave a lane, so rare): fall back to the previous lane.
-    return this.track.laneUsable(g.prevLane, g.s) ? g.prevLane : here;
+    // Nowhere clear: never back into the lane he's in (that bounces him in place off the same thing, Law 1).
+    // Take the usable side lane whose nearest blocker is farthest ahead: the most room to get past.
+    let best = -1;
+    let room = -Infinity;
+    for (const lane of [here - 1, here + 1]) {
+      if (!this.track.laneUsable(lane, g.s)) continue;
+      const r = this.roomAhead(lane);
+      if (r > room) {
+        room = r;
+        best = lane;
+      }
+    }
+    return best >= 0 ? best : this.track.laneUsable(g.prevLane, g.s) ? g.prevLane : here;
+  }
+
+  /** Metres of lane ahead of him before something he can't smash (props and police), up to 60m. */
+  private roomAhead(lane: number): number {
+    const g = this.giant;
+    const c = this.track.laneCenter(lane);
+    const r = this.radius();
+    const rank = this.smashRank();
+    let room = 60;
+    for (const p of this.track.propsBetween(g.s - 2, g.s + 60)) {
+      if (CLASS_RANK[p.cls] > rank && Math.abs(p.d - c) < p.hw + r) room = Math.min(room, p.s - p.hl - g.s);
+    }
+    return room;
   }
 }
