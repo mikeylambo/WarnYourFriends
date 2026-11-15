@@ -68,6 +68,14 @@
     "compact": [
       "Police Compact",
       "Police Compacts"
+    ],
+    "tollgate": [
+      "Toll Gate",
+      "Toll Gates"
+    ],
+    "foodtruck": [
+      "Food Truck",
+      "Food Trucks"
     ]
   },
   "verbs": {
@@ -553,6 +561,64 @@
         "Clips",
         "Pursuit Car Clips {noun}"
       ]
-    ]
+    ],
+    "landmark": {
+      "toll": [
+        [
+          "Runs",
+          "Giant Runs {name}; Does Not Pay"
+        ],
+        [
+          "Skips",
+          "Giant Skips The Line At {name}"
+        ],
+        [
+          "No Change",
+          "{name} Reports Giant, No Change Given"
+        ]
+      ],
+      "foodtrucks": [
+        [
+          "Visits",
+          "Giant Visits {name}; Vendors Report No Purchases"
+        ],
+        [
+          "Drops In",
+          "Giant Drops In On {name}"
+        ],
+        [
+          "Crashes",
+          "Giant Crashes {name}"
+        ]
+      ],
+      "works": [
+        [
+          "Passes",
+          "Giant Passes {name}; Crews On Break"
+        ],
+        [
+          "Delays",
+          "{name} Delayed By Giant"
+        ],
+        [
+          "Inspects",
+          "Giant Inspects {name} At Speed"
+        ]
+      ],
+      "jam": [
+        [
+          "Meets",
+          "Giant Meets {name} Traffic"
+        ],
+        [
+          "Joins",
+          "Giant Joins {name} Gridlock; Does Not Wait"
+        ],
+        [
+          "Commutes",
+          "Giant Commutes Through {name}"
+        ]
+      ]
+    }
   }
 }

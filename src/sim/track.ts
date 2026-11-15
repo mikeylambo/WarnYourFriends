@@ -1,7 +1,7 @@
 import { TUNING, type MassClass } from '../tuning';
 import { Rng } from './rng';
 import { DEG, clamp } from './math';
-import type { Material, Prop, PropKind } from './types';
+import type { LandmarkKind, Material, Prop, PropKind } from './types';
 
 /**
  * v0.3 procedural highway, built from 40m segments on gentle splines.
@@ -37,6 +37,9 @@ export interface Segment {
   zoneStart: boolean;
   /** Highway only: a road bridge crosses overhead (presentation). */
   overpass: boolean;
+  /** Content pass: a landmark set piece on this segment (its own prop pattern and scenery), and its name. */
+  landmark?: LandmarkKind;
+  landmarkName?: string;
   /** Centre-reference samples every metre: left-edge position and heading. */
   xs: Float64Array;
   zs: Float64Array;
@@ -63,6 +66,9 @@ export const PROP_DEFS: Record<PropKind, PropDef> = {
   barricade: { cls: 'heavy', mat: 'concrete', hl: 0.35, hw: 1.8, h: 0.95, variants: 1 },
   // Impact pass: the one lane prop nothing smashes (bounces him at any tier). Leap clears it.
   dozer: { cls: 'immovable', mat: 'metal', hl: 2.3, hw: 1.35, h: 2.4, variants: 1 },
+  // Landmarks: a toll gate arm (Medium: Stride smashes it) and a food truck (Heavy: Rampage).
+  tollgate: { cls: 'medium', mat: 'wood', hl: 0.15, hw: 1.7, h: 1.2, variants: 1 },
+  foodtruck: { cls: 'heavy', mat: 'fruit', hl: 3.0, hw: 1.2, h: 2.9, variants: 4 },
   // Phase 2 police units (never placed as lane props; pursuit spawns them).
   cruiser: { cls: 'heavy', mat: 'metal', hl: 2.4, hw: 0.98, h: 1.7, variants: 1 },
   compact: { cls: 'medium', mat: 'metal', hl: 1.8, hw: 0.85, h: 1.4, variants: 1 },
@@ -89,6 +95,7 @@ export class Track {
   /** After a branch, the next segment starts at this many lanes outright (no merge taper). */
   private forceLanes: number | null = null;
   private nextRowS: number;
+  private nextLandmark: number = TUNING.landmarks.firstAt;
   private propId = 0;
   private readonly rng: Rng;
 
@@ -172,7 +179,19 @@ export class Track {
     const zoneStart = this.zoneJustStarted;
     this.zoneJustStarted = false;
     this.zoneLeft--;
-    const overpass = zone === 'highway' && kind !== 'merge' && index >= T.runwaySegments && rng.chance(Z.overpassChance);
+    // Landmarks: a straight, full-width segment well inside its zone (never on a merge or a zone's last segment).
+    let landmark: LandmarkKind | undefined;
+    let landmarkName: string | undefined;
+    if (index >= this.nextLandmark && kind !== 'merge' && !this.nextZone && this.zoneLeft >= 2) {
+      landmark = this.pickLandmark(zone);
+      if (landmark) {
+        kind = 'straight';
+        h1 = h0;
+        landmarkName = `${rng.pick(TUNING.zones.names.first)} ${TUNING.landmarks.suffix[landmark]}`;
+        this.nextLandmark = index + rng.int(TUNING.landmarks.every[0], TUNING.landmarks.every[1]);
+      }
+    }
+    const overpass = !landmark && zone === 'highway' && kind !== 'merge' && index >= T.runwaySegments && rng.chance(Z.overpassChance);
     const n = T.segmentLength;
     const xs = new Float64Array(n + 1);
     const zs = new Float64Array(n + 1);
@@ -188,7 +207,7 @@ export class Track {
       zs[i] = zs[i - 1] + Math.sin(hm);
       hs[i] = hNow;
     }
-    const seg: Segment = { index, kind, s0, length: n, h0, h1, lanes0, lanes1, xs, zs, hs, zone, zoneName: this.zoneName, zoneStart, overpass };
+    const seg: Segment = { index, kind, s0, length: n, h0, h1, lanes0, lanes1, xs, zs, hs, zone, zoneName: this.zoneName, zoneStart, overpass, landmark, landmarkName };
     this.segments.push(seg);
     this.addProps(seg);
   }
@@ -207,13 +226,13 @@ export class Track {
     const next = this.segments.find((x) => x.index === seg.index + 1);
     // Not on a bridge either: the ramp would hang over the water.
     const ok = (z: ZoneKind) => z !== 'tunnel' && z !== 'bridge';
-    return seg.kind !== 'merge' && seg.lanes0 === seg.lanes1 && ok(seg.zone) && (!next || ok(next.zone)) && !seg.fork && !next?.fork;
+    return seg.kind !== 'merge' && seg.lanes0 === seg.lanes1 && ok(seg.zone) && (!next || ok(next.zone)) && !seg.fork && !next?.fork && !seg.landmark && !next?.landmark;
   }
 
   /** Can a fork leave from this segment? Highway, no merge here or next, and the next segment is highway too. */
   forkEligible(seg: Segment): boolean {
     const next = this.segments.find((x) => x.index === seg.index + 1);
-    return seg.zone === 'highway' && !!next && next.zone === 'highway' && seg.kind !== 'merge' && next.kind !== 'merge' && seg.lanes0 === seg.lanes1 && !seg.exit && !next.exit;
+    return seg.zone === 'highway' && !!next && next.zone === 'highway' && seg.kind !== 'merge' && next.kind !== 'merge' && seg.lanes0 === seg.lanes1 && !seg.exit && !next.exit && !seg.landmark && !next.landmark;
   }
 
   /** A name for a road a fork leads to (seeded, from the zone name bank). */
@@ -240,6 +259,18 @@ export class Track {
     this.zoneJustStarted = true;
     this.forceLanes = Z.lanes[zone];
     this.nextRowS = propsFrom;
+  }
+
+  /** A landmark that suits this zone (weighted), or none. */
+  private pickLandmark(zone: ZoneKind): LandmarkKind | undefined {
+    const LM = TUNING.landmarks;
+    const options = (Object.keys(LM.zones) as LandmarkKind[]).filter((k) => LM.zones[k].includes(zone));
+    if (!options.length) return undefined;
+    let total = 0;
+    for (const k of options) total += LM.weight[k];
+    let r = this.rng.next() * total;
+    for (const k of options) if ((r -= LM.weight[k]) < 0) return k;
+    return options[0];
   }
 
   private pickZone(options: ZoneKind[]): ZoneKind {
@@ -322,6 +353,12 @@ export class Track {
   private addProps(seg: Segment) {
     const P = TUNING.props;
     if (seg.index < TUNING.track.runwaySegments) return;
+    if (seg.landmark) {
+      this.addLandmarkProps(seg);
+      // No random rows inside a landmark, and a short breath after it.
+      this.nextRowS = Math.max(this.nextRowS, seg.s0 + seg.length + P.rowGap[0]);
+      return;
+    }
     const rng = this.rng;
     const end = seg.s0 + seg.length;
     while (this.nextRowS < end) {
@@ -362,6 +399,60 @@ export class Track {
           alive: true,
           segment: seg.index,
         });
+      }
+    }
+  }
+
+  private place(kind: PropKind, s: number, lane: number, seg: Segment, jitter = 0.2) {
+    const def = PROP_DEFS[kind];
+    this.props.push({
+      id: this.propId++,
+      kind,
+      cls: def.cls,
+      mat: def.mat,
+      s,
+      d: this.laneCenter(lane) + this.rng.range(-jitter, jitter),
+      hl: def.hl,
+      hw: def.hw,
+      h: def.h,
+      variant: this.rng.int(0, def.variants - 1),
+      alive: true,
+      segment: seg.index,
+    });
+  }
+
+  /** A landmark's own pattern (see TUNING.landmarks): every row leaves at least one lane open. */
+  private addLandmarkProps(seg: Segment) {
+    const LM = TUNING.landmarks;
+    const rng = this.rng;
+    const lanes = seg.lanes0;
+    const rows = LM.rows[seg.landmark!].map((r) => seg.s0 + r);
+    switch (seg.landmark!) {
+      case 'toll': {
+        const open = rng.int(0, lanes - 1);
+        for (let l = 0; l < lanes; l++) if (l !== open) this.place('tollgate', rows[0], l, seg, 0);
+        break;
+      }
+      case 'foodtrucks': {
+        let open = rng.int(0, lanes - 1);
+        for (const s of rows) {
+          for (let l = 0; l < lanes; l++) if (l !== open) this.place(rng.chance(LM.truckShare) ? 'foodtruck' : 'cart', s + rng.range(-1, 1), l, seg);
+          open = (open + rng.int(1, lanes - 1)) % lanes; // a different lane next row
+        }
+        break;
+      }
+      case 'works': {
+        const closed = rng.chance(0.5) ? 0 : lanes - 1;
+        for (const s of rows) this.place('barricade', s, closed, seg, 0);
+        break;
+      }
+      case 'jam': {
+        let open = rng.int(0, lanes - 1);
+        for (const s of rows) {
+          for (let l = 0; l < lanes; l++) if (l !== open) this.place(rng.chance(0.75) ? 'car' : 'van', s + rng.range(-1.2, 1.2), l, seg);
+          open = Math.max(0, Math.min(lanes - 1, open + rng.int(-1, 1))); // reachable: at most one lane a row
+        }
+        break;
       }
     }
   }

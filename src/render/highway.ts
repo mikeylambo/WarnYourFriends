@@ -97,6 +97,12 @@ export function partsFor(p: Prop): Part[] {
     case 'dozer':
       // Tracked body, cab, and a wide blade facing the giant: reads as "not going through that".
       return [[0, 0.35, W * 0.38, L * 0.95, 0.7, W * 0.22, 0x2b2b2e], [0, 0.35, -W * 0.38, L * 0.95, 0.7, W * 0.22, 0x2b2b2e], [0.1, 1.05, 0, L * 0.7, 0.75, W * 0.7, 'kind'], [-0.35, 1.9, 0, L * 0.35, 0.95, W * 0.5, 'kind'], [-0.35, 2.4, 0, L * 0.4, 0.08, W * 0.56, 0x2b2b2e], [-L * 0.55, 0.6, 0, 0.22, 1.1, W * 1.12, 0x8c939b]];
+    case 'tollgate':
+      // A striped boom arm across the lane on a post at its left end.
+      return [[0, 1.0, 0, 0.14, 0.14, W, 'kind'], [0, 1.0, -W * 0.25, 0.15, 0.15, W * 0.16, 0xd64545], [0, 1.0, W * 0.15, 0.15, 0.15, W * 0.16, 0xd64545], [0, 0.6, -W * 0.5, 0.3, 1.2, 0.3, 0x6d737a]];
+    case 'foodtruck':
+      // Painted box with a serving hatch and awning on its right side, a roof sign.
+      return [[0, 1.6, 0, L, 2.4, W, 'kind'], [L * 0.38, 1.3, 0, L * 0.24, 1.2, W * 0.95, 0xa9cfe0], [-L * 0.05, 1.9, W * 0.51, L * 0.5, 0.8, 0.06, 0x2a2230], [-L * 0.05, 2.45, W * 0.62, L * 0.55, 0.08, 0.5, 0xf2efe8], [-L * 0.1, 3.05, 0, L * 0.4, 0.5, 0.12, 0xf5d33b], [0, 0.35, 0, L * 0.9, 0.4, W * 0.9, 0x2b2b2e]];
     case 'cruiser':
     case 'compact':
       // Black-and-white police car (white doors and roof read from the chopper).
@@ -362,6 +368,7 @@ export class HighwayView {
     if (zone === 'avenue') this.buildStorefronts(seg, group, rng);
     if (zone === 'bridge') this.buildBridge(seg, group);
     if (seg.overpass) this.buildOverpass(seg, group);
+    if (seg.landmark) this.buildLandmark(seg, group);
     if (zone === 'highway') {
     for (let t = 0; t < 7; t++) {
       const left = rng.chance(0.5);
@@ -536,6 +543,68 @@ export class HighwayView {
     if (seg.zoneStart) portal(seg.s0 + 2);
     if (next && next.zone !== 'tunnel') portal(seg.s0 + seg.length - 2);
     return lamps;
+  }
+
+  /**
+   * Content pass landmarks (TUNING.landmarks): scenery that says what the set piece is from the chopper.
+   * The lane props are the sim's; this only reads them (where the toll's open lane is, which lane is closed).
+   */
+  private buildLandmark(seg: Segment, group: THREE.Group) {
+    const track = this.sim.track;
+    const lanes = seg.lanes0;
+    const W = TUNING.lanes.width;
+    const props = track.props.filter((p) => p.segment === seg.index);
+    const add = (s: number, d: number, y: number, sx: number, sy: number, sz: number, mat: THREE.Material) => {
+      track.posAt(s, d, this.pos);
+      const m = new THREE.Mesh(this.box, mat);
+      m.scale.set(sx, sy, sz);
+      m.position.set(this.pos.x, y, this.pos.z);
+      m.rotation.y = -track.headingAt(s);
+      group.add(m);
+      return m;
+    };
+    switch (seg.landmark) {
+      case 'toll': {
+        const gates = props.filter((p) => p.kind === 'tollgate');
+        const s = gates[0]?.s ?? seg.s0 + 22;
+        const shut = new Set(gates.map((p) => Math.floor(p.d / W)));
+        const w = lanes * W;
+        // A canopy on posts over the plaza (fades like an overpass while he's under it), booths on the islands.
+        const roof = new THREE.MeshToonMaterial({ color: 0xd8d2c4, gradientMap: toonRamp(), transparent: true, opacity: 1 });
+        add(s, w / 2, 6.4, 7, 0.6, w + 6, roof);
+        add(s + 3.4, w / 2, 5.9, 0.3, 0.5, w + 6, new THREE.MeshToonMaterial({ color: 0x1e6b3a, gradientMap: toonRamp(), transparent: true }));
+        for (const d of [-2.2, w + 2.2]) add(s, d, 3.1, 0.6, 6.2, 0.6, toon(0x9a948a));
+        for (let k = 1; k < lanes; k++) add(s, k * W, 1.2, 2.6, 2.4, 0.7, toon(0xf2efe8));
+        // A light over each lane: green over the open one, red over the gates.
+        for (let l = 0; l < lanes; l++) add(s - 3.6, (l + 0.5) * W, 5.85, 0.2, 0.45, 0.9, toon(shut.has(l) ? 0xd01818 : 0x2bd15a, { emissive: shut.has(l) ? 0x8a0a0a : 0x14a83a }));
+        this.overpasses.push({ s, mat: roof });
+        break;
+      }
+      case 'foodtrucks': {
+        // Festoon lights strung across the street.
+        const w = track.widthAt(seg.s0 + 20);
+        const bulbs = [0xffd27a, 0xff9a5a, 0xfff2c4];
+        for (const s of [seg.s0 + 4, seg.s0 + 19, seg.s0 + 34]) {
+          add(s, w / 2, 6.6, 0.05, 0.05, w + 12, toon(0x2a2230));
+          for (let d = -5; d <= w + 5; d += 1.6) add(s, d, 6.45 - 0.25 * Math.sin(((d + 5) / (w + 10)) * Math.PI), 0.22, 0.22, 0.22, toon(bulbs[Math.abs(Math.round(d * 3)) % 3], { emissive: 0xc98a2a }));
+        }
+        break;
+      }
+      case 'works': {
+        const bar = props.find((p) => p.kind === 'barricade');
+        const closed = bar ? Math.floor(bar.d / W) : 0;
+        const edge = closed === 0 ? W : closed * W; // the lane line beside the closed lane
+        const inward = closed === 0 ? -0.5 : 0.5;
+        // Arrow board at the start of the closure, cones along the line from there on.
+        add(seg.s0 + 1, (closed + 0.5) * W, 1.9, 0.3, 1.8, 2.6, toon(0x2b2b2e));
+        add(seg.s0 + 0.8, (closed + 0.5) * W, 2.1, 0.1, 0.9, 2.0, toon(0xf08a24, { emissive: 0xc05a10 }));
+        add(seg.s0 + 1, (closed + 0.5) * W, 0.5, 0.6, 1.0, 0.25, toon(0x6d737a));
+        for (let s = seg.s0 + 3; s < seg.s0 + seg.length; s += 3.5) add(s, edge + inward, 0.4, 0.4, 0.8, 0.4, toon(0xf08a24));
+        break;
+      }
+      case 'jam':
+        break; // the stalled cars are the set piece (their brake lights are already on)
+    }
   }
 
   /** Phase 2 overpass: a road bridge crossing overhead. Its deck fades when the giant passes under (never hides him). */

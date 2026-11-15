@@ -23,11 +23,11 @@ This file is the law for anyone (human or agent) building this repo. The design 
 
 ```
 src/tuning.ts        every number, with reasons
-src/sim/             pure TS simulation (no three/DOM): sim.ts, track.ts (road zones + props, fork branch), pursuit.ts (police units, chopper spotlight, police crashes), show.ts (Ratings/Heat/Pin, spectacle chain + score), asks.ts (the producer's asks), run.ts (five-segment run, meeting offers, budget), escort.ts, bot.ts, rng.ts
+src/sim/             pure TS simulation (no three/DOM): sim.ts, track.ts (road zones + props, landmarks, fork branch), pursuit.ts (police units, chopper spotlight, police crashes), show.ts (Ratings/Heat/Pin, spectacle chain + score), asks.ts (the producer's asks), run.ts (five-segment run, meeting offers, budget), escort.ts, bot.ts, rng.ts
 src/anim/gait.ts     run cycle: pinned feet, two-bone IK, phase locked to distance (pure math, tested)
 src/render/          three.js views: highway (zones, ramp), units (police), giant (greybox pose rig) + giantModel (Meshy skin, assets/giant/giant.glb), cruisers, pip (viewer video), camera rig + director, lighting (night/dusk/day), glow, silhouette test, palette, toon
 src/broadcast/       headline generator (§21) + headlines.json word bank (pure TS, tested); coverage.ts (escalation ladder), viewers.json
-src/audio.ts         Web Audio, music/sfx/voice buses (synth placeholders)
+src/audio.ts         Web Audio, music/sfx/voice buses: authored SFX (assets/sfx, ElevenLabs) with synth fallback
 src/input.ts         KBM, gamepad, touch → SimInput
 src/glyphs.ts        button labels per device family (PS4: L1/R1/L2/✕), via the shell's glyph registry
 src/tips.ts          onboarding producer notes (each once, first time it matters)
@@ -54,6 +54,7 @@ tools/shots-asks.mjs    The producer's asks: panel, an ask landing, the recap li
 tools/shots-fork.mjs    Forks: the exit sign and ramp on approach, the avenue after the cut
 tools/shots-shoulder.mjs  Shoulder Check filmstrip: wind-up, drive, recover
 tools/shots-hud.mjs     HUD (Direction D) in both palettes: desktop, phone landscape, phone portrait
+tools/shots-landmarks.mjs  Landmarks: toll plaza, night market, roadworks, rush hour on approach (ONLY=, SEED_FROM=)
 ```
 
 ## Deploys

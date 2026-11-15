@@ -49,11 +49,13 @@ export interface Headline {
   at?: NewsContext;
 }
 
-type Kind = 'zone' | 'spotted' | 'ratingsTier' | 'tierUp' | 'tierDown' | 'smash' | 'bounce' | 'wall' | 'merge' | 'escort' | 'ramHit' | 'ramMiss' | 'lostTrack' | 'spiked' | 'heat' | 'tell' | 'exitOpen' | 'end' | 'leap' | 'stare' | 'hijack' | 'pose' | 'spotlight' | 'chopperLost' | 'policeCrash' | 'policeSmash' | 'forkZone';
+type Kind = 'zone' | 'spotted' | 'ratingsTier' | 'tierUp' | 'tierDown' | 'smash' | 'bounce' | 'wall' | 'merge' | 'escort' | 'ramHit' | 'ramMiss' | 'lostTrack' | 'spiked' | 'heat' | 'tell' | 'exitOpen' | 'end' | 'leap' | 'stare' | 'hijack' | 'pose' | 'spotlight' | 'chopperLost' | 'policeCrash' | 'policeSmash' | 'forkZone' | 'landmark';
 /** `at`: where he was when it happened (places come from here, not from publish time). */
 type Item = { kind: Kind; t: number; prio: number; events: SimEvent[]; at?: NewsContext };
 
-const PRIO: Partial<Record<Kind, number>> = { zone: 66, spotted: 95, ratingsTier: 100, end: 200, exitOpen: 90, tell: 75, ramHit: 65, ramMiss: 58, lostTrack: 57, spiked: 62, heat: 52, escort: 60, merge: 55, leap: 64, stare: 61, hijack: 68, pose: 72, forkZone: 98, spotlight: 63, chopperLost: 59, policeCrash: 70, policeSmash: 35, tierUp: 50, bounce: 45, tierDown: 40, wall: 10 };
+const PRIO: Partial<Record<Kind, number>> = { landmark: 60, zone: 66, spotted: 95, ratingsTier: 100, end: 200, exitOpen: 90, tell: 75, ramHit: 65, ramMiss: 58, lostTrack: 57, spiked: 62, heat: 52, escort: 60, merge: 55, leap: 64, stare: 61, hijack: 68, pose: 72, forkZone: 98, spotlight: 63, chopperLost: 59, policeCrash: 70, policeSmash: 35, tierUp: 50, bounce: 45, tierDown: 40, wall: 10 };
+/** The player's own ability moments: kept queued longer so they get their headline. */
+const ABILITY_NEWS: Kind[] = ['leap', 'stare', 'hijack', 'pose'];
 /** These break in immediately, ignoring the 4s cadence (§21: tier changes; and the end of the broadcast). */
 /** These break in now; `forkZone` is the new road after a fork (the cut needs its chyron). */
 const IMMEDIATE: Kind[] = ['ratingsTier', 'end', 'exitOpen', 'forkZone'];
@@ -141,6 +143,7 @@ export class Newsroom {
           this.forkZoneNext = true;
         }
         break;
+      case 'landmark': add('landmark'); break;
       case 'zone':
         add(this.forkZoneNext ? 'forkZone' : 'zone');
         this.forkZoneNext = false;
@@ -173,7 +176,8 @@ export class Newsroom {
     if (ctx.ratingsTier > this.lastTier && this.lastRatings) this.queue.push({ kind: 'ratingsTier', t: now, prio: PRIO.ratingsTier!, events: [this.lastRatings] });
     this.lastTier = Math.max(this.lastTier, ctx.ratingsTier);
     // Stale news is dropped, not shown late.
-    this.queue = this.queue.filter((q) => now - q.t <= 6 || IMMEDIATE.includes(q.kind));
+    const B0 = TUNING.broadcast;
+    this.queue = this.queue.filter((q) => now - q.t <= (ABILITY_NEWS.includes(q.kind) ? B0.staleAfterAbility : B0.staleAfter) || IMMEDIATE.includes(q.kind));
     if (!this.queue.length) return null;
 
     const tierUp = this.queue.filter((q) => IMMEDIATE.includes(q.kind)).sort((a, b) => b.prio - a.prio)[0];
@@ -314,6 +318,12 @@ export class Newsroom {
         if (!line) return null;
         // Off the highway at a fork: the station cut to a new road, so it breaks in.
         return mk(this.fill(line[1], { name: e.name }), line[0], null, q.kind === 'forkZone');
+      }
+      case 'landmark': {
+        const e = q.events[0] as Extract<SimEvent, { type: 'landmark' }>;
+        const line = this.freshLine(L.landmark[e.kind]);
+        if (!line) return null;
+        return mk(this.fill(line[1], { name: e.name }), line[0], null);
       }
       case 'exitOpen': {
         const h = mk(L.exitOpen, null, null, true);

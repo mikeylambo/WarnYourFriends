@@ -157,7 +157,7 @@ export const TUNING = {
     // and stride are unchanged.
     { name: 'Jog', topSpeed: 6, accel: 8, tierUpAfter: 2.0, smashes: 'light', laneChangeTime: 0.22, cadence: 2.6, specStrideLength: 2.5, leanDeg: 20, hipHeight: 1.68, bodyDrop: 0.12, footLift: 0.45, cameraDistanceScale: 0.9, armSwing: 0.9, armBase: -0.1, flightLift: 0.03, elbowBend: 1.2, capeAngle: 20, capeFlutterHz: 1.3, capeFlutterAmp: 0.05 },
     { name: 'Stride', topSpeed: 10, accel: 6, tierUpAfter: 3.0, smashes: 'medium', laneChangeTime: 0.3, cadence: 2.8, specStrideLength: 4.0, leanDeg: 30, hipHeight: 1.64, bodyDrop: 0.18, footLift: 0.75, cameraDistanceScale: 1.0, armSwing: 1.25, armBase: -0.05, flightLift: 0.07, elbowBend: 1.4, capeAngle: 52, capeFlutterHz: 3.2, capeFlutterAmp: 0.12 },
-    { name: 'Rampage', topSpeed: 15, accel: 4, tierUpAfter: Infinity, smashes: 'heavy', laneChangeTime: 0.4, cadence: 3.1, specStrideLength: 6.0, leanDeg: 40, hipHeight: 1.6, bodyDrop: 0.24, footLift: 1.05, cameraDistanceScale: 1.15, armSwing: 1.6, armBase: 0, flightLift: 0.11, elbowBend: 1.6, capeAngle: 80, capeFlutterHz: 6.5, capeFlutterAmp: 0.2 },
+    { name: 'Rampage', topSpeed: 15, accel: 4, tierUpAfter: Infinity, smashes: 'heavy', laneChangeTime: 0.4, cadence: 3.1, specStrideLength: 6.0, leanDeg: 40, hipHeight: 1.6, bodyDrop: 0.24, footLift: 1.05, cameraDistanceScale: 1.17, armSwing: 1.6, armBase: 0, flightLift: 0.11, elbowBend: 1.6, capeAngle: 80, capeFlutterHz: 6.5, capeFlutterAmp: 0.2 },
   ] as TierTuning[],
 
   tierDrop: {
@@ -290,6 +290,30 @@ export const TUNING = {
       first: ['Harbor', 'Quarry', 'Ninth', 'Kessler', 'Orchard', 'Lantern', 'Millbrook', 'Ashgrove', 'Redline', 'Copper', 'Dunmore', 'Saltmarsh'],
       suffix: { highway: 'Expressway', avenue: 'Avenue', bridge: 'Bridge', tunnel: 'Tunnel' },
     },
+  },
+
+  /**
+   * Content pass (Mike, 2026-11-15): landmark set pieces (v0.3 §16 "landmark set pieces become segments"),
+   * one 40m segment each, built from verbs he already has. Every row leaves a lane open.
+   * - toll: gate arms (Medium) across every lane but one open booth lane. Smash them for points, or take the open lane.
+   * - foodtrucks (avenue): two rows of food trucks (Heavy) and carts (Medium), a different lane open each row.
+   * - works: one edge lane closed by concrete barricades (Heavy) behind an arrow board; merge out, or smash down it at Rampage.
+   * - jam: three rows of stalled cars (Heavy) across all but one lane; the open lane moves at most one lane a row.
+   */
+  landmarks: {
+    /** First landmark no earlier than this segment (after the opening runway and the first props). */
+    firstAt: 7,
+    /** Segments between landmarks: about one every 25–40 s at Stride. */
+    every: [7, 11] as [number, number],
+    /** Which zones each one appears in, and how often it's picked. */
+    zones: { toll: ['highway'], foodtrucks: ['avenue'], works: ['highway'], jam: ['highway'] } as Record<'toll' | 'foodtrucks' | 'works' | 'jam', ('highway' | 'avenue' | 'bridge' | 'tunnel')[]>,
+    weight: { toll: 1, foodtrucks: 1, works: 1, jam: 1 } as Record<'toll' | 'foodtrucks' | 'works' | 'jam', number>,
+    /** Where the rows sit inside the 40m segment (m from its start). */
+    rows: { toll: [22], foodtrucks: [10, 28], works: [6, 13, 20, 27, 34], jam: [6, 20, 34] } as Record<'toll' | 'foodtrucks' | 'works' | 'jam', number[]>,
+    /** Food-truck rows: share of blocked lanes that are trucks (the rest carts). */
+    truckShare: 0.6,
+    /** Invented names for the headlines (the zone's first-name bank supplies the rest). */
+    suffix: { toll: 'Toll Plaza', foodtrucks: 'Night Market', works: 'Roadworks', jam: 'Rush Hour' } as Record<'toll' | 'foodtrucks' | 'works' | 'jam', string>,
   },
 
   /** v0.3 props in lanes: Medium and Heavy only, densities tunable. */
@@ -433,7 +457,7 @@ export const TUNING = {
       { name: 'Wide Side', yawDeg: 35, pitchDeg: 52, distance: 55, fov: 35, lookAheadTime: 0.5 },
       { name: 'Long Lens', yawDeg: 15, pitchDeg: 40, distance: 70, fov: 22, lookAheadTime: 0.7 },
       // Mike: head-on as a cut-away, from higher up (44° vs the 18° experiment). Far and telephoto so ≥2s of road ahead fits below him.
-      { name: 'Head-On', yawDeg: 12, pitchDeg: 44, distance: 104, fov: 16, headOn: true, swoopHome: true },
+      { name: 'Head-On', yawDeg: 12, pitchDeg: 44, distance: 108, fov: 16, headOn: true, swoopHome: true },
       // Mike: a higher head-on. Steeper means more road per screen, so further out to keep ≥2s below him.
       { name: 'High Head-On', yawDeg: 10, pitchDeg: 58, distance: 122, fov: 17, headOn: true, swoopHome: true },
       // Mike: almost directly above. Travel stays screen-up; shows lanes, merges and the convoy like a map.
@@ -718,6 +742,10 @@ export const TUNING = {
     tallyWindow: 4,
     /** Opening headline after this long. */
     openAt: 1.2,
+    /** Queued news older than this is dropped, not shown late (s). */
+    staleAfter: 6,
+    /** ...except the player's own ability moments (Leap, Stare, Hijack, Pose): they wait longer for a slot. */
+    staleAfterAbility: 10,
   },
 
   /** Phase 2 broadcast escalation (presentation). */

@@ -198,6 +198,7 @@ export class Sim {
     const seg = this.track.segmentAt(this.giant.s);
     if (seg.index !== segBefore && seg.kind === 'merge') this.emit({ type: 'merge', from: seg.lanes0, to: seg.lanes1, s: seg.s0 });
     if (seg.index !== segBefore && seg.zoneStart) this.emit({ type: 'zone', zone: seg.zone, name: seg.zoneName });
+    if (seg.index !== segBefore && seg.landmark) this.emit({ type: 'landmark', kind: seg.landmark, name: seg.landmarkName ?? '', s: seg.s0 });
     this.pursuit.step(dt);
     this.stepFork();
     this.stepExit();

@@ -2,7 +2,10 @@ import type { AbilityId, MassClass } from '../tuning';
 
 export type Material = 'wood' | 'glass' | 'metal' | 'fruit' | 'concrete' | 'paper';
 
-export type PropKind = 'sawhorse' | 'cart' | 'fence' | 'scooter' | 'car' | 'van' | 'barricade' | 'dozer' | 'cruiser' | 'compact';
+export type PropKind = 'sawhorse' | 'cart' | 'fence' | 'scooter' | 'car' | 'van' | 'barricade' | 'dozer' | 'cruiser' | 'compact' | 'tollgate' | 'foodtruck';
+
+/** Content pass (Mike, 2026-11-15): landmark set pieces, one per segment (v0.3 §16: landmarks become segments). */
+export type LandmarkKind = 'toll' | 'foodtrucks' | 'works' | 'jam';
 
 /** A prop in a lane, in track space: `s` along the road, `d` across it from the left edge. */
 export interface Prop {
@@ -151,7 +154,8 @@ export type SimEvent =
   /** A chasing cruiser crashes into something Heavy or immovable and is out of the chase; a Heavy prop goes with it. */
   | { type: 'policeCrash'; id: number; propId: number; propKind: PropKind; propCls: MassClass; propSmashed: boolean; s: number; d: number; speed: number }
   /** Phase 2 road variety: the giant enters a new stretch of road. */
-  | { type: 'zone'; zone: 'highway' | 'avenue' | 'bridge' | 'tunnel'; name: string };
+  | { type: 'zone'; zone: 'highway' | 'avenue' | 'bridge' | 'tunnel'; name: string }
+  | { type: 'landmark'; kind: LandmarkKind; name: string; s: number };
 
 export type UnitKind = 'cruiser' | 'rolling' | 'roadblock' | 'spike' | 'chopper';
 /** §12 gain sources. */

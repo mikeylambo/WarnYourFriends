@@ -56,6 +56,8 @@ const p2 = { tellsOffscreen: 0, spawns: {} as Record<string, number>, tells: {} 
 const asksAgg: Record<string, { offered: number; done: number }> = {};
 /** Forks: opened, taken, stayed. */
 const forks = { opened: 0, taken: 0, stayed: 0 };
+const landmarks: Record<string, number> = {};
+let landmarkSmashes = 0;
 const stepSamples: number[] = [];
 let maxStepMs = 0;
 const t0 = performance.now();
@@ -131,6 +133,8 @@ for (let seed = 1; seed <= seeds; seed++) {
         rig.cut(director.current, director.side, target());
       } else if (e.type === 'fork') forks.stayed++;
       if (e.type === 'forkOpen') forks.opened++;
+      if (e.type === 'landmark') landmarks[e.kind] = (landmarks[e.kind] ?? 0) + 1;
+      if (e.type === 'smash' && sim.track.segmentAt(sim.giant.s).landmark) landmarkSmashes++;
       const trig = cutTriggerFor(e);
       if (trig) {
         lastSeen[trig] = sim.time;
@@ -385,6 +389,7 @@ console.log(
 );
 console.log(`  run (Phase 3): segments ${p3.segments.join('/')}; ability uses ${JSON.stringify(p3.uses)}, no-target presses ${p3.duds}; leap landings ${p3.leapLands} (smashed ${p3.leapSmash}); stare pulled over ${p3.stareMoved}; hijack bails ${p3.hijackBails}; pose Ratings +${p3.poseGain.toFixed(0)}`);
 console.log(`  forks: opened ${forks.opened}, taken ${forks.taken}, stayed ${forks.stayed}`);
+console.log(`  landmarks passed: ${Object.entries(landmarks).sort().map(([k, v]) => `${k} ${v}`).join(', ')}; smashes inside them ${landmarkSmashes}`);
 console.log(`  producer's asks (offered → done): ${Object.entries(asksAgg).sort().map(([k, v]) => `${k} ${v.done}/${v.offered}`).join(', ')}`);
 console.log(`  escort: ${esc.joins} joins, nearest join ${esc.minJoinBehind.toFixed(1)}m back, ${esc.joinsOnCamera} on camera; closest gap ever ${esc.minGap.toFixed(2)}m (floor ${TUNING.escort.minGap}m)`);
 if (Object.keys(aheadBy).length) console.log('  road-ahead shortfalls (min s by angle/tier):', JSON.stringify(Object.fromEntries(Object.entries(aheadBy).map(([k, v]) => [k, +v.toFixed(2)]))));
@@ -401,6 +406,7 @@ if (cuts.minAwayHold < TUNING.camera.awayHold[0] - 1e-6) fail(`returned home aft
 if (cuts.maxAwayHold > TUNING.camera.awayHold[1] + 2) fail(`stayed away ${cuts.maxAwayHold.toFixed(2)}s`);
 if (swoop.n < seeds / 4) fail(`too few swoops to test (${swoop.n})`);
 for (const k of ['cruiser', 'spike', 'rolling', 'roadblock', 'chopper']) if (!p2.tells[k]) fail(`no ${k} tell in ${seeds} seeds`);
+if (Object.keys(landmarks).length < 4) fail(`landmarks: only ${Object.keys(landmarks).join(', ')} passed in ${seeds} seeds`);
 if (!forks.taken || !forks.stayed) fail(`forks: taken ${forks.taken}, stayed ${forks.stayed} in ${seeds} seeds`);
 if (!p2.choppersShaken) fail(`no police chopper was ever shaken in ${seeds} seeds`);
 if (!p2.policeCrash) fail(`no police crash in ${seeds} seeds`);
