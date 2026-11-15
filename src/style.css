@@ -420,7 +420,12 @@ html:has(#budget:not([hidden])) #gainpop { top: calc(108px + env(safe-area-inset
 /* Producer's Meeting cards: the sheet's art up top, the producer's line, then what it does. */
 #recap .pitch { padding: 0 0 12px; overflow: hidden; }
 #recap .pitch > :not(.art) { margin-left: 12px; margin-right: 12px; }
-#recap .pitch .art { position: relative; display: block; width: 100%; aspect-ratio: 16 / 10; overflow: hidden; background: #191230; }
+/* The art is square: show all of it, never crop. */
+#recap .pitch .art { position: relative; display: block; width: 100%; aspect-ratio: 1 / 1; overflow: hidden; background: #191230; }
+#recap .pitch { min-height: 0; gap: 4px; }
+#recap .pitch b { font-size: 16px; margin-top: 4px; }
+#recap .meeting .how { margin: 0 0 10px; font-size: 13px; }
+#recap .meeting .purse { margin: 6px 0 8px; }
 #recap .pitch .art img { width: 100%; height: 100%; object-fit: cover; display: block; }
 #recap .pitch .art .tag { position: absolute; left: 8px; top: 8px; font-style: italic; font-weight: 900; clip-path: polygon(5px 0, 100% 0, calc(100% - 5px) 100%, 0 100%); padding: 3px 9px; background: var(--wyf-ink); color: var(--wyf-cream); }
 #recap .pitch.ability .art .tag { background: var(--wyf-red); }
@@ -434,3 +439,21 @@ html:has(#budget:not([hidden])) #gainpop { top: calc(108px + env(safe-area-inset
 #btn-ability { background-size: cover; background-position: center; color: var(--wyf-cream); text-shadow: 0 1px 3px #000; display: grid; align-items: end; padding-bottom: 6px; }
 #btn-ability:not(.ready) { filter: grayscale(0.8); }
 #btn-ability.ready { background-color: transparent; color: var(--wyf-cream); box-shadow: 0 0 0 3px #f2cc8f; }
+/* Small screens: the square art sits beside the text (still whole), so three pitches fit without scrolling. */
+@media (max-width: 640px), (max-height: 560px) {
+  #recap .meeting { padding-top: 12px; padding-bottom: 12px; }
+  #recap .meeting .how { display: none; }
+  #recap .pitches { gap: 6px; margin-bottom: 8px; }
+  #recap .pitch { display: grid; grid-template-columns: var(--art, 92px) 1fr; grid-auto-rows: min-content; column-gap: 10px; row-gap: 2px; padding: 0; align-items: start; }
+  #recap .pitch > :not(.art) { grid-column: 2; margin: 0 8px 0 0; }
+  #recap .pitch .art { grid-column: 1; grid-row: 1 / span 6; width: var(--art, 92px); }
+  #recap .pitch b { font-size: 14px; margin-top: 6px; }
+  #recap .pitch .said { font-size: 12px; }
+  #recap .pitch .blurb { font-size: 11px; }
+  #recap .pitch .price { font-size: 14px; margin-bottom: 6px; }
+  #recap .pitch .art .tag { font-size: 8px; left: 4px; top: 4px; padding: 2px 6px; }
+}
+@media (max-height: 560px) and (min-width: 641px) {
+  #recap .meeting { max-width: 860px; }
+  #recap .pitch { --art: 104px; }
+}
