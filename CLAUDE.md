@@ -56,6 +56,10 @@ tools/shots-shoulder.mjs  Shoulder Check filmstrip: wind-up, drive, recover
 tools/shots-hud.mjs     HUD (Direction D) in both palettes: desktop, phone landscape, phone portrait
 ```
 
+## Deploys
+
+Vercel builds only the production branch `claude/new-session-cxrh92` (`vercel.json` `ignoreCommand`; `GITHUB_TOKEN` for the private shell is production-only). **After every push to the working branch, fast-forward `claude/new-session-cxrh92` to it and push** (Mike, 2026-11-15), so the live site always has the latest build.
+
 ## Commands
 
 ```bash

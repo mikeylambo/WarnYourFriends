@@ -445,6 +445,55 @@ const recapArmed = () => performance.now() >= recapArmedAt;
 const esc = (x: string) => x.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
 
 /** Phase 3 (§4, §17): the Producer's Meeting. Three pitches paid from the purse, or skip. */
+/**
+ * How to Play (Mike, 2026-11-15: "onboarding might be necessary for some"). Five lines, button
+ * labels for the device in use. Shown once before the first broadcast, and from the main menu
+ * and Settings. Uses the recap overlay (its controller and Enter handling come along); the shell's
+ * menu is parked on its empty gameplay screen while it's open so its input can't fire behind it.
+ */
+const BRIEF_KEY = 'gal.briefing.seen.v1';
+let briefingClose: (() => void) | null = null;
+function briefingSeen(): boolean {
+  try {
+    return localStorage.getItem(BRIEF_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+function openBriefing(goLive: boolean): Promise<void> {
+  try {
+    localStorage.setItem(BRIEF_KEY, '1');
+  } catch {
+    /* storage unavailable: it shows again next time */
+  }
+  app?.ui.show('gameplay-placeholder');
+  const k = (a: GlyphAction) => (glyph(a) ? `<kbd>${esc(glyph(a))}</kbd>` : '');
+  const at = TUNING.segment.exitOpensAt;
+  const clock = `${Math.floor(at / 60)}:${String(at % 60).padStart(2, '0')}`;
+  recapEl.innerHTML = `<div class="card briefing">
+    <div class="kicker">HOW TO PLAY</div>
+    <ol class="steps">
+      <li><b>Run.</b> He never stops. ${k('lanes')} change lanes, ${k('brake')} brake.</li>
+      <li><b>Gear up.</b> Hold top speed to shift: Jog, Stride, Rampage. Each gear smashes bigger things; too big bounces you down a gear.</li>
+      <li><b>Keep them watching.</b> Smashes, close calls and chains raise the ratings. At zero they cut to commercial.</li>
+      <li><b>Lose the police.</b> Watch for blinkers, spikes and roadblocks. ${k('shoulder')} shoulder-checks through. Don't get boxed in.</li>
+      <li><b>Take the exit.</b> At ${clock} a ramp opens on the right. Be in the far-right lane when you reach it.</li>
+    </ol>
+    <div class="row"><button class="go" id="brief-go">${goLive ? 'Go live' : 'Back'}</button></div>
+  </div>`;
+  recapEl.hidden = false;
+  recapArmedAt = performance.now() + 250;
+  return new Promise((resolve) => {
+    briefingClose = () => {
+      briefingClose = null;
+      hideRecap();
+      resolve();
+    };
+    $<HTMLButtonElement>('brief-go').onclick = () => briefingClose?.();
+    $<HTMLButtonElement>('brief-go').focus();
+  });
+}
+
 function showMeeting() {
   if (!run) return;
   const r = run;
@@ -1085,7 +1134,11 @@ function beginBroadcast(mode = 'broadcast') {
     newRun(seed, Math.max(0, Math.min(TUNING.run.segments - 1, flags.seg ?? 0)), flags.ability ? [flags.ability] : []);
   }
   bot = flags.bot ? new Bot(sim) : null;
-  start();
+  // First broadcast ever: How to Play first, then the cold open.
+  if (!bot && !flags.autostart && !briefingSeen()) {
+    started = false;
+    void openBriefing(true).then(() => start());
+  } else start();
 }
 
 /** Back to the menus: the bot takes over a fresh broadcast behind them. */
@@ -1111,7 +1164,7 @@ input.onAnyInput = () => {
 };
 /** Pause requests from the game (Esc/Start/II, focus loss, pad unplugged) go through the shell. */
 function requestPause() {
-  if (app && app.shell.session.phase === 'playing' && !attract && sim.live) app.flow.showPause();
+  if (app && !briefingClose && app.shell.session.phase === 'playing' && !attract && sim.live) app.flow.showPause();
 }
 input.onPadDisconnect = requestPause;
 window.addEventListener('blur', requestPause); // §20 focus loss auto-pauses
@@ -1198,6 +1251,7 @@ app = await createGameApp({
   flow: {
     settingsExtension: {
       choices: () => [
+        { id: 'wyf-howto', label: 'How to Play' },
         { id: 'wyf-cuts', label: `Camera Cuts: ${onOff(settings.cameraCuts)}`, description: 'Off holds the Chase High shot' },
         { id: 'wyf-livetime', label: `LIVE TIME: ${onOff(settings.liveTime)}`, description: 'Lighting follows your clock; off is always night' },
         { id: 'wyf-flashes', label: `Reduce Flashes: ${onOff(settings.reduceFlashes)}` },
@@ -1205,7 +1259,11 @@ app = await createGameApp({
         { id: 'wyf-tips', label: `Producer Tips: ${onOff(settings.producerTips)}`, description: 'Turning them back on replays them' },
         { id: 'wyf-debug', label: `Debug Overlay: ${onOff(settings.debug)}` },
       ],
-      handle: (id) => {
+      handle: async (id) => {
+        if (id === 'wyf-howto') {
+          await openBriefing(false);
+          return true; // the shell shows Settings again
+        }
         if (id === 'wyf-cuts') settings.cameraCuts = director.enabled = !settings.cameraCuts;
         else if (id === 'wyf-livetime') {
           settings.liveTime = !settings.liveTime;
@@ -1232,7 +1290,15 @@ app = await createGameApp({
 registerGlyphs(app.shell.production.glyphs);
 // Only what exists: no challenges or credits yet; the tagline is approved fiction (§21).
 app.ui.updateScreen('title', { title: 'Giant\nat Large', subtitle: 'Warn your friends.', choices: [{ id: 'start', label: 'Press Start' }] });
-app.ui.updateScreen('main-menu', { choices: [{ id: 'play', label: 'Play' }, { id: 'settings', label: 'Settings' }] });
+app.ui.updateScreen('main-menu', { choices: [{ id: 'play', label: 'Play' }, { id: 'howto', label: 'How to Play' }, { id: 'settings', label: 'Settings' }] });
+// The shell's main menu doesn't know How to Play: catch it before the flow does.
+{
+  const flowActivate = app.flow.onActivate.bind(app.flow);
+  app.flow.onActivate = (screen: string, choice: string) => {
+    if (screen === 'main-menu' && choice === 'howto') void openBriefing(false).then(() => app!.ui.show('main-menu'));
+    else flowActivate(screen, choice);
+  };
+}
 // Core settings drive the game: reduced motion, shake, vibration, volume.
 const applyCore = (c: CoreSettings) => {
   rig.reducedMotion = settings.reducedMotion = c.reducedMotion;
@@ -1385,6 +1451,8 @@ function frame(now: number) {
       else showRecap();
     }
   }
+  // Back (Esc / B / Circle) closes How to Play.
+  if (briefingClose && app?.shell.input.wasPressed('ui_back') && recapArmed()) briefingClose();
   // Controller parity on the recap: left/right to move, A to choose.
   if (!recapEl.hidden && app) {
     const btns = ([...recapEl.querySelectorAll('button')] as HTMLButtonElement[]).filter((b) => !b.disabled);
