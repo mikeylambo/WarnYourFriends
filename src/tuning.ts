@@ -339,6 +339,17 @@ export const TUNING = {
    */
   gear: { buildUp: 1.0, buildRingScale: 0.9, fovPunch: 0.14, fovPunchTime: 0.5, shockRadius: 10, trafficAlarm: 1.6, trafficAlarmBrakeAt: 85, tagTime: 2.4, dustKick: [0, 3, 8] },
 
+  /**
+   * Recap REPLAY (presentation): the night's top moment, re-simulated from the recorded inputs and
+   * played back before the recap card. Starts `lead` s before the moment at full speed, slows to `slow`×
+   * from `slowBefore` s before to `slowAfter` s after, and ends `after` s after. Scores pick the moment
+   * (the highest wins; ties go to the later one). Shot from a cut-away angle.
+   */
+  replay: {
+    lead: 2.2, slow: 0.35, slowBefore: 0.35, slowAfter: 1.0, after: 1.6, angle: 'Long Lens',
+    score: { policeCrash: 10, unitSmash: 7, leapLand: 4, hijackBail: 5, heavyAcross: 6, heavy: 4, nearMiss: 4, ramMiss: 4, pose: 3 },
+  },
+
   /** Footfall presentation (v0.3). */
   footfall: {
     /** 2px camera pulse on every plant. */

@@ -473,3 +473,18 @@ html:has(#budget:not([hidden])) #gainpop { top: calc(108px + env(safe-area-inset
 #geartag { position: absolute; right: 18px; bottom: calc(100% + 6px); padding: 4px 16px; background: var(--wyf-cream); color: var(--wyf-red); font: italic 900 13px/1 ui-sans-serif, system-ui, sans-serif; letter-spacing: 0.14em; clip-path: polygon(8px 0, 100% 0, calc(100% - 8px) 100%, 0 100%); opacity: 0; transform: translateY(8px); transition: opacity 0.15s, transform 0.2s cubic-bezier(.2,.8,.2,1); pointer-events: none; }
 #geartag.on { opacity: 1; transform: none; }
 #geartag.rampage { background: var(--wyf-red); color: var(--wyf-cream); }
+
+/* --- Recap REPLAY (the sheet's blue badge): HUD off, letterbox bars, badge top left ------------- */
+#replay { position: absolute; left: 0; top: calc(18px + env(safe-area-inset-top)); display: flex; align-items: center; gap: 10px; pointer-events: none; z-index: 5; }
+#replay[hidden] { display: none; }
+#replay b { background: var(--wyf-blue); color: var(--wyf-cream); font: italic 900 22px/1 ui-sans-serif, system-ui, sans-serif; letter-spacing: 0.08em; padding: 7px 22px 6px 28px; clip-path: polygon(0 0, 100% 0, calc(100% - 12px) 100%, 0 100%); }
+#replay span { background: rgba(30, 24, 33, 0.82); color: var(--wyf-cream); font: italic 800 12px/1 ui-sans-serif, system-ui, sans-serif; letter-spacing: 0.16em; text-transform: uppercase; padding: 7px 16px; clip-path: polygon(8px 0, 100% 0, calc(100% - 8px) 100%, 0 100%); }
+#replay small { color: rgba(236, 224, 200, 0.7); font: 700 11px/1 ui-sans-serif, system-ui, sans-serif; letter-spacing: 0.1em; text-transform: uppercase; }
+html.replay #hud > :not(#chyron) { visibility: hidden; }
+html.replay #abil, html.replay #touch, html.replay #controls, html.replay #camtag { visibility: hidden; }
+html.replay::before, html.replay::after { content: ''; position: fixed; left: 0; right: 0; height: 7vh; background: #000; z-index: 4; pointer-events: none; }
+html.replay::before { top: 0; }
+html.replay::after { bottom: 0; }
+html.replay #hud #chyron { bottom: calc(7vh + 10px); }
+html.replay #replay { top: calc(7vh + 12px); }
+html.replay #chyron:has(.text.empty) { visibility: hidden; }

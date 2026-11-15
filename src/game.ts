@@ -156,6 +156,15 @@ let menuGuard = 0;
 let acc = 0;
 let camTagT = 0;
 const recentEvents: SimEvent[] = [];
+// Recap REPLAY state (declared up here: newRun runs at boot). See startReplay below.
+let simOpts: { seed: number; segment: number; upgrades: UpgradeId[] } = { seed: 0, segment: 0, upgrades: [] };
+const inputLog: SimInput[] = [];
+let moment: { t: number; score: number; kind: string; event: SimEvent; headline: Headline | null } | null = null;
+let replayRate = 1;
+const replayEl = $('replay');
+type Parked = { sim: Sim; highway: HighwayView; gait: Gait; cruisers: CruiserView; units: UnitViews; director: Director; news: Newsroom; bot: Bot | null; rideMesh: THREE.Group | null; prev: typeof prev; runStats: typeof runStats; propKinds: Map<number, PropKind>; recent: SimEvent[] };
+let replay: { sim: Sim; live: Parked; slowFrom: number; slowTo: number; end: number; armedAt: number; done: () => void } | null = null;
+
 const perf = { fps: 0, frames: 0, t: 0, simMs: 0 };
 /** Browser-side measurements, exposed for E2E. */
 const measure = {
@@ -180,6 +189,13 @@ function targetAt(s: number, d: number): CameraTarget {
 
 function newRun(seed: number, segment = 0, upgrades: UpgradeId[] = []) {
   tips.clear();
+  if (replay) {
+    // A new broadcast mid-replay: drop the replay (its views go below) and the parked live ones.
+    replay = null;
+    replayRate = 1;
+    document.documentElement.classList.remove('replay');
+    replayEl.hidden = true;
+  }
   if (highway) scene.remove(highway.group);
   if (giant) for (const o of giant.objects) scene.remove(o);
   if (cruisers) scene.remove(cruisers.group);
@@ -196,6 +212,9 @@ function newRun(seed: number, segment = 0, upgrades: UpgradeId[] = []) {
   Object.assign(runStats, { heavy: 0, units: 0, crashes: 0, lost: 0, dodged: 0, nearMiss: 0, best: null, bestRatings: -1 });
   $('coldts').textContent = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
   sim = new Sim({ seed, segment, upgrades });
+  simOpts = { seed, segment, upgrades: [...upgrades] };
+  inputLog.length = 0;
+  moment = null;
   highway = new HighwayView(sim);
   highway.onHonk = (v) => audio.honk(v);
   giant = new GiantView();
@@ -287,7 +306,7 @@ function hideRecap() {
 /** Onboarding producer notes: what triggers each one (events trigger the rest). */
 function updateTips(dt: number) {
   const T = TUNING.tips;
-  const on = settings.producerTips && !attract && started && sim.live && !document.documentElement.classList.contains('coldopen');
+  const on = settings.producerTips && !attract && !replay && started && sim.live && !document.documentElement.classList.contains('coldopen');
   if (on) {
     const g = sim.giant;
     if (g.tier === 0 && sim.time > T.gearAfter) tips.want('gear');
@@ -508,6 +527,7 @@ function present(e: SimEvent) {
     if (p) propKinds.set(p.id, p.kind);
   }
   news.observe(e, sim.time);
+  noteMoment(e);
   const trig = cutTriggerFor(e);
   if (trig) {
     triggerLog.push({ t: sim.time, kind: trig });
@@ -753,6 +773,7 @@ function present(e: SimEvent) {
 }
 
 function stepSim(inp: SimInput) {
+  if (!replay) inputLog.push(inp);
   const g = sim.giant;
   prev.s = g.s;
   prev.d = g.d;
@@ -781,7 +802,9 @@ function stepSim(inp: SimInput) {
     showCamTag();
   }
   const h = news.update({ time: sim.time, tier: g.tier, lane: g.lane, lanes: sim.track.lanesAt(g.s), heading: sim.track.headingAt(g.s), s: g.s, ratingsTier: sim.show.tier, heat: sim.show.heat, zone: sim.track.segmentAt(g.s).zone, zoneName: sim.track.segmentAt(g.s).zoneName }, (id) => propKinds.get(id));
-  if (h) {
+  // During a replay the chyron holds what the station actually ran about the moment (never a new line).
+  if (h && !replay) {
+    if (moment && !moment.headline && h.sources.includes(moment.event)) moment.headline = h;
     showHeadline(h);
     // Tonight's top story: the biggest headline that wasn't the ending itself.
     if (!['BUSTED', 'SIGN-OFF'].includes(h.kicker) && sim.show.ratings >= runStats.bestRatings) {
@@ -789,6 +812,105 @@ function stepSim(inp: SimInput) {
       runStats.bestRatings = sim.show.ratings;
     }
   }
+}
+
+
+// --- Recap REPLAY: tonight's top moment, re-simulated from the recorded inputs -----------
+// The sim is deterministic for (seed, segment, upgrades, inputs), so the replay is the real
+// thing, not a recording of pixels: a fresh sim fast-forwards to just before the moment, then the
+// normal renderer plays it from a cut-away angle in slow motion. The live views are parked and
+// restored untouched; run stats and headlines from the replay are thrown away.
+
+function noteMoment(e: SimEvent) {
+  if (replay || attract || !sim.live) return;
+  const S = TUNING.replay.score;
+  let sc = 0;
+  switch (e.type) {
+    case 'policeCrash': sc = S.policeCrash; break;
+    case 'smash': sc = e.propId >= 1_000_000 ? S.unitSmash : e.cls === 'heavy' ? (e.across ? S.heavyAcross : S.heavy) : 0; break;
+    case 'leapLand': sc = e.smashed > 0 ? S.leapLand + e.smashed : 0; break;
+    case 'hijackBail': sc = S.hijackBail; break;
+    case 'nearMiss': sc = S.nearMiss; break;
+    case 'ram': sc = e.hit ? 0 : S.ramMiss; break;
+    case 'pose': sc = S.pose; break;
+  }
+  if (sc > 0 && (!moment || sc >= moment.score)) moment = { t: sim.time, score: sc, kind: e.type, event: e, headline: null };
+}
+
+function replayInput(): SimInput {
+  return replay ? inputLog[replay.sim.tick] ?? NO_INPUT : NO_INPUT;
+}
+
+function startReplay(done: () => void) {
+  const R = TUNING.replay;
+  const m = moment!;
+  const rs = new Sim(simOpts);
+  const startTick = Math.round(Math.max(0, m.t - R.lead) / rs.dt);
+  for (let i = 0; i < startTick && i < inputLog.length; i++) rs.step(inputLog[i]);
+  const live: Parked = { sim, highway, gait, cruisers, units, director, news, bot, rideMesh, prev: { ...prev }, runStats: { ...runStats }, propKinds: new Map(propKinds), recent: recentEvents.slice() };
+  scene.remove(highway.group, cruisers.group, units.group);
+  if (rideMesh) scene.remove(rideMesh);
+  sim = rs;
+  highway = new HighwayView(rs);
+  highway.onHonk = (v) => audio.honk(v);
+  gait = new Gait();
+  cruisers = new CruiserView(rs);
+  cruisers.reduceFlashes = settings.reduceFlashes;
+  units = new UnitViews(rs, highway);
+  units.reduceFlashes = settings.reduceFlashes;
+  news = new Newsroom(simOpts.seed, rs.show.heat);
+  director = new Director(simOpts.seed);
+  rideMesh = null;
+  bot = null;
+  scene.add(highway.group, cruisers.group, units.group);
+  giant.reset();
+  prev.s = rs.giant.s;
+  prev.d = rs.giant.d;
+  prev.stepPos = rs.giant.stepPos;
+  const ang = Math.max(0, TUNING.camera.angles.findIndex((a) => a.name === R.angle));
+  director.force(ang, 1, true);
+  rig.cut(ang, 1, targetAt(rs.giant.s, rs.giant.d));
+  document.documentElement.classList.add('replay');
+  replayEl.hidden = false;
+  // The chyron shows the headline that ran about this moment, or nothing.
+  chyText.classList.toggle('empty', !m.headline);
+  if (m.headline) showHeadline({ ...m.headline, breaking: false });
+  acc = 0;
+  replay = { sim: rs, live, slowFrom: m.t - R.slowBefore, slowTo: m.t + R.slowAfter, end: m.t + R.after, armedAt: performance.now() + 400, done };
+}
+
+function updateReplay() {
+  const r = replay!;
+  const t = r.sim.time;
+  replayRate = t >= r.slowFrom && t <= r.slowTo ? TUNING.replay.slow : 1;
+  const skip = performance.now() > r.armedAt && !!app && (app.shell.input.wasPressed('ui_accept') || app.shell.input.wasPressed('ui_cancel'));
+  if (t >= r.end || skip || !r.sim.live) endReplay();
+}
+
+function endReplay() {
+  const r = replay!;
+  replay = null;
+  replayRate = 1;
+  scene.remove(highway.group, cruisers.group, units.group);
+  if (rideMesh) scene.remove(rideMesh);
+  const L = r.live;
+  ({ sim, highway, gait, cruisers, units, director, news, bot, rideMesh } = L);
+  scene.add(highway.group, cruisers.group, units.group);
+  if (rideMesh) scene.add(rideMesh);
+  Object.assign(prev, L.prev);
+  Object.assign(runStats, L.runStats);
+  propKinds.clear();
+  for (const [k, v] of L.propKinds) propKinds.set(k, v);
+  recentEvents.length = 0;
+  recentEvents.push(...L.recent);
+  giant.reset();
+  rig.snap(targetAt(sim.giant.s, sim.giant.d));
+  tips.clear();
+  document.documentElement.classList.remove('replay');
+  chyText.classList.remove('empty');
+  replayEl.hidden = true;
+  acc = 0;
+  r.done();
 }
 
 // --- Pause, focus, start (the SLU Web Shell owns the flow) ----------------------
@@ -1010,7 +1132,7 @@ function frame(now: number) {
 
   let frozen = false;
   if (started && !paused && !flags.stepMode) {
-    acc += realDt * flags.timescale;
+    acc += realDt * flags.timescale * replayRate;
     let steps = 0;
     while (acc >= SIM_DT && steps < 8) {
       acc -= SIM_DT;
@@ -1020,10 +1142,10 @@ function frame(now: number) {
         continue;
       }
       const human = input.sample(); // always drain edges, even while the bot drives
-      let inp = bot ? bot.input() : human;
+      let inp = replay ? replayInput() : bot ? bot.input() : human;
       // Lane input follows the screen: when travel points down (Head-On, or past halfway through
       // the swoop), his left is screen-right, so mirror it.
-      if (!bot && rig.info.travelDown && inp.lane) inp = { ...inp, lane: -inp.lane };
+      if (!replay && !bot && rig.info.travelDown && inp.lane) inp = { ...inp, lane: -inp.lane };
       if (menuGuard > 0) {
         menuGuard--;
         inp = { ...inp, shoulder: false, lane: 0 };
@@ -1046,7 +1168,8 @@ function frame(now: number) {
   const lateralVel = (g.d - prev.d) / SIM_DT;
   const heading = t.travel + Math.atan2(lateralVel, Math.max(4, g.speed)) * 0.5;
 
-  const animDt = paused || frozen ? 0 : realDt * flags.timescale;
+  if (replay) updateReplay();
+  const animDt = paused || frozen ? 0 : realDt * flags.timescale * replayRate;
   audio.setRotor(g.tier / 2);
 
   if (animDt > 0) {
@@ -1120,7 +1243,9 @@ function frame(now: number) {
         app?.shell.session.setPhase('results');
         void recordStats();
       }
-      showRecap();
+      // Tonight's top moment first, then the recap.
+      if (moment && flags.replay && !flags.stepMode) startReplay(showRecap);
+      else showRecap();
     }
   }
   // Controller parity on the recap: left/right to move, A to choose.
@@ -1464,6 +1589,8 @@ window.__GAME = {
   toggleHeadOn,
   /** Dev: slow motion (camera included), for filmstrips. */
   recap: () => (recapEl.hidden ? null : { title: recapEl.querySelector('h2')?.textContent, outcome: recapEl.querySelector('.outcome')?.textContent }),
+  /** Recap REPLAY: playing now (sim time, end, rate), and the moment it picked. */
+  replay: () => ({ playing: !!replay, t: replay?.sim.time ?? null, end: replay?.end ?? null, rate: replayRate, moment }),
   show: () => ({ ...sim.show, tier: sim.show.tier, exit: sim.exit, live: sim.live, units: sim.pursuit.units.map((u) => ({ id: u.id, unit: u.unit, phase: u.phase, gap: u.s - sim.giant.s, lane: u.lane })) }),
   coverage: () => ({ cls: document.getElementById('hud')!.className, desk: !document.getElementById('desk')!.hidden, ticker: !document.getElementById('ticker')!.hidden, pip: pip.active, cold: !document.getElementById('coldopen')!.hidden }),
   /** Dev: roll viewer video now. */

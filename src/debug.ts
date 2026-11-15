@@ -10,6 +10,8 @@ export interface Flags {
   bot: boolean;
   autostart: boolean;
   stepMode: boolean;
+  /** Recap REPLAY of the night's top moment (?replay=0 skips it). */
+  replay: boolean;
   debug: boolean | null;
   reducedMotion: boolean | null;
   reduceFlashes: boolean | null;
@@ -57,6 +59,7 @@ export function readFlags(search: string): Flags {
     bot: bool(q, 'bot') ?? false,
     autostart: bool(q, 'autostart') ?? false,
     stepMode: bool(q, 'step') ?? false,
+    replay: bool(q, 'replay') ?? true,
     debug: bool(q, 'debug'),
     reducedMotion: bool(q, 'reducedmotion'),
     reduceFlashes: bool(q, 'reduceflashes'),

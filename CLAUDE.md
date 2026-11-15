@@ -47,6 +47,7 @@ tools/filmstrip.mjs     slow-motion strip of an impact (smash-heavy, bounce, bou
 tools/shots-onboarding.mjs  producer tip, live budget, recap and meeting
 tools/shots-police.mjs  Police evidence: chopper spotlight sweep and lock, a police crash
 tools/shots-gear.mjs    Gear tells: build-up, gear-up moment, Rampage dust
+tools/shots-replay.mjs  Recap REPLAY in real time: lead-in, slow motion at the moment, recap after
 ```
 
 ## Commands
