@@ -125,6 +125,10 @@ export type SimEvent =
   | { type: 'heat'; heat: number }
   | { type: 'exitOpen'; s: number; segment: number; lane: number }
   | { type: 'exitMissed'; s: number }
+  /** A fork's exit ramp opens ahead (gore at `s`), to the road `name`. */
+  | { type: 'forkOpen'; s: number; segment: number; zone: string; name: string }
+  /** He reached the fork: took the exit (`taken`) or stayed. Taking it rebuilds the road from segment `from`. */
+  | { type: 'fork'; taken: boolean; zone: string; name: string; from: number; shaken: number }
   | { type: 'signOff'; ratings: number; banked: number }
   /** Spectacle chain (Mike's score): a stunt joined the chain. `add` is this stunt's points (before the chain multiplier). */
   | { type: 'chain'; count: number; mult: number; pending: number; add: number; cause: StuntType }

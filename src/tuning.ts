@@ -393,6 +393,15 @@ export const TUNING = {
     ] as { id: string; text: string; n: number; reward: number; zone?: 'bridge' | 'tunnel' | 'avenue'; fromSegment?: number }[],
   },
 
+  /**
+   * Forks (Mike, 2026-11-15): on a highway, an exit ramp to an avenue opens `distance` m ahead (like the
+   * sign-off ramp). Rightmost lane at the gore takes it: the broadcast cuts away and the road ahead
+   * becomes that avenue (denser, more to smash); chasing police can't follow (each one engaged is shaken).
+   * Staying keeps the highway. Forks open at these broadcast times (s), never within `clearOfExit` m of
+   * the sign-off or after `lastAt` s; a missed window waits for the next highway stretch.
+   */
+  forks: { at: [30, 58, 86] as number[], lastAt: 108, distance: [150, 330] as [number, number], clearOfExit: 320, propsAfter: 35 },
+
   /** Footfall presentation (v0.3). */
   footfall: {
     /** 2px camera pulse on every plant. */
@@ -413,7 +422,7 @@ export const TUNING = {
       { name: 'Wide Side', yawDeg: 35, pitchDeg: 52, distance: 55, fov: 35, lookAheadTime: 0.5 },
       { name: 'Long Lens', yawDeg: 15, pitchDeg: 40, distance: 70, fov: 22, lookAheadTime: 0.7 },
       // Mike: head-on as a cut-away, from higher up (44° vs the 18° experiment). Far and telephoto so ≥2s of road ahead fits below him.
-      { name: 'Head-On', yawDeg: 12, pitchDeg: 44, distance: 100, fov: 16, headOn: true, swoopHome: true },
+      { name: 'Head-On', yawDeg: 12, pitchDeg: 44, distance: 104, fov: 16, headOn: true, swoopHome: true },
       // Mike: a higher head-on. Steeper means more road per screen, so further out to keep ≥2s below him.
       { name: 'High Head-On', yawDeg: 10, pitchDeg: 58, distance: 122, fov: 17, headOn: true, swoopHome: true },
       // Mike: almost directly above. Travel stays screen-up; shows lanes, merges and the convoy like a map.

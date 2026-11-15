@@ -49,13 +49,14 @@ export interface Headline {
   at?: NewsContext;
 }
 
-type Kind = 'zone' | 'spotted' | 'ratingsTier' | 'tierUp' | 'tierDown' | 'smash' | 'bounce' | 'wall' | 'merge' | 'escort' | 'ramHit' | 'ramMiss' | 'lostTrack' | 'spiked' | 'heat' | 'tell' | 'exitOpen' | 'end' | 'leap' | 'stare' | 'hijack' | 'pose' | 'spotlight' | 'chopperLost' | 'policeCrash' | 'policeSmash';
+type Kind = 'zone' | 'spotted' | 'ratingsTier' | 'tierUp' | 'tierDown' | 'smash' | 'bounce' | 'wall' | 'merge' | 'escort' | 'ramHit' | 'ramMiss' | 'lostTrack' | 'spiked' | 'heat' | 'tell' | 'exitOpen' | 'end' | 'leap' | 'stare' | 'hijack' | 'pose' | 'spotlight' | 'chopperLost' | 'policeCrash' | 'policeSmash' | 'forkZone';
 /** `at`: where he was when it happened (places come from here, not from publish time). */
 type Item = { kind: Kind; t: number; prio: number; events: SimEvent[]; at?: NewsContext };
 
-const PRIO: Partial<Record<Kind, number>> = { zone: 66, spotted: 95, ratingsTier: 100, end: 200, exitOpen: 90, tell: 75, ramHit: 65, ramMiss: 58, lostTrack: 57, spiked: 62, heat: 52, escort: 60, merge: 55, leap: 64, stare: 61, hijack: 68, pose: 72, spotlight: 63, chopperLost: 59, policeCrash: 70, policeSmash: 35, tierUp: 50, bounce: 45, tierDown: 40, wall: 10 };
+const PRIO: Partial<Record<Kind, number>> = { zone: 66, spotted: 95, ratingsTier: 100, end: 200, exitOpen: 90, tell: 75, ramHit: 65, ramMiss: 58, lostTrack: 57, spiked: 62, heat: 52, escort: 60, merge: 55, leap: 64, stare: 61, hijack: 68, pose: 72, forkZone: 98, spotlight: 63, chopperLost: 59, policeCrash: 70, policeSmash: 35, tierUp: 50, bounce: 45, tierDown: 40, wall: 10 };
 /** These break in immediately, ignoring the 4s cadence (§21: tier changes; and the end of the broadcast). */
-const IMMEDIATE: Kind[] = ['ratingsTier', 'end', 'exitOpen'];
+/** These break in now; `forkZone` is the new road after a fork (the cut needs its chyron). */
+const IMMEDIATE: Kind[] = ['ratingsTier', 'end', 'exitOpen', 'forkZone'];
 
 /** Compass direction of travel: −Z is north, +X is east. */
 export function compass(heading: number): 'North' | 'East' | 'South' | 'West' {
@@ -133,7 +134,17 @@ export class Newsroom {
       case 'pose': add('pose'); break;
       case 'tell': if (e.kind !== 'cruiser') add('tell'); break;
       case 'exitOpen': add('exitOpen'); break;
-      case 'zone': add('zone'); break;
+      case 'fork':
+        // Off the highway: queued road news (zones, merges) is about a road he's no longer on.
+        if (e.taken) {
+          this.queue = this.queue.filter((q) => q.kind !== 'zone' && q.kind !== 'merge');
+          this.forkZoneNext = true;
+        }
+        break;
+      case 'zone':
+        add(this.forkZoneNext ? 'forkZone' : 'zone');
+        this.forkZoneNext = false;
+        break;
       case 'signOff':
       case 'busted':
         this.queue = [];
@@ -142,6 +153,8 @@ export class Newsroom {
     }
   }
 
+  /** A fork was just taken: the next zone event is the new road, and it breaks in. */
+  private forkZoneNext = false;
   /** Where he was on the last update (an event observed now happened here). */
   private lastCtx: NewsContext | null = null;
   /** The zone the headline being composed is placed in (highway words only on highways). */
@@ -294,11 +307,13 @@ export class Newsroom {
         const place = line[1].includes('{place}') ? this.freshPlace(ctx) : null;
         return mk(this.fill(line[1], { place }), line[0], place);
       }
+      case 'forkZone':
       case 'zone': {
         const e = q.events[0] as Extract<SimEvent, { type: 'zone' }>;
         const line = this.freshLine(L.zone[e.zone]);
         if (!line) return null;
-        return mk(this.fill(line[1], { name: e.name }), line[0], null);
+        // Off the highway at a fork: the station cut to a new road, so it breaks in.
+        return mk(this.fill(line[1], { name: e.name }), line[0], null, q.kind === 'forkZone');
       }
       case 'exitOpen': {
         const h = mk(L.exitOpen, null, null, true);

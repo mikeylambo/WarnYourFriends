@@ -57,6 +57,23 @@ export class Pursuit {
     return this.units.filter((u) => u.alive && !u.lost && u.unit !== 'spike').length;
   }
 
+  /** A fork taken: nothing follows him off the highway. Units that engaged are shaken (lost track). */
+  loseAll(): number {
+    let n = 0;
+    for (const u of this.units) {
+      if (!u.alive) continue;
+      const engaged = !u.lost && (u.unit === 'cruiser' ? u.target >= 0 || u.phase !== 'approach' : u.phase !== 'approach');
+      if (engaged && u.unit !== 'spike' && u.unit !== 'roadblock') {
+        n++;
+        this.sim.emitPublic({ type: 'lostTrack', id: u.id, kind: u.unit });
+        this.sim.award('lostTrack');
+      }
+      u.alive = false;
+    }
+    this.closest.clear();
+    return n;
+  }
+
   /** The Stare: cruisers closing in or winding up back off (they've lost their nerve, not him). */
   backOff(): number {
     let n = 0;
@@ -149,9 +166,11 @@ export class Pursuit {
     if (this.aheadThreatActive()) return false;
     // One tell at a time: no threat ahead while a cruiser is closing in or winding up.
     if (this.units.some((u) => u.alive && u.unit === 'cruiser' && !u.lost && u.phase !== 'leave' && u.s > sim.giant.s - 40)) return false;
-    // Never on the approach to the sign-off ramp.
+    // Never on the approach to the sign-off ramp, or to a fork's gore (the choice must be readable).
     const ex = sim.exit;
     if (ex && ex.gore - sim.giant.s < 320 && ex.gore > sim.giant.s) return false;
+    const fk = sim.fork;
+    if (fk && fk.gore - sim.giant.s < TUNING.forks.clearOfExit && fk.gore > sim.giant.s) return false;
     return true;
   }
 

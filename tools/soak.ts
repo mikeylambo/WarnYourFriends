@@ -54,6 +54,8 @@ const p3 = { segments: [0, 0, 0, 0, 0], uses: {} as Record<string, number>, duds
 const p2 = { tellsOffscreen: 0, spawns: {} as Record<string, number>, tells: {} as Record<string, number>, minSpawnDist: Infinity, spawnOnCamera: 0, maxTells: 0, ramHits: 0, ramMisses: 0, spotlights: 0, choppersShaken: 0, policeCrash: 0, policeSmash: 0, crashOffscreen: 0, spiked: 0, nearMiss: 0, dodges: 0, lostTrack: 0, maxPin: 0, ends: {} as Record<string, number>, endTime: 0, peak: 0, banked: 0 };
 /** The producer's asks: offered and finished, per ask. */
 const asksAgg: Record<string, { offered: number; done: number }> = {};
+/** Forks: opened, taken, stayed. */
+const forks = { opened: 0, taken: 0, stayed: 0 };
 const stepSamples: number[] = [];
 let maxStepMs = 0;
 const t0 = performance.now();
@@ -89,6 +91,7 @@ for (let seed = 1; seed <= seeds; seed++) {
   const dt = sim.dt;
 
   const seenUnits = new Set<number>();
+  let lastForkAt = -Infinity;
   let lastHeat = 1;
   for (let i = 0; i < ticks; i++) {
     if (!sim.live) break;
@@ -120,6 +123,14 @@ for (let seed = 1; seed <= seeds; seed++) {
     }
 
     for (const e of events) {
+      // A fork taken: the broadcast cuts away while the road ahead is rebuilt (a jump, not a slide).
+      if (e.type === 'fork' && e.taken) {
+        forks.taken++;
+        lastForkAt = sim.time;
+        gait.reset();
+        rig.cut(director.current, director.side, target());
+      } else if (e.type === 'fork') forks.stayed++;
+      if (e.type === 'forkOpen') forks.opened++;
       const trig = cutTriggerFor(e);
       if (trig) {
         lastSeen[trig] = sim.time;
@@ -193,6 +204,7 @@ for (let seed = 1; seed <= seeds; seed++) {
       cam.aheadUnder2++;
       const key = `${info.angle}/${TUNING.tiers[g.tier].name}${sim.laneBusy ? '/lane' : ''}${g.ride > 0 ? '/ride' : ''}${g.air > 0 ? '/air' : ''}${g.pose > 0 ? '/pose' : ''}${g.abilityCd > 0 ? '/cd:' + sim.ability : ''}`;
       aheadBy[key] = Math.min(aheadBy[key] ?? Infinity, info.aheadSeconds);
+      if (process.env.SOAK_VERBOSE) console.log(`  ahead ${info.aheadSeconds.toFixed(2)}s seed ${seed} t=${sim.time.toFixed(2)} since fork ${(sim.time - lastForkAt).toFixed(2)}s zone ${sim.track.segmentAt(g.s).zone}`);
     }
     }
     // Escort: joined ≥40m back and off camera; never closer than the gap floor.
@@ -372,6 +384,7 @@ console.log(
     `rams hit ${p2.ramHits} / missed ${p2.ramMisses}; spotlight locks ${p2.spotlights}, choppers shaken ${p2.choppersShaken}; police crashes ${p2.policeCrash} (${p2.crashOffscreen} outside the frame), ploughed through ${p2.policeSmash}; spiked ${p2.spiked}; near-misses ${p2.nearMiss}; traffic dodges ${p2.dodges}; lost track ${p2.lostTrack}; max Pin ${p2.maxPin.toFixed(0)}`,
 );
 console.log(`  run (Phase 3): segments ${p3.segments.join('/')}; ability uses ${JSON.stringify(p3.uses)}, no-target presses ${p3.duds}; leap landings ${p3.leapLands} (smashed ${p3.leapSmash}); stare pulled over ${p3.stareMoved}; hijack bails ${p3.hijackBails}; pose Ratings +${p3.poseGain.toFixed(0)}`);
+console.log(`  forks: opened ${forks.opened}, taken ${forks.taken}, stayed ${forks.stayed}`);
 console.log(`  producer's asks (offered → done): ${Object.entries(asksAgg).sort().map(([k, v]) => `${k} ${v.done}/${v.offered}`).join(', ')}`);
 console.log(`  escort: ${esc.joins} joins, nearest join ${esc.minJoinBehind.toFixed(1)}m back, ${esc.joinsOnCamera} on camera; closest gap ever ${esc.minGap.toFixed(2)}m (floor ${TUNING.escort.minGap}m)`);
 if (Object.keys(aheadBy).length) console.log('  road-ahead shortfalls (min s by angle/tier):', JSON.stringify(Object.fromEntries(Object.entries(aheadBy).map(([k, v]) => [k, +v.toFixed(2)]))));
@@ -388,6 +401,7 @@ if (cuts.minAwayHold < TUNING.camera.awayHold[0] - 1e-6) fail(`returned home aft
 if (cuts.maxAwayHold > TUNING.camera.awayHold[1] + 2) fail(`stayed away ${cuts.maxAwayHold.toFixed(2)}s`);
 if (swoop.n < seeds / 4) fail(`too few swoops to test (${swoop.n})`);
 for (const k of ['cruiser', 'spike', 'rolling', 'roadblock', 'chopper']) if (!p2.tells[k]) fail(`no ${k} tell in ${seeds} seeds`);
+if (!forks.taken || !forks.stayed) fail(`forks: taken ${forks.taken}, stayed ${forks.stayed} in ${seeds} seeds`);
 if (!p2.choppersShaken) fail(`no police chopper was ever shaken in ${seeds} seeds`);
 if (!p2.policeCrash) fail(`no police crash in ${seeds} seeds`);
 if (p2.crashOffscreen > p2.policeCrash * 0.1) fail(`${p2.crashOffscreen}/${p2.policeCrash} police crashes outside the frame`);

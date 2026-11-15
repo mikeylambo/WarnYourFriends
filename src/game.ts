@@ -674,6 +674,25 @@ function present(e: SimEvent) {
       tips.want('exit');
       highway.rebuild([e.segment - 1, e.segment, e.segment + 1]);
       break;
+    case 'forkOpen':
+      // The ramp opens on segments already built ahead; the producer calls it.
+      highway.rebuild([e.segment - 1, e.segment, e.segment + 1]);
+      tips.say(`Exit for ${e.name} coming up. Right lane takes it.`);
+      break;
+    case 'fork':
+      if (e.taken) {
+        // The station cuts away while the road ahead is rebuilt as the avenue (a jump, not a slide).
+        highway.rebuildFrom(e.from);
+        gait.reset();
+        prev.s = sim.giant.s;
+        prev.d = sim.giant.d;
+        prev.stepPos = sim.giant.stepPos;
+        rig.cut(director.current, director.side, targetAt(sim.giant.s, sim.giant.d));
+        flash(TUNING.camera.cutFlashFrames);
+        showCamTag();
+        if (e.shaken > 0) tips.say(e.shaken === 1 ? 'They missed the exit.' : `${e.shaken} cars missed the exit.`);
+      }
+      break;
     case 'busted':
     case 'signOff':
       endedAt = performance.now();

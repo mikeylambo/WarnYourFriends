@@ -13,10 +13,12 @@ const LENS = new THREE.MeshBasicMaterial({ color: 0xffc27a });
 const TAIL = new THREE.MeshBasicMaterial({ color: 0xd01818 });
 const HEAD = new THREE.MeshBasicMaterial({ color: 0xfff2d8 });
 
-let signTex: THREE.Texture | null = null;
-/** "SIGN-OFF" exit sign face, drawn once. */
-function signTexture(): THREE.Texture {
-  if (signTex) return signTex;
+const signTex = new Map<string, THREE.Texture>();
+/** Exit sign faces: "EXIT 6 / SIGN-OFF" for the sign-off, "EXIT 6A / {road}" for a fork. Drawn once each. */
+function signTexture(fork?: string): THREE.Texture {
+  const key = fork ?? '';
+  const hit = signTex.get(key);
+  if (hit) return hit;
   const c = document.createElement('canvas');
   c.width = 256;
   c.height = 176;
@@ -29,14 +31,18 @@ function signTexture(): THREE.Texture {
   g.fillStyle = '#f4f4ee';
   g.textAlign = 'center';
   g.font = '800 30px system-ui, sans-serif';
-  g.fillText('EXIT 6', 128, 52);
-  g.font = '900 40px system-ui, sans-serif';
-  g.fillText('SIGN-OFF', 128, 104);
+  g.fillText(fork ? 'EXIT 6A' : 'EXIT 6', 128, 52);
+  const big = fork ? fork.toUpperCase() : 'SIGN-OFF';
+  let px = 40;
+  do g.font = `900 ${px--}px system-ui, sans-serif`;
+  while (px > 16 && g.measureText(big).width > 228);
+  g.fillText(big, 128, 104);
   g.font = '800 44px system-ui, sans-serif';
   g.fillText('\u2198', 128, 156);
-  signTex = new THREE.CanvasTexture(c);
-  signTex.colorSpace = THREE.SRGBColorSpace;
-  return signTex;
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  signTex.set(key, tex);
+  return tex;
 }
 
 /** Road paint is retroreflective: a little self-light so lanes read at night outside the pools. */
@@ -280,7 +286,8 @@ export class HighwayView {
     const exitSeg = this.exitFor(seg);
     if (exitSeg) this.buildRamp(seg, exitSeg, group);
     else add(this.sweep(seg, (_i, _s, w) => [[w + 0.4, 0], [w + 0.4, eh], [w + 0.9, eh], [w + 0.9, 0]]), ec);
-    if (this.sim.track.segments.some((x) => x.exit && x.index === seg.index + 1)) this.signGantry(seg, seg.s0 + 6, group);
+    const nextExit = this.sim.track.segments.find((x) => (x.exit || x.fork) && x.index === seg.index + 1);
+    if (nextExit) this.signGantry(seg, seg.s0 + 6, group, nextExit.fork?.name);
 
     // Dashed lane lines (3m dash, 6m gap), only where both lanes exist.
     const dashGeo = new THREE.PlaneGeometry(1, 1);
@@ -604,9 +611,14 @@ export class HighwayView {
     return lamps;
   }
 
-  /** The sign-off exit segment this segment's ramp belongs to (the exit segment itself or the one after it). */
+  /** The exit (sign-off or fork) segment this segment's ramp belongs to (the exit segment itself or the one after it). */
   private exitFor(seg: Segment): Segment | null {
-    return this.sim.track.segments.find((x) => x.exit && (x.index === seg.index || x.index === seg.index - 1)) ?? null;
+    return this.sim.track.segments.find((x) => (x.exit || x.fork) && (x.index === seg.index || x.index === seg.index - 1)) ?? null;
+  }
+
+  /** A fork was taken: every segment view from `from` on is stale (the road there was rebuilt). */
+  rebuildFrom(from: number) {
+    this.rebuild([...this.segViews.keys()].filter((i) => i >= from));
   }
 
   /** Rebuild segment views (the exit opens on segments already built ahead). */
@@ -657,12 +669,12 @@ export class HighwayView {
         chev.scale.set(2.4, 1, 0.35);
         group.add(chev);
       }
-      this.signGantry(seg, seg.s0 + 4, group);
+      this.signGantry(seg, seg.s0 + 4, group, ex.fork?.name);
     }
   }
 
   /** Green overhead sign over the rightmost lane: "SIGN-OFF / EXIT 6". */
-  private signGantry(seg: Segment, s: number, group: THREE.Group) {
+  private signGantry(seg: Segment, s: number, group: THREE.Group, fork?: string) {
     const track = this.sim.track;
     const w = track.widthAt(s);
     const h = track.headingAt(s);
@@ -679,7 +691,7 @@ export class HighwayView {
     arm.rotation.y = -h;
     // Fades like an overpass while he runs under it.
     const green = new THREE.MeshToonMaterial({ color: 0x1e6b3a, gradientMap: toonRamp(), transparent: true });
-    const face = new THREE.MeshBasicMaterial({ map: signTexture(), transparent: true });
+    const face = new THREE.MeshBasicMaterial({ map: signTexture(fork), transparent: true });
     this.overpasses.push({ s, mat: green }, { s, mat: face as unknown as THREE.MeshToonMaterial });
     const board = new THREE.Mesh(this.box, [green, face, green, green, green, green]);
     board.scale.set(0.2, 2.6, 3.8);

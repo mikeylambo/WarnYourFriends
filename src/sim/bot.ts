@@ -60,10 +60,16 @@ export class Bot {
     // A police chopper has him: two lane changes in a row shake it.
     const spotted = units.some((u) => u.unit === 'chopper' && u.phase === 'act');
     const ex = sim.exit;
-    const exitLane = ex && ex.gore - g.s < 230 && ex.gore > g.s ? track.lanesAt(ex.gore) - 1 : -1;
+    // Forks: take about half of them (deterministic per seed and fork), so the soak exercises both roads.
+    const fk = sim.fork;
+    const forkLane = fk && fk.gore - g.s < 230 && fk.gore > g.s && (fk.segment + sim.seed) % 2 === 0 ? track.lanesAt(fk.gore) - 1 : -1;
+    const exitLane = ex && ex.gore - g.s < 230 && ex.gore > g.s ? track.lanesAt(ex.gore) - 1 : forkLane;
+    const exitGore = exitLane < 0 ? -1 : ex && ex.gore > g.s ? ex.gore : fk ? fk.gore : -1;
     const score = (lane: number): number => {
       if (!track.laneUsable(lane, g.s) || !track.laneUsable(lane, g.s + 6)) return -Infinity;
-      if (!sim.laneClear(lane, s0, s1)) return -100;
+      // The exit lane leaves the road at the gore: judge it only up to there (a merge past the gore is not his problem).
+      const end = lane === exitLane && exitGore > g.s ? Math.min(s1, exitGore + 1) : s1;
+      if (!sim.laneClear(lane, s0, end)) return -100;
       if (threatened(lane)) return -60;
       let sc = exitLane >= 0 ? -6 * Math.abs(lane - exitLane) : 0;
       // Prefer lanes with things to smash once we can.

@@ -80,6 +80,10 @@ export class Sim {
   readonly ability: AbilityId | null;
   /** Phase 2: the sign-off exit ramp, once open (v0.3 §4). */
   exit: { s: number; gore: number; segment: number; lane: number } | null = null;
+  /** A fork's exit ramp, once open (Mike, 2026-11-15). */
+  fork: { gore: number; segment: number; zone: 'avenue'; name: string } | null = null;
+  /** Forks opened so far this segment (indexes TUNING.forks.at). */
+  private forksOpened = 0;
   tick = 0;
   time = 0;
   stats: SimStats = { timeAtTier: [0, 0, 0], smashes: 0, smashesAcross: 0, bounces: 0, wallBumps: 0, laneChanges: 0, tierUps: 0, tierDowns: 0, footfalls: 0, merges: 0, minSpeed: Infinity };
@@ -195,6 +199,7 @@ export class Sim {
     if (seg.index !== segBefore && seg.kind === 'merge') this.emit({ type: 'merge', from: seg.lanes0, to: seg.lanes1, s: seg.s0 });
     if (seg.index !== segBefore && seg.zoneStart) this.emit({ type: 'zone', zone: seg.zone, name: seg.zoneName });
     this.pursuit.step(dt);
+    this.stepFork();
     this.stepExit();
     const outnumbered = this.pursuit.chasing >= TUNING.show.outnumberedAt;
     for (const a of this.asks.step(dt, this.giant.tier === TUNING.tiers.length - 1, this.events)) this.show.banked += a.reward;
@@ -312,12 +317,68 @@ export class Sim {
     return blocked(g.lane - 1) && blocked(g.lane + 1);
   }
 
+  /** Forks: open on schedule on a highway; at the gore, the rightmost lane takes the exit. */
+  private stepFork() {
+    const F = TUNING.forks;
+    const g = this.giant;
+    const now = this.time + this.dt;
+    if (!this.fork && this.forksOpened < F.at.length && now >= F.at[this.forksOpened] && now < F.lastAt && !this.exit) this.openFork();
+    if (!this.fork || g.s < this.fork.gore) return;
+    const f = this.fork;
+    this.fork = null;
+    const lanes = this.track.lanesAt(f.gore);
+    if (g.lane !== lanes - 1 || g.move === 'wallBump') {
+      this.emit({ type: 'fork', taken: false, zone: f.zone, name: f.name, from: -1, shaken: 0 });
+      return;
+    }
+    // Taken: the road from here on becomes the avenue, from the segment under him.
+    const from = this.track.segmentAt(g.s).index;
+    this.track.branch(from, f.zone, f.name, g.s + F.propsAfter);
+    this.track.ensure(g.s + TUNING.track.aheadDistance);
+    const lane = Math.min(g.lane, this.track.lanesAt(g.s) - 1);
+    g.lane = g.prevLane = g.moveFromLane = lane;
+    g.d = g.moveToD = g.moveFromD = this.track.laneCenter(lane);
+    g.move = null;
+    g.moveT = 1;
+    g.laneQueue = 0;
+    // The police can't follow him off the highway: every unit goes, and each one that engaged is shaken.
+    const shaken = this.pursuit.loseAll();
+    this.emit({ type: 'fork', taken: true, zone: f.zone, name: f.name, from, shaken });
+    this.emit({ type: 'zone', zone: f.zone, name: f.name });
+  }
+
+  private openFork() {
+    const F = TUNING.forks;
+    const g = this.giant;
+    const X = TUNING.segment;
+    if (this.track.segmentAt(g.s).zone !== 'highway') return; // try again on the next highway stretch
+    const want = clamp(g.speed * 12, F.distance[0], F.distance[1]);
+    this.track.ensure(g.s + F.distance[1] + 80);
+    const seg = this.track.segments.find((sg) => sg.s0 >= g.s + want && sg.s0 <= g.s + F.distance[1] && this.track.forkEligible(sg));
+    if (!seg) return;
+    // Never near the sign-off: the exit opens at 130s, roughly this far on.
+    const toExit = (X.exitOpensAt - this.time) * g.speed;
+    if (toExit < F.clearOfExit + F.distance[1]) {
+      this.forksOpened = F.at.length;
+      return;
+    }
+    this.forksOpened++;
+    const name = this.track.forkName('avenue');
+    seg.fork = { zone: 'avenue', name };
+    const gore = seg.s0 + X.goreAt;
+    const lane = this.track.lanesAt(gore) - 1;
+    const c = this.track.laneCenter(lane);
+    for (const p of this.track.propsBetween(gore - X.exitClear, gore + 6)) if (Math.abs(p.d - c) < p.hw + 1.2) p.alive = false;
+    this.fork = { gore, segment: seg.index, zone: 'avenue', name };
+    this.emit({ type: 'forkOpen', s: gore, segment: seg.index, zone: 'avenue', name });
+  }
+
   /** v0.3 §4: the exit ramp opens at 130s; be in the rightmost lane at the gore to sign off. */
   private stepExit() {
     const X = TUNING.segment;
     const g = this.giant;
     const now = this.time + this.dt;
-    if (!this.exit && now >= X.exitOpensAt && now < X.length + X.grace) this.openExit();
+    if (!this.exit && !this.fork && now >= X.exitOpensAt && now < X.length + X.grace) this.openExit();
     if (this.exit && g.s >= this.exit.gore) {
       const lanes = this.track.lanesAt(this.exit.gore);
       if (g.lane === lanes - 1 && g.move !== 'wallBump') {

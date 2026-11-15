@@ -28,6 +28,8 @@ export interface Segment {
   lanes1: number;
   /** Phase 2: the sign-off exit ramp leaves from this segment's right edge. */
   exit?: boolean;
+  /** A fork (Mike, 2026-11-15): an exit ramp to this road leaves from this segment's right edge. */
+  fork?: { zone: ZoneKind; name: string };
   /** Phase 2 road variety: which stretch of road this is, and its (invented) name. */
   zone: ZoneKind;
   zoneName: string;
@@ -84,6 +86,8 @@ export class Track {
   private nextZone: ZoneKind | null = null;
   private zoneTarget: number = TUNING.lanes.start;
   private zoneJustStarted = true;
+  /** After a branch, the next segment starts at this many lanes outright (no merge taper). */
+  private forceLanes: number | null = null;
   private nextRowS: number;
   private propId = 0;
   private readonly rng: Rng;
@@ -124,7 +128,8 @@ export class Track {
     const index = prev ? prev.index + 1 : 0;
     const s0 = prev ? prev.s0 + prev.length : 0;
     const h0 = prev ? prev.h1 : -Math.PI / 2; // start heading north (screen-up)
-    const lanes0 = prev ? prev.lanes1 : L.start;
+    const lanes0 = this.forceLanes ?? (prev ? prev.lanes1 : L.start);
+    this.forceLanes = null;
     const x0 = prev ? prev.xs[prev.xs.length - 1] : -(L.start * L.width) / 2; // road centred on x=0 at start
     const z0 = prev ? prev.zs[prev.zs.length - 1] : 0;
     const rng = this.rng;
@@ -197,10 +202,42 @@ export class Track {
     return -TUNING.lanes.width / 2 + 16 * u * u;
   }
 
-  /** Can the sign-off ramp leave from this segment? (Not a merge; not into or out of a tunnel.) */
+  /** Can the sign-off ramp leave from this segment? (Not a merge; not into or out of a tunnel; not a fork.) */
   exitEligible(seg: Segment): boolean {
     const next = this.segments.find((x) => x.index === seg.index + 1);
-    return seg.kind !== 'merge' && seg.lanes0 === seg.lanes1 && seg.zone !== 'tunnel' && (!next || next.zone !== 'tunnel');
+    return seg.kind !== 'merge' && seg.lanes0 === seg.lanes1 && seg.zone !== 'tunnel' && (!next || next.zone !== 'tunnel') && !seg.fork && !next?.fork;
+  }
+
+  /** Can a fork leave from this segment? Highway, no merge here or next, and the next segment is highway too. */
+  forkEligible(seg: Segment): boolean {
+    const next = this.segments.find((x) => x.index === seg.index + 1);
+    return seg.zone === 'highway' && !!next && next.zone === 'highway' && seg.kind !== 'merge' && next.kind !== 'merge' && seg.lanes0 === seg.lanes1 && !seg.exit && !next.exit;
+  }
+
+  /** A name for a road a fork leads to (seeded, from the zone name bank). */
+  forkName(zone: ZoneKind): string {
+    return this.nameFor(zone);
+  }
+
+  /**
+   * Take a fork: the road from segment `fromIndex` on is regenerated as `zone` (from the same start
+   * point, so the join is continuous), at that zone's lane count outright. Its props start `propsFrom`.
+   * The caller hides the join behind a broadcast cut and moves everything on the old road.
+   */
+  branch(fromIndex: number, zone: ZoneKind, name: string, propsFrom: number) {
+    const keep = this.segments.findIndex((x) => x.index === fromIndex);
+    if (keep < 0) return;
+    this.segments.length = keep;
+    for (let i = this.props.length - 1; i >= 0; i--) if (this.props[i].segment >= fromIndex) this.props.splice(i, 1);
+    const Z = TUNING.zones;
+    this.zone = zone;
+    this.zoneName = name;
+    this.nextZone = null;
+    this.zoneLeft = this.rng.int(Z.length[zone][0], Z.length[zone][1]);
+    this.zoneTarget = Z.lanes[zone];
+    this.zoneJustStarted = true;
+    this.forceLanes = Z.lanes[zone];
+    this.nextRowS = propsFrom;
   }
 
   private pickZone(options: ZoneKind[]): ZoneKind {
