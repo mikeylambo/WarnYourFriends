@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import { clone as cloneSkinned } from 'three/examples/jsm/utils/SkeletonUtils.js';
 import type { GaitFrame, Vec3 } from '../anim/gait';
 import { TUNING } from '../tuning';
 import { PALETTE } from './palette';
@@ -14,8 +15,26 @@ import runClips from '../assets/giant/runs.json';
  * crossfaded on tier changes and time-locked to the stride. Feet: while the gait has a foot
  * planted, that leg blends into IK onto the gait's plant spot, so nothing slides; in swing the
  * clip's foot arc leads. The Pose, the Shoulder Check and Leap take the arms back to the
- * procedural pose. Until (or unless) it loads, the greybox shows.
+ * procedural pose. The greybox rig is never drawn (Mike, 2026-11-15): its groups are only the
+ * pose the model follows. The file is fetched and parsed once per page (`preloadGiant`); every
+ * broadcast's GiantView builds from a clone of it, so the giant is there from the first frame.
  */
+
+/** The pristine parsed model, shared by every broadcast (each builds from its own clone). */
+const cache = new Map<string, Promise<THREE.Object3D>>();
+
+/** Fetch and parse the giant once; later calls reuse it. */
+export function preloadGiant(url: string): Promise<THREE.Object3D> {
+  let p = cache.get(url);
+  if (!p) {
+    p = new Promise((resolve, reject) => new GLTFLoader().load(url, (gltf) => resolve(gltf.scene), undefined, reject));
+    cache.set(url, p);
+  }
+  return p;
+}
+
+/** The parsed model, if it has already loaded (so a new broadcast can build it synchronously). */
+const ready = new Map<string, THREE.Object3D>();
 
 /** What the greybox pose gives this frame (world space). */
 export interface GreyboxPose {
@@ -78,19 +97,23 @@ export class GiantModel {
   private p = [new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3()];
 
   load(url: string, onReady: () => void) {
-    new GLTFLoader().load(
-      url,
-      (gltf) => {
-        try {
-          this.build(gltf.scene);
-          this.loaded = true;
-          onReady();
-        } catch (e) {
-          console.warn('Giant model rejected, keeping the greybox:', e);
-        }
+    const make = (src: THREE.Object3D) => {
+      try {
+        this.build(cloneSkinned(src));
+        this.loaded = true;
+        onReady();
+      } catch (e) {
+        console.warn('Giant model rejected:', e);
+      }
+    };
+    const have = ready.get(url);
+    if (have) return make(have);
+    preloadGiant(url).then(
+      (src) => {
+        ready.set(url, src);
+        make(src);
       },
-      undefined,
-      (e) => console.warn('Giant model failed to load, keeping the greybox:', e),
+      (e) => console.warn('Giant model failed to load:', e),
     );
   }
 

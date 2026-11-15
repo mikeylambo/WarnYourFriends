@@ -99,9 +99,9 @@ export class GiantView {
   private cape: THREE.Mesh;
   private capePts: THREE.Vector3[] = [];
   private capeGeo: THREE.BufferGeometry;
-  /** The Meshy giant, skinned over this rig once it loads (the greybox until then). */
+  /** The Meshy giant, skinned over this (never drawn) greybox rig. */
   readonly model = new GiantModel();
-  /** Resolves true when the Meshy model is showing, false if it failed (greybox stays). */
+  /** Resolves true when the Meshy model is showing (false without a window, or if it failed). */
   readonly ready: Promise<boolean>;
   private capeAngle = 0;
   private capePhase = 0;
@@ -240,11 +240,14 @@ export class GiantView {
 
     let done: (ok: boolean) => void = () => {};
     this.ready = new Promise((r) => (done = r));
-    if (typeof window === 'undefined' || new URLSearchParams(window.location.search).get('greybox') === '1') done(false);
+    if (typeof window === 'undefined') done(false);
     else {
+      // The greybox is never drawn (Mike, 2026-11-15): its groups are only the pose rig the model
+      // follows. The cape waits for the model too, so nothing shows half-built.
+      for (const o of [this.root, this.legs, ...this.braid]) o.traverse((m) => (m as THREE.Mesh).isMesh && (m.visible = false));
+      this.cape.visible = false;
       this.model.load(giantUrl, () => {
-        // The greybox's meshes hide; its groups stay as the pose rig the model follows.
-        for (const o of [this.root, this.legs, ...this.braid]) o.traverse((m) => (m as THREE.Mesh).isMesh && (m.visible = false));
+        this.cape.visible = true;
         done(true);
       });
       setTimeout(() => done(this.model.loaded), 20000);
