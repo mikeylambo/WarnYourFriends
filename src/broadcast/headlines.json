@@ -184,6 +184,10 @@
       [
         "Loses",
         "Highway Loses A Lane, Giant Loses Nothing"
+      ],
+      [
+        "Squeezes",
+        "Road Squeezes To {lanes} Lanes; Giant Unbothered"
       ]
     ],
     "widens": [
@@ -198,6 +202,10 @@
       [
         "Opens",
         "Extra Lane Opens Up"
+      ],
+      [
+        "Gives",
+        "Road Gives Him {lanes} Lanes To Work With"
       ]
     ],
     "escort": [

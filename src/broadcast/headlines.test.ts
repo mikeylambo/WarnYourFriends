@@ -13,6 +13,7 @@ function run(seed: number, seconds: number, upgrades: UpgradeId[] = [], segment 
   const log = new Set<SimEvent>();
   const out: { h: Headline; ctx: NewsContext }[] = [];
   const tiers: { t: number; tier: number }[] = [];
+  const zones: { t: number; zone: string }[] = [];
   for (let i = 0; i < seconds * 60 && sim.live; i++) {
     for (const p of sim.track.props) kinds.set(p.id, p.kind);
     const braking = i % 900 > 700 && i % 900 < 760;
@@ -22,12 +23,14 @@ function run(seed: number, seconds: number, upgrades: UpgradeId[] = [], segment 
       news.observe(e, sim.time);
     }
     const g = sim.giant;
-    const ctx: NewsContext = { time: sim.time, tier: g.tier, lane: g.lane, lanes: sim.track.lanesAt(g.s), heading: sim.track.headingAt(g.s), s: g.s, ratingsTier: sim.show.tier, heat: sim.show.heat };
+    const seg = sim.track.segmentAt(g.s);
+    const ctx: NewsContext = { time: sim.time, tier: g.tier, lane: g.lane, lanes: sim.track.lanesAt(g.s), heading: sim.track.headingAt(g.s), s: g.s, ratingsTier: sim.show.tier, heat: sim.show.heat, zone: seg.zone, zoneName: seg.zoneName };
+    zones.push({ t: sim.time, zone: seg.zone });
     tiers.push({ t: sim.time, tier: sim.show.tier });
     const h = news.update(ctx, (id) => kinds.get(id));
     if (h) out.push({ h, ctx });
   }
-  return { out, log, tiers };
+  return { out, log, tiers, zones };
 }
 
 describe('headlines (§21)', () => {
@@ -56,15 +59,18 @@ describe('headlines (§21)', () => {
         const prev = out.slice(Math.max(0, i - TUNING.broadcast.antiRepeat), i).map((x) => x.h);
         if (h.verb) expect(prev.map((p) => p.verb)).not.toContain(h.verb);
         if (h.place) expect(prev.map((p) => p.place)).not.toContain(h.place);
-        // Never lies: sources happened; counts are exact; places are true now.
+        // Never lies: sources happened; counts are exact; places are true where it happened.
         if (!/Spotted/.test(h.text)) expect(h.sources.length).toBeGreaterThan(0);
         for (const e of h.sources) expect(log.has(e)).toBe(true);
         const n = h.text.match(/ (\d+) [A-Z][a-z]+s\b/);
         if (n && !/Lanes/.test(h.text)) expect(h.sources.length).toBe(Number(n[1]));
+        // Places are facts about where it happened (the headline carries that moment's context).
+        const at = h.at ?? ctx;
         const lane = h.place?.match(/^In Lane (\d)$/);
-        if (lane) expect(ctx.lane + 1).toBe(Number(lane[1]));
-        if (h.place === 'In The Fast Lane') expect(ctx.lane).toBe(0);
-        if (h.place?.endsWith('bound')) expect(h.place).toBe(`${compass(ctx.heading)}bound`);
+        if (lane) expect(at.lane + 1).toBe(Number(lane[1]));
+        if (h.place === 'In The Fast Lane') expect(at.lane).toBe(0);
+        if (h.place?.endsWith('bound')) expect(h.place).toBe(`${compass(at.heading)}bound`);
+        if (h.place === 'On Highway' || h.place === 'On The Interstate') expect(at.zone ?? 'highway').toBe('highway');
         if (h.breaking) expect(['ratings', 'exitOpen', 'busted', 'signOff']).toContain(h.sources[0].type);
       });
       // §21: a Ratings tier rise breaks in on the same tick.
@@ -83,4 +89,22 @@ describe('headlines (§21)', () => {
       expect(out.filter(({ h }) => h.text === 'Giant At Large. Warn Your Friends.').length).toBe(tiers.some((x) => x.tier >= 1) ? 1 : 0);
     });
   }
+
+  it('never puts him on a highway when he was somewhere else (place words follow the zone he was in)', () => {
+    const road = /\b(interstate|highway|freeway|expressway)\b/i;
+    let checked = 0;
+    for (const seed of [1, 2, 3, 4, 5, 6, 7, 8]) {
+      const { out, zones } = run(seed, 150);
+      for (const { h } of out) {
+        // Zone names ("On Ninth Expressway") are facts about the zone itself; strip the place they came from.
+        const text = h.place && /^(On|In) /.test(h.place) && !['On Highway', 'On The Interstate'].includes(h.place) ? h.text.replace(h.place, '') : h.text;
+        if (!road.test(text) || h.kicker === 'BUSTED' || h.kicker === 'SIGN-OFF') continue;
+        checked++;
+        // The event is at most 6s old: he must have been on a highway then.
+        const window = zones.filter((z) => z.t <= h.t && z.t >= h.t - 6.1);
+        expect(window.some((z) => z.zone === 'highway'), `"${h.text}" at ${h.t.toFixed(1)}s, zones ${[...new Set(window.map((z) => z.zone))].join('/')}`).toBe(true);
+      }
+    }
+    expect(checked).toBeGreaterThan(0);
+  });
 });

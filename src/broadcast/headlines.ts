@@ -14,6 +14,10 @@ import BANK from './headlines.json';
  */
 
 /** Facts about the giant right now, for places and subjects. */
+/** Words that put him on a highway: only true there. */
+const HIGHWAY_WORDS = /\b(interstate|highway|freeway|expressway)\b/i;
+const onHighway = (zone: NewsContext['zone']) => zone === undefined || zone === 'highway';
+
 export interface NewsContext {
   time: number;
   tier: number;
@@ -41,10 +45,13 @@ export interface Headline {
   place: string | null;
   /** Events this headline reports (for the "chyron never lies" check). */
   sources: SimEvent[];
+  /** Where he was when it happened: the place is a fact about this, not about publish time. */
+  at?: NewsContext;
 }
 
 type Kind = 'zone' | 'spotted' | 'ratingsTier' | 'tierUp' | 'tierDown' | 'smash' | 'bounce' | 'wall' | 'merge' | 'escort' | 'ramHit' | 'ramMiss' | 'lostTrack' | 'spiked' | 'heat' | 'tell' | 'exitOpen' | 'end' | 'leap' | 'stare' | 'hijack' | 'pose' | 'spotlight' | 'chopperLost' | 'policeCrash' | 'policeSmash';
-type Item = { kind: Kind; t: number; prio: number; events: SimEvent[] };
+/** `at`: where he was when it happened (places come from here, not from publish time). */
+type Item = { kind: Kind; t: number; prio: number; events: SimEvent[]; at?: NewsContext };
 
 const PRIO: Partial<Record<Kind, number>> = { zone: 66, spotted: 95, ratingsTier: 100, end: 200, exitOpen: 90, tell: 75, ramHit: 65, ramMiss: 58, lostTrack: 57, spiked: 62, heat: 52, escort: 60, merge: 55, leap: 64, stare: 61, hijack: 68, pose: 72, spotlight: 63, chopperLost: 59, policeCrash: 70, policeSmash: 35, tierUp: 50, bounce: 45, tierDown: 40, wall: 10 };
 /** These break in immediately, ignoring the 4s cadence (§21: tier changes; and the end of the broadcast). */
@@ -83,7 +90,7 @@ export class Newsroom {
 
   /** Feed every sim event. */
   observe(e: SimEvent, time: number) {
-    const add = (kind: Kind) => this.queue.push({ kind, t: time, prio: PRIO[kind] ?? 0, events: [e] });
+    const add = (kind: Kind) => this.queue.push({ kind, t: time, prio: PRIO[kind] ?? 0, events: [e], at: this.lastCtx ?? undefined });
     switch (e.type) {
       case 'ratings':
         this.lastRatings = e;
@@ -95,7 +102,7 @@ export class Newsroom {
         this.nowSmashes.push({ t: time, e });
         const open = this.queue.find((q) => q.kind === 'smash' && time - q.t <= TUNING.broadcast.tallyWindow);
         if (open) open.events.push(e);
-        else this.queue.push({ kind: 'smash', t: time, prio: 0, events: [e] });
+        else this.queue.push({ kind: 'smash', t: time, prio: 0, events: [e], at: this.lastCtx ?? undefined });
         break;
       }
       case 'bounce': add('bounce'); break;
@@ -118,7 +125,7 @@ export class Newsroom {
         for (const q of this.queue) if (q.kind === 'smash') q.events = q.events.filter((x) => !mine.includes(x));
         this.queue = this.queue.filter((q) => q.kind !== 'smash' || q.events.length);
         this.leapSmashes.set(e, mine.map((x) => (x as Extract<SimEvent, { type: 'smash' }>).propId));
-        this.queue.push({ kind: 'leap', t: time, prio: PRIO.leap ?? 0, events: [e, ...mine] });
+        this.queue.push({ kind: 'leap', t: time, prio: PRIO.leap ?? 0, events: [e, ...mine], at: this.lastCtx ?? undefined });
         break;
       }
       case 'stare': if (e.moved.length || e.backedOff) add('stare'); break;
@@ -135,10 +142,16 @@ export class Newsroom {
     }
   }
 
+  /** Where he was on the last update (an event observed now happened here). */
+  private lastCtx: NewsContext | null = null;
+  /** The zone the headline being composed is placed in (highway words only on highways). */
+  private placeZone: NewsContext['zone'] = undefined;
+
   /** Publish a headline if one is due; returns it, else null. */
   update(ctx: NewsContext, propKind: (id: number) => PropKind | undefined): Headline | null {
     const B = TUNING.broadcast;
     const now = ctx.time;
+    this.lastCtx = ctx;
     if (!this.spottedDone && now >= B.openAt) {
       this.spottedDone = true;
       this.queue.push({ kind: 'spotted', t: now, prio: PRIO.spotted ?? 0, events: [] });
@@ -187,14 +200,15 @@ export class Newsroom {
   /** A [verb, template] line whose verb wasn't used in the last 5 headlines. */
   private freshLine(lines: string[][]): string[] | null {
     const used = new Set(this.recent().map((h) => h.verb));
-    const ok = lines.filter((l) => !used.has(l[0]));
+    // A line that names the road type ("Tears Up The Interstate") is only true on a highway.
+    const ok = lines.filter((l) => !used.has(l[0]) && (onHighway(this.placeZone) || !HIGHWAY_WORDS.test(l[1])));
     return ok.length ? this.rng.pick(ok) : null;
   }
 
   /** True places for the giant right now, minus any used in the last 5 headlines. */
   private freshPlace(ctx: NewsContext): string | null {
     const P = BANK.places;
-    const all = [...P.road, P.bound.replace('{dir}', compass(ctx.heading)), P.lane.replace('{n}', String(ctx.lane + 1)), P.mile.replace('{m}', (ctx.s / 1609.344).toFixed(1))];
+    const all = [...(onHighway(ctx.zone) ? P.road : []), P.bound.replace('{dir}', compass(ctx.heading)), P.lane.replace('{n}', String(ctx.lane + 1)), P.mile.replace('{m}', (ctx.s / 1609.344).toFixed(1))];
     if (ctx.zone && ctx.zoneName) all.push(P.zone[ctx.zone].replace('{name}', ctx.zoneName));
     if (ctx.lanes > 1 && ctx.lane === 0) all.push(P.fast);
     if (ctx.lanes > 1 && ctx.lane === ctx.lanes - 1) all.push(P.slow);
@@ -215,11 +229,14 @@ export class Newsroom {
       .trim();
   }
 
-  private compose(q: Item, ctx: NewsContext, propKind: (id: number) => PropKind | undefined): Headline | null {
+  private compose(q: Item, now: NewsContext, propKind: (id: number) => PropKind | undefined): Headline | null {
+    // Facts about place come from where he was when it happened; the kicker and the time are now.
+    const ctx: NewsContext = q.at ? { ...q.at, time: now.time, ratingsTier: now.ratingsTier, heat: now.heat } : now;
+    this.placeZone = ctx.zone;
     const L = BANK.lines;
     const V = BANK.verbs;
     const kicker = BANK.kicker[Math.min(ctx.ratingsTier, BANK.kicker.length - 1)];
-    const mk = (text: string, verb: string | null, place: string | null, breaking = false): Headline => ({ t: ctx.time, kicker: breaking ? 'BREAKING' : kicker, text, breaking, verb, place, sources: q.events });
+    const mk = (text: string, verb: string | null, place: string | null, breaking = false): Headline => ({ t: ctx.time, kicker: breaking ? 'BREAKING' : kicker, text, breaking, verb, place, sources: q.events, at: ctx });
     switch (q.kind) {
       case 'spotted': {
         const place = this.freshPlace(ctx);
