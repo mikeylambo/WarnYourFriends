@@ -488,3 +488,23 @@ html.replay::after { bottom: 0; }
 html.replay #hud #chyron { bottom: calc(7vh + 10px); }
 html.replay #replay { top: calc(7vh + 12px); }
 html.replay #chyron:has(.text.empty) { visibility: hidden; }
+
+/* --- Spectacle combo counter (left, under the score it feeds; clear of the desk and viewer-video windows on the right) --------------------------- */
+#chain { position: absolute; left: 12px; top: calc(146px + env(safe-area-inset-top)); display: grid; grid-template-columns: auto auto; grid-template-areas: 'mult pts' 'mult stunt' 'mult cnt' 'clock clock' 'result result'; justify-items: start; align-items: center; column-gap: 10px; color: var(--wyf-cream); font: italic 900 12px/1.1 ui-sans-serif, system-ui, sans-serif; letter-spacing: 0.08em; opacity: 0; transform: translateX(-14px); transition: opacity 0.15s, transform 0.2s cubic-bezier(.2,.8,.2,1); pointer-events: none; text-shadow: 0 1px 3px rgba(0, 0, 0, 0.6); }
+#chain.on, #chain.banked, #chain.dropped { opacity: 1; transform: none; }
+#chain .mult { grid-area: mult; background: var(--wyf-red); color: var(--wyf-cream); font-size: 34px; padding: 6px 16px 4px 18px; clip-path: polygon(10px 0, 100% 0, calc(100% - 10px) 100%, 0 100%); text-shadow: none; }
+#chain[data-mult='1'] .mult { background: rgba(30, 24, 33, 0.85); }
+#chain .pts { grid-area: pts; font-size: 20px; font-variant-numeric: tabular-nums; }
+#chain .stunt { grid-area: stunt; font-size: 11px; letter-spacing: 0.14em; color: #f2cc8f; }
+#chain .cnt { grid-area: cnt; font-size: 10px; letter-spacing: 0.12em; opacity: 0.75; font-style: normal; font-weight: 700; }
+#chain .clock { grid-area: clock; justify-self: stretch; height: 4px; margin-top: 5px; background: rgba(236, 224, 200, 0.18); }
+#chain .clock i { display: block; height: 100%; background: var(--wyf-cream); transform-origin: left; }
+#chain .result { grid-area: result; margin-top: 4px; font-size: 18px; }
+#chain.banked .result { color: #f2cc8f; }
+#chain.dropped .result { color: #ff6b6b; }
+#chain.banked .clock, #chain.dropped .clock { visibility: hidden; }
+#chain.up .mult { animation: chainpop 0.28s cubic-bezier(.2,.9,.3,1.4); }
+@keyframes chainpop { 0% { transform: scale(1.35); } 100% { transform: none; } }
+#chain.dropped { animation: chaindrop 0.35s steps(4) 1; }
+@keyframes chaindrop { 25% { transform: translateX(-4px); } 75% { transform: translateX(4px); } }
+#chain[hidden] { display: none; }

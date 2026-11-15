@@ -44,6 +44,16 @@ const flashEl = $('flash');
 const debugEl = $('debug');
 const tierbar = $('tierbar');
 const gearsEl = $('gears');
+const chainEl = $('chain');
+const chainMult = chainEl.querySelector('.mult') as HTMLElement;
+const chainStunt = chainEl.querySelector('.stunt') as HTMLElement;
+const chainPts = chainEl.querySelector('.pts') as HTMLElement;
+const chainCnt = chainEl.querySelector('.cnt') as HTMLElement;
+const chainClock = chainEl.querySelector('.clock i') as HTMLElement;
+const chainResult = chainEl.querySelector('.result') as HTMLElement;
+/** Spectacle stunt names on the combo counter (what just counted, so the player learns the menu). */
+const STUNT_LABEL: Record<string, string> = { medium: 'SMASH', heavy: 'HEAVY SMASH', unit: 'POLICE CAR', policeCrash: 'POLICE CRASH', collateral: 'COLLATERAL', nearMiss: 'NEAR MISS', ramDodge: 'DODGED', lostTrack: 'SHOOK ONE', chopperShaken: 'LOST THE CHOPPER', leapLand: 'LANDING', hijackBail: 'BAIL OUT', pose: 'POSE' };
+let chainResultT = 0;
 const gearPips = [...gearsEl.querySelectorAll('i')] as HTMLElement[];
 const gearName = gearsEl.querySelector('.nm') as HTMLElement;
 const gearTag = $('geartag');
@@ -129,7 +139,7 @@ const recapEl = $('recap');
 const coverage = new Coverage();
 const pip = new ViewerVideo($('pip'));
 /** Run stats for the recap, counted from sim events. */
-const runStats = { heavy: 0, units: 0, crashes: 0, lost: 0, dodged: 0, nearMiss: 0, best: null as Headline | null, bestRatings: -1 };
+const runStats = { heavy: 0, units: 0, crashes: 0, bestChain: 0, lost: 0, dodged: 0, nearMiss: 0, best: null as Headline | null, bestRatings: -1 };
 let news: Newsroom;
 /** Prop kinds by id, recorded when a smash/bounce happens (the prop may be pruned before the headline). */
 const propKinds = new Map<number, PropKind>();
@@ -209,7 +219,7 @@ function newRun(seed: number, segment = 0, upgrades: UpgradeId[] = []) {
   hideRecap();
   coverage.reset();
   pip.reset();
-  Object.assign(runStats, { heavy: 0, units: 0, crashes: 0, lost: 0, dodged: 0, nearMiss: 0, best: null, bestRatings: -1 });
+  Object.assign(runStats, { heavy: 0, units: 0, crashes: 0, bestChain: 0, lost: 0, dodged: 0, nearMiss: 0, best: null, bestRatings: -1 });
   $('coldts').textContent = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
   sim = new Sim({ seed, segment, upgrades });
   simOpts = { seed, segment, upgrades: [...upgrades] };
@@ -412,7 +422,7 @@ function showMeeting() {
   recapEl.innerHTML = `<div class="card meeting">
     <div class="kicker">PRODUCER'S MEETING · BEFORE SEGMENT ${r.segment + 2} OF ${TUNING.run.segments}</div>
     <div class="purse">Budget <b>${r.purse.toLocaleString()}</b></div>
-    <p class="how">Viewers × gear, banked every second, pays for these. Spending never lowers your score.</p>
+    <p class="how">Your stunts pay for these. Spending never lowers your score.</p>
     <div class="pitches">${offers
       .map((id) => {
         const u = TUNING.upgrades[id];
@@ -454,7 +464,7 @@ function showRecap() {
   const segLabel = run ? ` · SEGMENT ${run.segment + 1} OF ${N}` : '';
   const runStatsHtml = run && run.phase !== 'meeting'
     ? `<span>Run score <b>${Math.round(run.earned).toLocaleString()}</b></span><span>Segments cleared <b>${run.results.filter((x) => x.cleared).length} / ${N}</b></span>`
-    : run ? `<span>Added to budget <b>+${Math.round(sh.banked).toLocaleString()}</b></span><span>Budget <b>${run.purse.toLocaleString()}</b></span><span class="how">Viewers × gear, banked every second. Spend it at the meeting.</span>` : '';
+    : run ? `<span>Added to budget <b>+${Math.round(sh.banked).toLocaleString()}</b></span><span>Budget <b>${run.purse.toLocaleString()}</b></span><span class="how">Spend it at the meeting.</span>` : '';
   const buttons = run?.phase === 'meeting'
     ? `<button class="go" id="meet">Producer's Meeting</button>`
     : run
@@ -466,7 +476,7 @@ function showRecap() {
     <span class="outcome ${cleared ? 'cleared' : ''}">${run?.phase === 'won' ? 'FULL BROADCAST · SIGNED OFF' : cleared ? 'SIGNED OFF' : reason === 'pin' ? 'BUSTED · BOXED IN' : reason === 'ratings' ? 'BUSTED · CUT TO COMMERCIAL' : 'BUSTED · MISSED THE EXIT'}</span>
     ${best ? `<div class="best"><small>TONIGHT'S TOP STORY</small>${esc(best.text)}</div>` : ''}
     <div class="stats">
-      <span>Peak audience <b>${viewers(sh.peak)}</b></span><span>Score banked <b>${Math.round(sh.banked).toLocaleString()}</b></span>
+      <span>Peak audience <b>${viewers(sh.peak)}</b></span><span>Score <b>${Math.round(sh.banked).toLocaleString()}</b></span><span>Longest chain <b>${runStats.bestChain}</b></span>
       <span>On air <b>${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}</b></span><span>Rampage time <b>${Math.round(sim.stats.timeAtTier[2])}s</b></span>
       <span>Things flattened <b>${sim.stats.smashes}</b></span><span>Police cars smashed <b>${runStats.units}</b></span><span>Police cars crashed <b>${runStats.crashes}</b></span>
       <span>Pursuers shaken <b>${runStats.lost}</b></span><span>Heat reached <b>${'★'.repeat(sh.heat)}</b></span>
@@ -517,6 +527,16 @@ function showHeadline(h: Headline) {
     void breakingEl.offsetWidth;
     breakingEl.classList.add('go');
   }
+}
+
+/** The stunt just before this chain event was a smash-across (for the counter's label). */
+function recentAcross(e: SimEvent): boolean {
+  const i = recentEvents.lastIndexOf(e);
+  for (let k = i - 1; k >= 0 && k >= i - 4; k--) {
+    const x = recentEvents[k];
+    if (x.type === 'smash') return x.across;
+  }
+  return false;
 }
 
 function present(e: SimEvent) {
@@ -707,6 +727,32 @@ function present(e: SimEvent) {
       rig.jolt(TUNING.impact.heavy.shake, TUNING.camera.joltTime);
       flash(TUNING.impact.heavy.flashFrames);
       haptic(120, 0.8);
+      break;
+    }
+    case 'chain': {
+      if (e.count === 1 || (chainEl.dataset.mult ?? '1') !== String(e.mult)) {
+        chainEl.classList.remove('up');
+        void chainEl.offsetWidth;
+        chainEl.classList.add('up');
+      }
+      chainEl.dataset.mult = String(e.mult);
+      chainEl.classList.add('on');
+      chainEl.classList.remove('banked', 'dropped');
+      chainMult.textContent = `×${e.mult}`;
+      chainStunt.textContent = STUNT_LABEL[e.cause] + ((e.cause === 'medium' || e.cause === 'heavy' || e.cause === 'unit') && recentAcross(e) ? ' · ACROSS' : '');
+      chainPts.textContent = Math.round(e.pending).toLocaleString();
+      chainCnt.textContent = e.count > 1 ? `${e.count} in a row` : '';
+      chainResult.textContent = '';
+      runStats.bestChain = Math.max(runStats.bestChain, e.count);
+      audio.chainTick(e.mult);
+      break;
+    }
+    case 'chainEnd': {
+      chainEl.classList.remove('up');
+      chainEl.classList.add(e.dropped ? 'dropped' : 'banked');
+      chainResult.textContent = e.dropped ? 'DROPPED' : `+${e.points.toLocaleString()}`;
+      chainResultT = 1.4;
+      if (e.count > 1 || !e.dropped) audio.chainEnd(e.mult, e.dropped);
       break;
     }
     case 'policeSmash': {
@@ -1456,13 +1502,20 @@ function updateHud(dt: number) {
   ratingsBar.style.width = `${sh.ratings.toFixed(1)}%`;
   for (let k = 1; k <= 3; k++) ratingsEl.classList.toggle(`t${k}`, sh.tier === k);
   ratingsEl.classList.toggle('danger', sh.ratings < 8 && sim.live);
-  // Full Broadcast: the budget ticks up live (what's banked so far plus this segment), with the gear's multiplier.
-  budgetEl.hidden = !run || attract;
-  if (run && !attract) {
+  // Score (Single Segment) or Budget (Full Broadcast: banked so far plus this segment), with the gear's multiplier.
+  budgetEl.hidden = attract;
+  if (!attract) {
+    budgetEl.querySelector('span')!.textContent = run ? 'Budget' : 'Score';
     // While live, this segment's banked score isn't in the purse yet; once it ends, it is.
-    budgetEl.querySelector('b')!.textContent = Math.floor(run.purse + (run.phase === 'live' ? sh.banked : 0)).toLocaleString();
+    budgetEl.querySelector('b')!.textContent = Math.floor((run ? run.purse : 0) + (!run || run.phase === 'live' ? sh.banked : 0)).toLocaleString();
     budgetEl.querySelector('i')!.textContent = `×${TUNING.show.bankMult[g.tier]}`;
   }
+  // Combo counter: the clock drains over the chain window; the result lingers after it ends.
+  const ch = sh.chain;
+  if (ch.count > 0) chainClock.style.transform = `scaleX(${Math.max(0, 1 - (sim.time - ch.last) / TUNING.spectacle.window).toFixed(3)})`;
+  chainResultT = Math.max(0, chainResultT - dt);
+  if (ch.count === 0 && chainResultT <= 0 && chainEl.classList.contains('on')) chainEl.className = '';
+  chainEl.hidden = attract;
   updateTips(dt);
   const falling = sim.live && sh.ratings < lastRatings - 1e-6;
   trendEl.textContent = falling ? '▼' : '';

@@ -5,7 +5,7 @@ import { Track } from './track';
 import { Escort } from './escort';
 import { Show } from './show';
 import { Pursuit } from './pursuit';
-import type { GainType, GiantState, Prop, SimEvent, SimInput, TierDropReason, Unit } from './types';
+import type { GainType, GiantState, Prop, SimEvent, SimInput, StuntType, TierDropReason, Unit } from './types';
 
 export const CLASS_RANK: Record<MassClass, number> = { light: 0, medium: 1, heavy: 2, immovable: 3 };
 
@@ -229,6 +229,11 @@ export class Sim {
     this.emit(e);
   }
 
+  /** Spectacle: a stunt joins the chain (score; Ratings are separate). */
+  private stunt(cause: StuntType, base?: number) {
+    this.show.stunt(cause, this.time, this.giant.tier, this.events, base);
+  }
+
   /** §12 gain, with "outnumbered" applied. */
   award(type: GainType) {
     this.show.gain(type, this.time, this.pursuit.chasing >= TUNING.show.outnumberedAt, this.events);
@@ -330,19 +335,38 @@ export class Sim {
     this.events.push(e);
     const st = this.stats;
     switch (e.type) {
-      case 'smash':
+      case 'smash': {
         st.smashes++;
         if (e.across) st.smashesAcross++;
         if (e.cls === 'medium' || e.cls === 'heavy') this.award(e.cls);
+        // Spectacle: a police car he flattened, else the class; smash-across pays a bonus.
+        const unit = e.propId >= 1_000_000;
+        const cause = unit ? 'unit' : e.cls === 'heavy' ? 'heavy' : e.cls === 'medium' ? 'medium' : null;
+        if (cause) this.stunt(cause, e.across ? TUNING.spectacle.points[cause] * TUNING.spectacle.acrossBonus : undefined);
         break;
-      case 'bounce': st.bounces++; break;
+      }
+      case 'bounce':
+        st.bounces++;
+        this.show.endChain(true, this.events);
+        break;
+      case 'spiked': this.show.endChain(true, this.events); break;
+      case 'ram':
+        if (e.hit) this.show.endChain(true, this.events);
+        else this.stunt('ramDodge');
+        break;
+      case 'nearMiss': this.stunt('nearMiss'); break;
+      case 'lostTrack': this.stunt(e.kind === 'chopper' ? 'chopperShaken' : 'lostTrack'); break;
+      case 'policeCrash': this.stunt('policeCrash'); break;
+      case 'policeSmash': this.stunt('collateral'); break;
+      case 'leapLand': if (e.smashed > 0) this.stunt('leapLand'); break;
+      case 'hijackBail': this.stunt('hijackBail'); break;
+      case 'pose': this.stunt('pose', TUNING.spectacle.points.posePerHeat * Math.max(1, e.heat + 1)); break;
       case 'wallBump': st.wallBumps++; break;
       case 'laneChange': st.laneChanges++; break;
       case 'tierUp': st.tierUps++; break;
       case 'tierDown': st.tierDowns++; break;
       case 'footfall': st.footfalls++; break;
       case 'merge': st.merges++; break;
-      case 'smash': break;
     }
   }
 

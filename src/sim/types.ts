@@ -126,6 +126,10 @@ export type SimEvent =
   | { type: 'exitOpen'; s: number; segment: number; lane: number }
   | { type: 'exitMissed'; s: number }
   | { type: 'signOff'; ratings: number; banked: number }
+  /** Spectacle chain (Mike's score): a stunt joined the chain. `add` is this stunt's points (before the chain multiplier). */
+  | { type: 'chain'; count: number; mult: number; pending: number; add: number; cause: StuntType }
+  /** The chain ended: banked `points` (pending × mult, or × 1 when `dropped`). */
+  | { type: 'chainEnd'; count: number; mult: number; points: number; dropped: boolean }
   | { type: 'busted'; reason: BustReason }
   /** Phase 3: an ability fired (ok) or the button was pressed with nothing to do (e.g. no car to hijack). */
   | { type: 'ability'; id: AbilityId; ok: boolean }
@@ -146,6 +150,8 @@ export type SimEvent =
 export type UnitKind = 'cruiser' | 'rolling' | 'roadblock' | 'spike' | 'chopper';
 /** §12 gain sources. */
 export type GainType = 'medium' | 'heavy' | 'nearMiss' | 'lostTrack' | 'rampage' | 'pose' | 'policeCrash' | 'collateral';
+/** Spectacle stunts (score, not Ratings). */
+export type StuntType = 'medium' | 'heavy' | 'unit' | 'policeCrash' | 'collateral' | 'nearMiss' | 'ramDodge' | 'lostTrack' | 'chopperShaken' | 'leapLand' | 'hijackBail' | 'pose';
 export type BustReason = 'ratings' | 'pin' | 'missed';
 export type ShowState = 'live' | 'cleared' | 'busted';
 

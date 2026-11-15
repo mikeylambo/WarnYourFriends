@@ -350,6 +350,23 @@ export const TUNING = {
     score: { policeCrash: 10, unitSmash: 7, leapLand: 4, hijackBail: 5, heavyAcross: 6, heavy: 4, nearMiss: 4, ramMiss: 4, pose: 3 },
   },
 
+  /**
+   * Spectacle score (Mike, 2026-11-15; replaces §12 "banked = Ratings × gear per second", which sat at the
+   * 100 cap ~2/3 of a broadcast so nothing great play did could add score). Ratings stay the life bar.
+   * Each stunt pays `points` × gear (`show.bankMult`) × audience (by Ratings tier), into the chain.
+   * A stunt within `window` s of the last extends the chain; its multiplier steps up every `stepEvery`
+   * stunts to `maxMult`. Chain times out → banks at its multiplier. Bounce, spikes or a ram that connects
+   * → it drops: the points bank at ×1, the multiplier is lost. Smash-across pays `acrossBonus`×.
+   */
+  spectacle: {
+    points: { medium: 100, heavy: 250, unit: 500, policeCrash: 750, collateral: 100, nearMiss: 200, ramDodge: 200, lostTrack: 250, chopperShaken: 300, leapLand: 150, hijackBail: 300, posePerHeat: 100 },
+    acrossBonus: 1.5,
+    audienceMult: [1, 1.25, 1.5, 2],
+    window: 2.5,
+    stepEvery: 2,
+    maxMult: 6,
+  },
+
   /** Footfall presentation (v0.3). */
   footfall: {
     /** 2px camera pulse on every plant. */
@@ -496,7 +513,7 @@ export const TUNING = {
     /** §12 outnumbered: 6+ pursuers chasing → ×1.25 all gains. */
     outnumberedAt: 6,
     outnumberedMult: 1.25,
-    /** §12 banking: each second banks Ratings × tier multiplier. */
+    /** Gear multiplier on spectacle points (was §12's per-second banking multiplier). */
     bankMult: [1, 1.5, 2],
     /** §12 Heat: rises at these Ratings, and +1 every 45s; never falls in a segment. */
     heatAt: [30, 50, 70, 90],
@@ -574,19 +591,19 @@ export const TUNING = {
 
   /**
    * §17 v1 upgrade pool (8). Abilities share the one ability slot (a new one replaces it);
-   * passives stack. Prices are paid from banked Ratings (the run score is what you earned,
-   * spending doesn't lower it). Working default: a cleared segment banks ~24k with the bot, so one
+   * passives stack. Prices are paid from banked spectacle points (the run score is what you earned,
+   * spending doesn't lower it). Working default (×7.5 when spectacle points replaced per-second banking, 2026-11-15): a cleared segment banks ~180k median with the bot (p10 120k, p90 245k), so one
    * segment affords the cheaper half; saving up for Leap/Hijack is a real choice.
    */
   upgrades: {
-    leap: { kind: 'ability', price: 26000, label: 'Leap', blurb: 'Hop lanes of trouble. The landing flattens what you land on.', pitch: 'Get a clean shot of him clearing the spike strip.' },
-    stare: { kind: 'ability', price: 21000, label: 'The Stare', blurb: 'Traffic and police ahead pull out of your lane.', pitch: 'Stay tight on the eyes. We have time.' },
-    hijack: { kind: 'ability', price: 30000, label: 'Hijack Hop', blurb: 'Ride a car through everything, then bail at Rampage.', pitch: 'Follow him across the car roofs. Keep it wide.' },
-    pose: { kind: 'ability', price: 21000, label: 'Pose for the Camera', blurb: 'Stop for the cameras. Heat becomes a Ratings spike.', pitch: 'Hold the close-up. He’s giving us a usable still.' },
-    ironShins: { kind: 'passive', price: 17000, label: 'Iron Shins', blurb: 'Medium objects never bounce you.', pitch: 'Keep rolling. The street furniture won’t slow him down.' },
-    secondWind: { kind: 'passive', price: 17000, label: 'Second Wind', blurb: 'The box-in meter drains 50% faster.', pitch: 'Stay with him. He’s slipping out of the box-in faster.' },
-    showman: { kind: 'passive', price: 22000, label: 'Showman', blurb: 'Something new on air pays double.', pitch: 'Double the variety bonus when he gives us something we haven’t aired.' },
-    tailwind: { kind: 'passive', price: 19000, label: 'Tailwind', blurb: 'Tier up 30% sooner.', pitch: 'Cue the wide shot. He’s hitting the next speed tier 30% sooner.' },
+    leap: { kind: 'ability', price: 195000, label: 'Leap', blurb: 'Hop lanes of trouble. The landing flattens what you land on.', pitch: 'Get a clean shot of him clearing the spike strip.' },
+    stare: { kind: 'ability', price: 160000, label: 'The Stare', blurb: 'Traffic and police ahead pull out of your lane.', pitch: 'Stay tight on the eyes. We have time.' },
+    hijack: { kind: 'ability', price: 225000, label: 'Hijack Hop', blurb: 'Ride a car through everything, then bail at Rampage.', pitch: 'Follow him across the car roofs. Keep it wide.' },
+    pose: { kind: 'ability', price: 160000, label: 'Pose for the Camera', blurb: 'Stop for the cameras. Heat becomes a Ratings spike.', pitch: 'Hold the close-up. He’s giving us a usable still.' },
+    ironShins: { kind: 'passive', price: 125000, label: 'Iron Shins', blurb: 'Medium objects never bounce you.', pitch: 'Keep rolling. The street furniture won’t slow him down.' },
+    secondWind: { kind: 'passive', price: 125000, label: 'Second Wind', blurb: 'The box-in meter drains 50% faster.', pitch: 'Stay with him. He’s slipping out of the box-in faster.' },
+    showman: { kind: 'passive', price: 165000, label: 'Showman', blurb: 'Something new on air pays double.', pitch: 'Double the variety bonus when he gives us something we haven’t aired.' },
+    tailwind: { kind: 'passive', price: 140000, label: 'Tailwind', blurb: 'Tier up 30% sooner.', pitch: 'Cue the wide shot. He’s hitting the next speed tier 30% sooner.' },
   } as Record<UpgradeId, { kind: 'ability' | 'passive'; price: number; label: string; blurb: string; /** The producer's line on the meeting card (flavour). */ pitch: string }>,
 
   /** Phase 3 abilities (lane-runner versions of §17's pool). 5f input buffer (§8). */

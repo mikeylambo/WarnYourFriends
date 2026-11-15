@@ -1,5 +1,5 @@
 import { TUNING } from '../tuning';
-import type { BustReason, GainType, ShowState, SimEvent } from './types';
+import type { BustReason, GainType, ShowState, SimEvent, StuntType } from './types';
 
 /**
  * Phase 2 broadcast state (§12): Ratings (the score source and the life bar),
@@ -7,8 +7,13 @@ import type { BustReason, GainType, ShowState, SimEvent } from './types';
  */
 export class Show {
   ratings: number = TUNING.show.startRatings;
-  /** Score (§6): Ratings × tier multiplier, banked every second. */
+  /** Score: spectacle points banked from finished chains (Mike, 2026-11-15). */
   banked = 0;
+  /** The live chain: stunts in it, points waiting (before its multiplier), time of the last stunt. */
+  chain = { count: 0, pending: 0, last: -Infinity };
+  /** Longest chain this segment (stunts) and the biggest single chain banked (points). */
+  bestChain = 0;
+  bestChainPoints = 0;
   heat = 1;
   pin = 0;
   state: ShowState = 'live';
@@ -88,7 +93,7 @@ export class Show {
     if (time - this.lastGain > S.decayAfter) {
       this.ratings = Math.max(0, this.ratings - S.decayRate[Math.min(this.segment, S.decayRate.length - 1)] * dt);
     }
-    this.banked += this.ratings * S.bankMult[tier] * dt;
+    if (this.chain.count > 0 && time - this.chain.last > TUNING.spectacle.window) this.endChain(false, out);
     if (time >= this.nextHeatT) {
       this.nextHeatT += S.heatEvery;
       if (this.heat < 5) {
@@ -119,8 +124,41 @@ export class Show {
     return delta;
   }
 
+  /** Chain multiplier for a chain of `count` stunts. */
+  static chainMult(count: number): number {
+    const C = TUNING.spectacle;
+    return Math.min(C.maxMult, 1 + Math.floor(Math.max(0, count - 1) / C.stepEvery));
+  }
+
+  /** A stunt joins the chain: points × gear × audience (multiplied by the chain when it banks). */
+  stunt(cause: StuntType, time: number, gear: number, out: SimEvent[], base?: number) {
+    if (this.state !== 'live') return;
+    const C = TUNING.spectacle;
+    if (this.chain.count > 0 && time - this.chain.last > C.window) this.endChain(false, out);
+    const pts = (base ?? (C.points as Record<string, number>)[cause] ?? 0) * TUNING.show.bankMult[gear] * C.audienceMult[this.tier];
+    if (pts <= 0) return;
+    this.chain.count++;
+    this.chain.pending += pts;
+    this.chain.last = time;
+    this.bestChain = Math.max(this.bestChain, this.chain.count);
+    out.push({ type: 'chain', count: this.chain.count, mult: Show.chainMult(this.chain.count), pending: this.chain.pending, add: pts, cause });
+  }
+
+  /** Bank the chain: at its multiplier, or at ×1 if it was dropped (bounce, spikes, a ram that connects). */
+  endChain(dropped: boolean, out: SimEvent[]) {
+    const c = this.chain;
+    if (c.count === 0) return;
+    const mult = dropped ? 1 : Show.chainMult(c.count);
+    const points = Math.round(c.pending * mult);
+    this.banked += points;
+    this.bestChainPoints = Math.max(this.bestChainPoints, points);
+    out.push({ type: 'chainEnd', count: c.count, mult, points, dropped });
+    this.chain = { count: 0, pending: 0, last: -Infinity };
+  }
+
   bust(reason: BustReason, out: SimEvent[]) {
     if (this.state !== 'live') return;
+    this.endChain(true, out); // busted mid-chain: what's in it banks at ×1
     this.state = 'busted';
     this.reason = reason;
     out.push({ type: 'busted', reason });
@@ -128,6 +166,7 @@ export class Show {
 
   clear(out: SimEvent[]) {
     if (this.state !== 'live') return;
+    this.endChain(false, out); // signed off mid-chain: it banks in full
     this.state = 'cleared';
     out.push({ type: 'signOff', ratings: this.ratings, banked: this.banked });
   }

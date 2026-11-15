@@ -16,7 +16,7 @@ describe('run (§4, §17)', () => {
   it('pitches 3 distinct upgrades, never a passive you own; abilities replace the slot', () => {
     const run = new RunState(7);
     run.phase = 'meeting';
-    run.earned = 100_000;
+    run.earned = 1_000_000;
     const offers = run.offers();
     expect(offers.length).toBe(3);
     expect(new Set(offers).size).toBe(3);
@@ -39,10 +39,10 @@ describe('run (§4, §17)', () => {
     run.earned = 1000;
     const id = run.offers()[0];
     expect(run.buy(id)).toBe(false);
-    run.earned = 50_000;
+    run.earned = 500_000;
     expect(run.buy(id)).toBe(true);
-    expect(run.purse).toBe(50_000 - TUNING.upgrades[id].price);
-    expect(run.earned).toBe(50_000);
+    expect(run.purse).toBe(500_000 - TUNING.upgrades[id].price);
+    expect(run.earned).toBe(500_000);
     expect(run.segment).toBe(1);
   });
 

@@ -83,3 +83,51 @@ describe('segment (LOCKED 150s + 15s grace)', () => {
     expect(sim.time).toBeGreaterThan(TUNING.segment.exitOpensAt);
   });
 });
+
+describe('spectacle chain (Mike, 2026-11-15)', () => {
+  const C = TUNING.spectacle;
+  it('stunts inside the window chain; the multiplier steps up every few stunts; a timeout banks at the multiplier', () => {
+    const sh = new Show();
+    const ev: SimEvent[] = [];
+    for (let i = 0; i < 5; i++) sh.stunt('medium', i * 1.0, 0, ev);
+    expect(sh.chain.count).toBe(5);
+    expect(Show.chainMult(5)).toBe(1 + Math.floor(4 / C.stepEvery));
+    expect(sh.banked).toBe(0); // nothing banks until the chain ends
+    sh.step(1 / 60, 4 + C.window + 0.1, 0, false, ev);
+    const end = ev.find((e) => e.type === 'chainEnd');
+    expect(end && end.type === 'chainEnd' && !end.dropped).toBe(true);
+    expect(sh.banked).toBe(Math.round(5 * C.points.medium * Show.chainMult(5)));
+  });
+
+  it('a bounce drops the chain: its points bank at ×1', () => {
+    const sh = new Show();
+    const ev: SimEvent[] = [];
+    for (let i = 0; i < 6; i++) sh.stunt('heavy', i * 0.5, 0, ev);
+    sh.endChain(true, ev);
+    expect(sh.banked).toBe(6 * C.points.heavy);
+  });
+
+  it('gear and audience multiply each stunt; the multiplier is capped', () => {
+    const sh = new Show();
+    const ev: SimEvent[] = [];
+    sh.ratings = 95; // CITY IN CHAOS
+    sh.stunt('heavy', 0, 2, ev);
+    const c = ev.find((e) => e.type === 'chain');
+    expect(c && c.type === 'chain' && c.add).toBe(C.points.heavy * TUNING.show.bankMult[2] * C.audienceMult[3]);
+    expect(Show.chainMult(999)).toBe(C.maxMult);
+  });
+
+  it('a bot broadcast banks points only through chains, and the score spreads with play', () => {
+    const scores: number[] = [];
+    for (const seed of [1, 2, 3, 4, 5, 6]) {
+      const sim = new Sim({ seed });
+      const bot = new Bot(sim);
+      let fromChains = 0;
+      while (sim.live && sim.time < 200) for (const e of sim.step(bot.input())) if (e.type === 'chainEnd') fromChains += e.points;
+      expect(sim.show.banked).toBe(fromChains);
+      scores.push(sim.show.banked);
+    }
+    expect(Math.max(...scores)).toBeGreaterThan(Math.min(...scores) * 1.2);
+  });
+});
+

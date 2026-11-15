@@ -148,6 +148,24 @@ export class Audio {
     this.noise(this.ctx!.currentTime, 0.12, 'bandpass', 2400, 3, 0.12);
   }
 
+  /** Spectacle chain: a bright tick per stunt, pitched up by the multiplier. */
+  chainTick(mult: number) {
+    if (!this.ready) return;
+    const t = this.ctx!.currentTime;
+    const f = 520 * Math.pow(2, (mult - 1) / 6);
+    this.tone(t, 0.12, f, f * 1.5, 0.07, 'square');
+  }
+  /** Chain banked (a till ring, bigger for a bigger multiplier) or dropped (a dull thud). */
+  chainEnd(mult: number, dropped: boolean) {
+    if (!this.ready) return;
+    const t = this.ctx!.currentTime;
+    if (dropped) {
+      this.tone(t, 0.3, 160, 70, 0.18, 'sawtooth');
+      return;
+    }
+    for (let i = 0; i < Math.min(4, mult); i++) this.tone(t + i * 0.06, 0.25, 880 * Math.pow(1.26, i), 880 * Math.pow(1.26, i), 0.06, 'triangle');
+  }
+
   /** Gear build-up: a short rising tick on each step of the last second before a gear-up (k 0..1). */
   gearTick(k: number) {
     if (!this.ready) return;
