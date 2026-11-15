@@ -32,6 +32,8 @@ export interface Flags {
   mode: 'run' | 'broadcast';
   /** Phase 3 dev: equip an ability in a single broadcast (?ability=leap|stare|hijack|pose). */
   ability: 'leap' | 'stare' | 'hijack' | 'pose' | null;
+  /** Giant size override (?size=growth|fixed|big), for side-by-side playtests. */
+  size: 'growth' | 'fixed' | 'big' | null;
 }
 
 function bool(q: URLSearchParams, k: string): boolean | null {
@@ -71,6 +73,7 @@ export function readFlags(search: string): Flags {
     angle: num(q, 'angle'),
     cuts: bool(q, 'cuts'),
     posecam: bool(q, 'posecam') ?? false,
+    size: ((v) => (v === 'growth' || v === 'fixed' || v === 'big' ? v : null))(q.get('size')),
     time: ((v) => (v === 'night' || v === 'dusk' || v === 'day' ? v : null))(q.get('time')),
   };
 }

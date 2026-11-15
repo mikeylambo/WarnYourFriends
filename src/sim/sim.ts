@@ -54,6 +54,8 @@ export interface SimOptions {
   segment?: number;
   /** Phase 3: upgrades owned (passives, and the equipped ability). */
   upgrades?: UpgradeId[];
+  /** Giant size: he grows with his gear, hit-box included (TUNING.growth). Off = the fixed 3.6m giant. */
+  growth?: boolean;
 }
 
 const smoothstep = (t: number) => t * t * (3 - 2 * t);
@@ -91,8 +93,12 @@ export class Sim {
   private events: SimEvent[] = [];
   private near: Prop[] = [];
 
+  /** Giant size grows with gear (SimOptions.growth). */
+  readonly growth: boolean;
+
   constructor(opts: SimOptions) {
     this.seed = opts.seed;
+    this.growth = opts.growth ?? false;
     this.rng = new Rng(opts.seed ^ 0x51ed);
     this.track = new Track(opts.seed);
     this.escort = new Escort(opts.seed, this.track);
@@ -271,9 +277,14 @@ export class Sim {
    * Impact pass: a dodge is passing close by something that would have bounced him at his
    * current tier, without touching it. Scores as a near-miss.
    */
+  /** His collision radius now: grows with his gear when growth is on. */
+  radius(): number {
+    return TUNING.giant.radius * (this.growth ? TUNING.growth.scale[this.giant.tier] : 1);
+  }
+
   private judgePasses() {
     const g = this.giant;
-    const r = TUNING.giant.radius;
+    const r = this.radius();
     const rank = this.smashRank();
     for (const p of this.track.propsBetween(g.s - r - 12, g.s)) {
       if (!p.alive || p.judged || p.s + p.hl > g.s - r) continue;
@@ -798,7 +809,7 @@ export class Sim {
   laneClear(lane: number, s0: number, s1: number, moving = true): boolean {
     if (!this.track.laneUsable(lane, s0) || !this.track.laneUsable(lane, s1)) return false;
     const c = this.track.laneCenter(lane);
-    const r = TUNING.giant.radius;
+    const r = this.radius();
     const rank = this.smashRank();
     for (const p of this.track.propsBetween(s0, s1)) {
       if (CLASS_RANK[p.cls] <= rank) continue;
@@ -816,7 +827,7 @@ export class Sim {
   private collide() {
     const g = this.giant;
     if (g.air > 0) return; // Leap: airborne over everything
-    const r = TUNING.giant.radius;
+    const r = this.radius();
     const rank = this.smashRank();
     const near: Prop[] = this.track.propsBetween(g.s - r - 4, g.s + r + 4, this.near);
     for (const u of this.pursuit.solidBetween(g.s - r - 6, g.s + r + 6)) near.push(u);

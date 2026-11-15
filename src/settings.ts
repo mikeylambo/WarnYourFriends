@@ -11,12 +11,14 @@ export interface Settings {
   producerTips: boolean;
   /** HUD colours (Mike, 2026-11-15): 'wyf' = the station's own (purple, ink, cream, red 6), 'network' = red / blue / white. */
   hudColors: 'wyf' | 'network';
+  /** Giant size (Mike, 2026-11-15): grows with his gear, fixed 3.6m, or big (Rampage size, look only). */
+  giantSize: 'growth' | 'fixed' | 'big';
   /** Set when the player turns the debug overlay on themselves (older saves defaulted it on). */
   debugChosen?: boolean;
 }
 
 const KEY = 'wyf.settings.v1';
-const DEFAULTS: Settings = { reducedMotion: false, reduceFlashes: false, debug: false, cameraCuts: true, liveTime: false, producerTips: true, hudColors: 'wyf' };
+const DEFAULTS: Settings = { reducedMotion: false, reduceFlashes: false, debug: false, cameraCuts: true, liveTime: false, producerTips: true, hudColors: 'wyf', giantSize: 'growth' };
 
 export function loadSettings(): Settings {
   try {
@@ -33,6 +35,7 @@ export function loadSettings(): Settings {
       liveTime: typeof parsed.liveTime === 'boolean' ? parsed.liveTime : DEFAULTS.liveTime,
       producerTips: typeof parsed.producerTips === 'boolean' ? parsed.producerTips : DEFAULTS.producerTips,
       hudColors: parsed.hudColors === 'network' ? 'network' : 'wyf',
+      giantSize: parsed.giantSize === 'fixed' || parsed.giantSize === 'big' ? parsed.giantSize : 'growth',
     };
   } catch {
     console.warn('Settings were unreadable and have been reset to defaults.');

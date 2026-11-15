@@ -88,8 +88,25 @@ export const TUNING = {
     hz: 60,
   },
 
+  /**
+   * Giant size (Mike, 2026-11-15: "even as a gameplay mechanic"; GDD §9's 3.6m is his Jog size now).
+   * Growth: he grows with his gear and shrinks when knocked down a gear, body and hit-box together, so
+   * shifting up reads at a glance and Rampage is a bigger target. The hit-box never reaches the next
+   * lane (1.43m at Rampage against 1.9m to the nearest prop edge there), so every row still leaves a lane.
+   */
+  growth: {
+    /** Scale per gear (Jog, Stride, Rampage), body and collision radius. */
+    scale: [1, 1.15, 1.3] as [number, number, number],
+    /** The fixed-size alternative to compare in playtest (?size=big): Rampage size all the time, look only. */
+    big: 1.3,
+    /** Grow/shrink ease time constant (s): a swell, not a pop. */
+    ease: 0.12,
+    /** How much of his extra size the chopper pulls out for (1 = in proportion; less keeps cars readable). */
+    cameraFollow: 0.25,
+  },
+
   giant: {
-    /** §9 the giant is 3.6m tall. */
+    /** §9 the giant is 3.6m tall (his Jog size; see growth). */
     height: 3.6,
     /** Collision circle. Shoulder width; fits a 4m lane with room either side. */
     radius: 1.1,

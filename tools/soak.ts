@@ -66,7 +66,9 @@ for (let seed = 1; seed <= seeds; seed++) {
   // Phase 3: every seed plays a segment of the run with an ability and a seeded set of passives.
   const passives: UpgradeId[] = (['ironShins', 'secondWind', 'showman', 'tailwind'] as UpgradeId[]).filter((_, k) => ((seed >> 2) >> k) & 1);
   const loadout: UpgradeId[] = seed % 9 === 0 ? passives : [ABILITIES[seed % 4], ...passives];
-  const sim = new Sim({ seed, segment: seed % TUNING.run.segments, upgrades: loadout });
+  // Giant size: two in three seeds play with growth (the default), the rest at the fixed size.
+  const growth = seed % 3 !== 0;
+  const sim = new Sim({ seed, segment: seed % TUNING.run.segments, upgrades: loadout, growth });
   p3.segments[seed % TUNING.run.segments]++;
   if (sim.show.heat !== Math.min(5, 1 + (seed % TUNING.run.segments))) fail(`seed ${seed}: segment ${seed % 5} started at Heat ${sim.show.heat}`);
   const bot = new Bot(sim);
@@ -192,6 +194,7 @@ for (let seed = 1; seed <= seeds; seed++) {
         swoop.n++;
       } else rig.cut(cutTo.index, cutTo.side, tg);
     }
+    rig.giantScale = growth ? TUNING.growth.scale[sim.giant.tier] : 1;
     rig.update(dt, tg);
     const info = rig.info;
     // A swoop out of Head-On suspends the camera rules; it must be short and land in the home shot.

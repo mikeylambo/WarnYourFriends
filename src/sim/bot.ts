@@ -1,4 +1,3 @@
-import { TUNING } from '../tuning';
 import { CLASS_RANK, type Sim } from './sim';
 import type { SimInput } from './types';
 
@@ -75,7 +74,7 @@ export class Bot {
       // Prefer lanes with things to smash once we can.
       const c = track.laneCenter(lane);
       for (const p of track.propsBetween(s0, s1)) {
-        if (Math.abs(p.d - c) < p.hw + TUNING.giant.radius && CLASS_RANK[p.cls] <= rank) sc += 2;
+        if (Math.abs(p.d - c) < p.hw + this.sim.radius() && CLASS_RANK[p.cls] <= rank) sc += 2;
       }
       if (spotted && lane !== g.lane) sc += 3;
       return sc - Math.abs(lane - g.lane) * 0.5;

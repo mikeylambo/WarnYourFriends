@@ -74,6 +74,8 @@ export function maxYawForScreenUp(limitDeg: number, pitchDeg: number): number {
 export class CameraRig {
   readonly camera: THREE.PerspectiveCamera;
   reducedMotion = false;
+  /** Giant size (TUNING.growth): the chopper pulls out for part of his extra size. */
+  giantScale = 1;
   /** Shell setting: screen shake intensity (0..1). */
   shakeScale = 1;
   readonly info: CameraFrameInfo = { angle: 'Chase High', screenUpDeg: 0, giantScreenY: 0, aheadMetres: 0, aheadSeconds: 0, lookAhead: 0, yawDeg: 0, raise: 0, pitchDeg: 0, insideBuilding: false, losBlocked: false, travelDown: false, transition: false };
@@ -268,7 +270,7 @@ export class CameraRig {
   }
 
   private distance(): number {
-    return this.angle.distance * this.tierScale + this.pullOut;
+    return this.angle.distance * this.tierScale * (1 + TUNING.growth.cameraFollow * (this.giantScale - 1)) + this.pullOut;
   }
 
   private pitch(): number {

@@ -134,7 +134,7 @@ export class Lighting {
     for (const m of this.shadowMats) m.opacity = L.shadow;
   }
 
-  update(dt: number, o: { giantX: number; giantZ: number; travel: number; speed: number; camera: THREE.Camera; lamps: LampPos[]; sirens: SirenSource[]; facing?: number }) {
+  update(dt: number, o: { giantX: number; giantZ: number; travel: number; speed: number; camera: THREE.Camera; lamps: LampPos[]; sirens: SirenSource[]; facing?: number; giantScale?: number }) {
     const L = this.look;
     const T = TUNING.look;
     this.time += dt;
@@ -189,10 +189,12 @@ export class Lighting {
     else this.spotAim.lerp(this.tmp.set(aimX, 0, aimZ), dt > 0 ? k : 1);
     this.spot.target.position.copy(this.spotAim);
     const dist = this.spot.position.distanceTo(this.spotAim);
-    this.spot.angle = Math.atan((T.spotRadius * 1.25) / dist);
+    // The pool grows with him (giant size), so he stays a dark shape on light (§23).
+    const radius = T.spotRadius * (o.giantScale ?? 1);
+    this.spot.angle = Math.atan((radius * 1.25) / dist);
     this.spot.intensity = L.spot;
     this.spotPool.position.set(this.spotAim.x, 0.07, this.spotAim.z);
-    this.spotPool.scale.set(T.spotRadius * 2.4, 1, T.spotRadius * 2.4);
+    this.spotPool.scale.set(radius * 2.4, 1, radius * 2.4);
     this.spotPool.visible = L.glow > 0;
     // Beam: apex at the chopper, base on the pool.
     const dir = this.tmp.copy(this.spot.position).sub(this.spotAim);

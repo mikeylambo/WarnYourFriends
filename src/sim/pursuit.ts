@@ -629,7 +629,7 @@ export class Pursuit {
     if (passing && !u.hit) {
       const ds = Math.max(0, Math.abs(u.s - g.s) - u.hl);
       const dd = Math.max(0, Math.abs(u.d - g.d) - u.hw);
-      const gap = Math.hypot(ds, dd) - TUNING.giant.radius;
+      const gap = Math.hypot(ds, dd) - this.sim.radius();
       this.closest.set(u.id, Math.min(this.closest.get(u.id) ?? Infinity, gap));
     }
     const over = u.unit === 'cruiser' ? u.phase === 'leave' : g.s - u.s > u.hl + 2;

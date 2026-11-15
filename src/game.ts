@@ -117,6 +117,47 @@ const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPrefere
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 const scene = new THREE.Scene();
+/**
+ * Giant size (TUNING.growth): the giant is posed in his own space (the gait runs there: positions, speed
+ * and stride divided by `gScale`), so planted feet stay pinned in the world and the step rate holds.
+ * GiantView poses its parts with world-space maths (IK, cape), so its parts sit in the scene unparented and
+ * unscaled while it updates; afterwards each top-level part is mapped to the world (anchor + scale × pose),
+ * and that is undone before the next update. A uniform scale commutes with the rotations, so every pose
+ * calculation stays consistent. When the scale changes, the anchor moves so his centre stays put.
+ */
+const giantSpace = scene; // his parts live in the scene unparented; `placeGiant` maps them to the world
+let gPosed: { o: THREE.Object3D; p: THREE.Vector3; s: THREE.Vector3 }[] | null = null;
+/** Undo the world mapping: back to his own space for the next pose. */
+function unplaceGiant() {
+  if (gPosed) for (const { o, p, s } of gPosed) o.position.copy(p), o.scale.copy(s);
+  gPosed = null;
+}
+/** Map his posed parts to the world: anchor + scale × pose. */
+function placeGiant() {
+  unplaceGiant();
+  if (gScale === 1 && gAnchor.x === 0 && gAnchor.z === 0) return;
+  gPosed = giant.objects.map((o) => ({ o, p: o.position.clone(), s: o.scale.clone() }));
+  for (const o of giant.objects) {
+    o.position.set(gAnchor.x + o.position.x * gScale, o.position.y * gScale, gAnchor.z + o.position.z * gScale);
+    o.scale.multiplyScalar(gScale);
+  }
+}
+let gScale = 1;
+const gAnchor = { x: 0, z: 0 };
+const sizeMode = () => flags.size ?? settings.giantSize;
+/** The size mode this broadcast started with: look and hit-box change together, from the next broadcast. */
+let runSize: 'growth' | 'fixed' | 'big' = 'growth';
+const sizeFor = (tier: number) => (runSize === 'growth' ? TUNING.growth.scale[tier] : runSize === 'big' ? TUNING.growth.big : 1);
+/** World → giant space (and back) for one point. */
+const toGiant = (x: number, z: number) => ({ x: (x - gAnchor.x) / gScale, z: (z - gAnchor.z) / gScale });
+const fromGiant = (x: number, z: number) => ({ x: gAnchor.x + x * gScale, z: gAnchor.z + z * gScale });
+function setGiantScale(k: number, cx: number, cz: number) {
+  if (k === gScale) return;
+  const l = toGiant(cx, cz);
+  gScale = k;
+  gAnchor.x = cx - l.x * k;
+  gAnchor.z = cz - l.z * k;
+}
 // Phase 0c: night by default; LIVE TIME follows the local clock; ?time= forces a look.
 const lighting = new Lighting(scene);
 lighting.reduceFlashes = settings.reduceFlashes;
@@ -195,7 +236,7 @@ const recentEvents: SimEvent[] = [];
 const playLog = new PlayLog();
 let lastEntry: PlayEntry | null = null;
 // Recap REPLAY state (declared up here: newRun runs at boot). See startReplay below.
-let simOpts: { seed: number; segment: number; upgrades: UpgradeId[] } = { seed: 0, segment: 0, upgrades: [] };
+let simOpts: { seed: number; segment: number; upgrades: UpgradeId[]; growth: boolean } = { seed: 0, segment: 0, upgrades: [], growth: false };
 const inputLog: SimInput[] = [];
 let moment: { t: number; score: number; kind: string; event: SimEvent; headline: Headline | null } | null = null;
 let replayRate = 1;
@@ -235,7 +276,10 @@ function newRun(seed: number, segment = 0, upgrades: UpgradeId[] = []) {
     replayEl.hidden = true;
   }
   if (highway) scene.remove(highway.group);
-  if (giant) for (const o of giant.objects) scene.remove(o);
+  if (giant) {
+    unplaceGiant();
+    for (const o of giant.objects) giantSpace.remove(o);
+  }
   if (cruisers) scene.remove(cruisers.group);
   if (units) scene.remove(units.group);
   if (rideMesh) scene.remove(rideMesh);
@@ -249,8 +293,14 @@ function newRun(seed: number, segment = 0, upgrades: UpgradeId[] = []) {
   pip.reset();
   Object.assign(runStats, { heavy: 0, units: 0, crashes: 0, bestChain: 0, lost: 0, dodged: 0, nearMiss: 0, best: null, bestRatings: -1 });
   $('coldts').textContent = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-  sim = new Sim({ seed, segment, upgrades });
-  simOpts = { seed, segment, upgrades: [...upgrades] };
+  runSize = sizeMode();
+  const growth = runSize === 'growth';
+  sim = new Sim({ seed, segment, upgrades, growth });
+  simOpts = { seed, segment, upgrades: [...upgrades], growth };
+  // A fresh giant space for the new road: no anchor carried over, his starting size outright.
+  gScale = sizeFor(0);
+  gAnchor.x = gAnchor.z = 0;
+  rig.giantScale = gScale;
   playLog.reset();
   inputLog.length = 0;
   moment = null;
@@ -272,7 +322,8 @@ function newRun(seed: number, segment = 0, upgrades: UpgradeId[] = []) {
   chyKicker.textContent = 'SPOTTED';
   chyText.innerHTML = '<span>&nbsp;</span>';
   renderAsks();
-  scene.add(highway.group, cruisers.group, units.group, ...giant.objects);
+  scene.add(highway.group, cruisers.group, units.group);
+  giantSpace.add(...giant.objects);
   giant.reset();
   const g = sim.giant;
   prev.s = g.s;
@@ -1256,6 +1307,7 @@ app = await createGameApp({
     settingsExtension: {
       choices: () => [
         { id: 'wyf-howto', label: 'How to Play' },
+        { id: 'wyf-size', label: `Giant Size: ${({ growth: 'Grows With Gear', fixed: 'Fixed', big: 'Big' } as const)[settings.giantSize]}`, description: 'Grows: bigger each gear, hit-box too. Applies from the next broadcast' },
         { id: 'wyf-cuts', label: `Camera Cuts: ${onOff(settings.cameraCuts)}`, description: 'Off holds the Chase High shot' },
         { id: 'wyf-livetime', label: `LIVE TIME: ${onOff(settings.liveTime)}`, description: 'Lighting follows your clock; off is always night' },
         { id: 'wyf-flashes', label: `Reduce Flashes: ${onOff(settings.reduceFlashes)}` },
@@ -1268,7 +1320,8 @@ app = await createGameApp({
           await openBriefing(false);
           return true; // the shell shows Settings again
         }
-        if (id === 'wyf-cuts') settings.cameraCuts = director.enabled = !settings.cameraCuts;
+        if (id === 'wyf-size') settings.giantSize = settings.giantSize === 'growth' ? 'fixed' : settings.giantSize === 'fixed' ? 'big' : 'growth';
+        else if (id === 'wyf-cuts') settings.cameraCuts = director.enabled = !settings.cameraCuts;
         else if (id === 'wyf-livetime') {
           settings.liveTime = !settings.liveTime;
           forcedLook = null;
@@ -1391,14 +1444,20 @@ function frame(now: number) {
   audio.setRotor(g.tier / 2);
 
   if (animDt > 0) {
-    const gf = gait.update({ x: t.x, z: t.z, fx: Math.cos(t.travel), fz: Math.sin(t.travel), speed: g.speed, stepPos, stepLen: g.stepLen, tier: g.tier, dt: animDt });
+    // Giant size: ease toward this gear's size, then run the gait in his space.
+    const want = sizeFor(g.tier);
+    setGiantScale(Math.abs(want - gScale) < 1e-3 ? want : gScale + (want - gScale) * Math.min(1, animDt / TUNING.growth.ease), t.x, t.z);
+    rig.giantScale = gScale;
+    const lt = toGiant(t.x, t.z);
+    const gf = gait.update({ x: lt.x, z: lt.z, fx: Math.cos(t.travel), fz: Math.sin(t.travel), speed: g.speed / gScale, stepPos, stepLen: g.stepLen / gScale, tier: g.tier, dt: animDt });
     if (gf.plantedNow === 0 || gf.plantedNow === 1) {
       // v0.3 footfall: dust ring, 2px camera pulse, bass thump; Rampage adds a crack decal.
-      const f = gf.legs[gf.plantedNow as 0 | 1].foot;
+      const lf = gf.legs[gf.plantedNow as 0 | 1].foot;
+      const f = fromGiant(lf.x, lf.z);
       // Gear build-up: the last second before a gear-up, steps swell and tick upward.
       const G = TUNING.gear;
       const build = sim.live && sim.tierUpIn <= G.buildUp && sim.tierUpProgress > 0 ? 1 - sim.tierUpIn / G.buildUp : 0;
-      highway.ring(f.x, f.z, (1.6 + g.tier * 0.7) * (1 + build * G.buildRingScale), build > 0 ? 0xfff1d6 : PALETTE.dust, 0.5 + build * 0.3, 0.55);
+      highway.ring(f.x, f.z, (1.6 + g.tier * 0.7) * gScale * (1 + build * G.buildRingScale), build > 0 ? 0xfff1d6 : PALETTE.dust, 0.5 + build * 0.3, 0.55);
       if (build > 0) audio.gearTick(build);
       if (gearShockPending) {
         gearShockPending = false;
@@ -1424,9 +1483,12 @@ function frame(now: number) {
     const A = TUNING.abilities;
     const u = g.airDur > 0 && g.air > 0 ? 1 - g.air / g.airDur : 0;
     const roof = rideMesh ? (rideMesh.userData.roof as number) : 0;
-    const lift = u > 0 ? 4 * A.leap.height * u * (1 - u) : roof;
+    // In his space: a Leap scales with him; standing on a car roof keeps his feet on the roof.
+    const lift = u > 0 ? 4 * A.leap.height * u * (1 - u) : roof / gScale;
     poseAnim += ((g.pose > 0 ? 1 : 0) - poseAnim) * Math.min(1, animDt / 0.08);
-    giant.update(animDt, { x: t.x, z: t.z, heading, travel: t.travel, lateralVel, speed: g.speed, tier: g.tier, braking: g.braking, stumble: g.stumble, stepPos, lift, leap: u, pose: poseAnim }, gf);
+    unplaceGiant();
+    giant.update(animDt, { x: lt.x, z: lt.z, heading, travel: t.travel, lateralVel, speed: g.speed, tier: g.tier, braking: g.braking, stumble: g.stumble, stepPos, lift, leap: u, pose: poseAnim }, gf);
+    placeGiant();
     if (rideMesh) {
       rideMesh.position.set(t.x, 0, t.z);
       rideMesh.rotation.y = -heading;
@@ -1477,7 +1539,7 @@ function frame(now: number) {
     if (app.shell.input.wasPressed('ui_accept') && recapArmed() && document.activeElement instanceof HTMLButtonElement && btns.includes(document.activeElement)) document.activeElement.click();
   }
   rig.update(paused ? 0 : realDt * flags.timescale, t);
-  lighting.update(animDt, { giantX: t.x, giantZ: t.z, travel: t.travel, speed: g.speed, camera: rig.camera, lamps: highway.lamps, sirens: cruisers.sirens, facing: rig.facing });
+  lighting.update(animDt, { giantX: t.x, giantZ: t.z, travel: t.travel, speed: g.speed, camera: rig.camera, lamps: highway.lamps, sirens: cruisers.sirens, facing: rig.facing, giantScale: gScale });
   audio.setSirens(sim.escort.cruisers.map((c) => (c.active ? Math.max(0.25, Math.min(1, 1 - (g.s - c.s - 8) / 60)) : 0)));
 
   const info = rig.info;
