@@ -342,6 +342,8 @@ function showCamTag() {
 }
 
 function hideRecap() {
+  // How to Play lives in this overlay: a broadcast rolling over behind the menus must not close it.
+  if (briefingClose) return;
   recapEl.hidden = true;
 }
 /** Onboarding producer notes: what triggers each one (events trigger the rest). */

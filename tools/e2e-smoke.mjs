@@ -408,6 +408,18 @@ try {
       asks: !!document.getElementById('asks')?.checkVisibility?.(),
       choices: [...document.querySelectorAll('#ui [data-choice-id]')].map((e) => e.dataset.choiceId).join('|'),
     }));
+    // How to Play from the menu survives the attract broadcast behind it ending and rolling over.
+    await page.click('[data-choice-id="howto"]');
+    await page.waitForSelector('#recap .briefing', { timeout: 3000 }).catch(() => {});
+    const runBefore = await page.evaluate(() => window.__GAME.sim.seed);
+    await page.evaluate(() => (window.__GAME.sim.time = 164.9));
+    await page.waitForFunction((s) => window.__GAME.sim.seed !== s, runBefore, { timeout: 12000 }).catch(() => {});
+    const b = await page.evaluate((s) => ({ rolled: window.__GAME.sim.seed !== s, open: !!document.querySelector('#recap .briefing') && !document.getElementById('recap').hidden }), runBefore);
+    if (!b.rolled) fail('attract broadcast did not roll over (test setup)');
+    else if (!b.open) fail('How to Play closed when the attract broadcast behind it rolled over');
+    else ok('How to Play stays open while the attract broadcast behind it rolls over');
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(400);
     if (m.hud || m.asks) fail(`broadcast HUD shows behind the menu (${JSON.stringify(m)})`);
     else if (m.choices !== 'run|broadcast|howto|settings') fail(`main menu choices: ${m.choices}`);
     else ok(`main menu over a clean chopper shot: ${m.choices}`);

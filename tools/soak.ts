@@ -114,6 +114,10 @@ for (let seed = 1; seed <= seeds; seed++) {
       break;
     }
     if (g.speed < TUNING.giant.speedFloor - 1e-9) fail(`seed ${seed}: speed ${g.speed} below floor at tick ${i}`);
+    // Nothing gets him through a bulldozer except a Leap (Mike's report: "running through bulldozers").
+    if (g.air <= 0) for (const p of sim.track.propsBetween(g.s - 3, g.s + 3)) {
+      if (p.cls === 'immovable' && p.alive && Math.abs(g.s - p.s) < p.hl * 0.6 && Math.abs(g.d - p.d) < p.hw * 0.6) fail(`seed ${seed}: inside a bulldozer at t=${sim.time.toFixed(2)}`);
+    }
     const w = sim.track.widthAt(g.s);
     if (g.d < TUNING.giant.radius - TUNING.lanes.wallBumpDepth - 0.01 || g.d > w - TUNING.giant.radius + TUNING.lanes.wallBumpDepth + 0.01) {
       fail(`seed ${seed}: off the road d=${g.d.toFixed(2)} width=${w.toFixed(2)} at tick ${i}`);
