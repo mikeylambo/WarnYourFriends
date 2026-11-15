@@ -175,6 +175,53 @@ describe('lanes', () => {
     throw new Error('no closing merge found');
   });
 
+  it('tapping into the wall through a closing merge still moves you over (no ghost lane)', () => {
+    for (let seed = 1; seed <= 40; seed++) {
+      const sim = emptySim(seed);
+      sim.track.ensure(5000);
+      const close = sim.track.segments.find((s) => s.kind === 'merge' && s.lanes1 < s.lanes0);
+      if (!close) continue;
+      sim.giant.s = close.s0 - 10;
+      sim.giant.lane = close.lanes0 - 1;
+      sim.giant.d = sim.track.laneCenter(sim.giant.lane);
+      const frames = Math.ceil(((close.length + 20) / sim.giant.speed + 1) * HZ);
+      for (let f = 0; f < frames; f++) sim.step({ ...NO_INPUT, lane: f % 4 === 0 ? 1 : 0 });
+      expect(sim.giant.lane).toBeLessThan(close.lanes1);
+      return;
+    }
+    throw new Error('no closing merge found');
+  });
+
+  it('signs off when hugging the ramp lane and pressing toward it at the gore', () => {
+    const sim = emptySim(3);
+    sim.time = TUNING.segment.exitOpensAt;
+    let guard = 0;
+    while (!sim.exit && guard++ < HZ * 5) sim.step(NO_INPUT);
+    expect(sim.exit).not.toBeNull();
+    const ex = sim.exit!;
+    // Teleport to just before the gore in the ramp lane, then tap right (a wall bump) every few frames.
+    sim.giant.s = ex.gore - 6;
+    sim.giant.lane = sim.track.lanesAt(ex.gore) - 1;
+    sim.giant.d = sim.track.laneCenter(sim.giant.lane);
+    for (let f = 0; f < HZ * 3 && sim.show.state === 'live'; f++) sim.step({ ...NO_INPUT, lane: f % 3 === 0 ? 1 : 0 });
+    expect(sim.show.state).toBe('cleared');
+  });
+
+  it('a lane change onto the ramp just past the gore still takes it', () => {
+    const sim = emptySim(3);
+    sim.time = TUNING.segment.exitOpensAt;
+    let guard = 0;
+    while (!sim.exit && guard++ < HZ * 5) sim.step(NO_INPUT);
+    const ex = sim.exit!;
+    const rampLane = sim.track.lanesAt(ex.gore) - 1;
+    sim.giant.s = ex.gore + 0.5;
+    sim.giant.lane = rampLane - 1;
+    sim.giant.d = sim.track.laneCenter(sim.giant.lane);
+    sim.step({ ...NO_INPUT, lane: 1 });
+    for (let f = 0; f < 10 && sim.show.state === 'live'; f++) sim.step(NO_INPUT);
+    expect(sim.show.state).toBe('cleared');
+  });
+
   it('never drops below the 2 m/s floor, even braking forever (Law 1, LOCKED)', () => {
     const sim = emptySim();
     run(sim, 2, { ...NO_INPUT, brake: true });

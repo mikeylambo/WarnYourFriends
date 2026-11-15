@@ -325,9 +325,10 @@ export class Sim {
     if (!this.fork && this.forksOpened < F.at.length && now >= F.at[this.forksOpened] && now < F.lastAt && !this.exit) this.openFork();
     if (!this.fork || g.s < this.fork.gore) return;
     const f = this.fork;
+    const onRamp = this.onRampLane(f.gore);
+    if (!onRamp && g.s < f.gore + this.lateTake()) return; // still time to steer onto it
     this.fork = null;
-    const lanes = this.track.lanesAt(f.gore);
-    if (g.lane !== lanes - 1 || g.move === 'wallBump') {
+    if (!onRamp) {
       this.emit({ type: 'fork', taken: false, zone: f.zone, name: f.name, from: -1, shaken: 0 });
       return;
     }
@@ -380,17 +381,32 @@ export class Sim {
     const now = this.time + this.dt;
     if (!this.exit && !this.fork && now >= X.exitOpensAt && now < X.length + X.grace) this.openExit();
     if (this.exit && g.s >= this.exit.gore) {
-      const lanes = this.track.lanesAt(this.exit.gore);
-      if (g.lane === lanes - 1 && g.move !== 'wallBump') {
+      if (this.onRampLane(this.exit.gore)) {
         const n = this.events.length;
         this.show.clear(this.events);
         this.observeShowEvents(n);
         return;
       }
-      this.emit({ type: 'exitMissed', s: this.exit.gore });
-      this.exit = null;
+      if (g.s >= this.exit.gore + this.lateTake()) {
+        this.emit({ type: 'exitMissed', s: this.exit.gore });
+        this.exit = null;
+      }
     }
     if (now >= X.length + X.grace) this.show.bust('missed', this.events);
+  }
+
+  /**
+   * In the ramp's lane (the rightmost at the gore)? A wall bump there counts: pressing toward the
+   * ramp while already hugging it is exactly what a player does (it used to count as a miss).
+   * A lane change already under way counts too (its target lane is his lane).
+   */
+  private onRampLane(gore: number): boolean {
+    return this.giant.lane === this.track.lanesAt(gore) - 1;
+  }
+
+  /** How far past the gore a late move onto the ramp still takes it (m). */
+  private lateTake(): number {
+    return this.giant.speed * TUNING.segment.lateTake;
   }
 
   private openExit() {
@@ -508,7 +524,8 @@ export class Sim {
     }
 
     // A merge closing the giant's lane: the wall bounces it into the next lane, no stumble.
-    if (g.move === null && !this.track.laneUsable(g.lane, g.s + 3)) {
+    // Also mid wall bump: tapping toward the wall used to chain bumps and keep him in a lane that had closed.
+    if ((g.move === null || g.move === 'wallBump') && !this.track.laneUsable(g.lane, g.s + 3)) {
       const target = Math.max(0, Math.min(g.lane - 1, this.track.lanesAt(g.s + 3) - 1));
       this.beginMove('change', target, this.tierTuning.laneChangeTime);
       this.emit({ type: 'wallBump', dir: 1, forced: true });

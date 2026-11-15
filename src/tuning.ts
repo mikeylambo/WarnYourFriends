@@ -539,6 +539,8 @@ export const TUNING = {
     exitClear: 40,
     /** ...and this far past it: he crosses the exit lane while the ramp pulls clear (no collisions after sign-off). */
     exitClearAfter: 40,
+    /** Steering onto a ramp (sign-off or fork) up to this long after passing the gore still takes it (s): forgiving, the ramp is still beside him. */
+    lateTake: 0.35,
   },
 
   /** §12 Ratings / Heat / Pin. */
