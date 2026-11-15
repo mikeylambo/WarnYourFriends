@@ -11,7 +11,7 @@ export interface Settings {
   producerTips: boolean;
   /** HUD colours (Mike, 2026-11-15): 'wyf' = the station's own (purple, ink, cream, red 6), 'network' = red / blue / white. */
   hudColors: 'wyf' | 'network';
-  /** Giant size (Mike, 2026-11-15): grows with his gear, fixed 3.6m, or big (Rampage size, look only). */
+  /** Kept for saves written while Giant Size was a setting (2026-11-15); the size is committed now. */
   giantSize: 'growth' | 'fixed' | 'big';
   /** Set when the player turns the debug overlay on themselves (older saves defaulted it on). */
   debugChosen?: boolean;

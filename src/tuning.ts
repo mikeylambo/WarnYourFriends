@@ -89,14 +89,16 @@ export const TUNING = {
   },
 
   /**
-   * Giant size (Mike, 2026-11-15: "even as a gameplay mechanic"; GDD §9's 3.6m is his Jog size now).
-   * Growth: he grows with his gear and shrinks when knocked down a gear, body and hit-box together, so
-   * shifting up reads at a glance and Rampage is a bigger target. The hit-box never reaches the next
-   * lane (1.43m at Rampage against 1.9m to the nearest prop edge there), so every row still leaves a lane.
+   * Giant size (Mike, 2026-11-15). Deviation from GDD §9's 3.6m: he is 1.3× (4.7m), body and hit-box,
+   * at every gear. Growing with the gear (1.0 / 1.15 / 1.3) was tried first: he rarely loses a gear,
+   * so it barely showed, and Mike liked the max size ("commit to 1.3× always"). The per-gear table
+   * stays so growth can come back after the balance pass. The hit-box (1.43m) never reaches the next
+   * lane (1.9m to the nearest prop edge there), so every row still leaves a lane. ?size=fixed compares
+   * the old 3.6m giant.
    */
   growth: {
     /** Scale per gear (Jog, Stride, Rampage), body and collision radius. */
-    scale: [1, 1.15, 1.3] as [number, number, number],
+    scale: [1.3, 1.3, 1.3] as [number, number, number],
     /** The fixed-size alternative to compare in playtest (?size=big): Rampage size all the time, look only. */
     big: 1.3,
     /** Grow/shrink ease time constant (s): a swell, not a pop. */
