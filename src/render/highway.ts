@@ -152,7 +152,7 @@ export class HighwayView {
   private fxTime = 0;
   private honkCd = 0;
   /** Called when a car honks (volume 0..1). */
-  onHonk: ((vol: number) => void) | null = null;
+  onHonk: ((vol: number, at: { x: number; z: number }) => void) | null = null;
 
   constructor(private sim: Sim) {
     const groundGeo = new THREE.PlaneGeometry(3000, 3000);
@@ -934,7 +934,7 @@ export class HighwayView {
         if (!c.honked && this.honkCd <= 0) {
           c.honked = true;
           this.honkCd = T.honkGap;
-          this.onHonk?.(Math.max(0.25, 1 - ds / T.swerveAt));
+          this.onHonk?.(Math.max(0.25, 1 - ds / T.swerveAt), this.sim.track.posAt(p.s, p.d, { x: 0, z: 0 }));
         }
       }
       // Brushed: his shoulders and arms sweep over the next lane, so a car he passes close to takes the hit
@@ -945,7 +945,7 @@ export class HighwayView {
         c.bounceV += T.brushKick;
         this.sim.track.posAt(p.s, p.d - c.brushDir * p.hw, this.pos);
         this.spawnDebris(this.pos.x, this.pos.z, -Math.sin(this.sim.track.headingAt(p.s)) * c.brushDir, Math.cos(this.sim.track.headingAt(p.s)) * c.brushDir, 3, 6, [0xd9d2c4, 0x9fa4ad], [0.08, 0.2], 0.8);
-        this.onBrush?.();
+        this.onBrush?.({ x: this.pos.x, z: this.pos.z });
       }
       for (const hz of c.hazards) hz.visible = (c.braking || c.brushT >= 0) && blink;
       let off = 0;
@@ -976,7 +976,7 @@ export class HighwayView {
   // --- Effects ------------------------------------------------------------------
 
   /** A car took a brush from him (audio hook). */
-  onBrush?: () => void;
+  onBrush?: (at: { x: number; z: number }) => void;
 
   /** Gear-up: traffic further ahead notices and brakes early for a moment. */
   private alarmT = 0;

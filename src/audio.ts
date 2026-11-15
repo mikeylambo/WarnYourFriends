@@ -6,6 +6,9 @@ import type { MassClass } from './tuning';
  * peak-normalised to -1 dBFS, mono 96 kbps. Each kind has one or more takes; a call plays a random
  * take with a little pitch jitter. Kinds without a file (or before they decode) use the synth below.
  */
+/** Spatial mix numbers (presentation): pan reaches full width this far across (m), never hard-panned; level falls off past `near`. */
+const SPATIAL = { panWidth: 14, panMax: 0.85, near: 6, falloff: 28, duckDepth: 0.45, duckHold: 0.9 };
+
 const SFX_FILES = import.meta.glob('./assets/sfx/*.mp3', { eager: true, query: '?url', import: 'default' }) as Record<string, string>;
 export type SfxKind =
   | 'foot' | 'smash-light' | 'smash-medium' | 'smash-heavy' | 'bounce' | 'scrape' | 'shoulder' | 'leap' | 'land'
@@ -24,7 +27,59 @@ export class Audio {
   private rotor: { gain: GainNode } | null = null;
   private lastWhip = 0;
   private sirens: GainNode[] = [];
+  private sirenPans: StereoPannerNode[] = [];
   private bed: { next: number; step: number; timer: number } | null = null;
+  /**
+   * Spatial mix (Mike, 2026-11-15): the listener is the giant; left/right is the camera's screen-right,
+   * so a honk left of him on screen comes from the left in any camera angle; farther is quieter.
+   */
+  private listener = { x: 0, z: 0, rx: 1, rz: 0 };
+  /** Where the sound being built right now goes (a panner for a positioned sound, else the SFX bus). */
+  private route: AudioNode | null = null;
+  private out(): AudioNode {
+    return this.route ?? this.buses.sfx;
+  }
+  /** Called every frame: the giant's position and the camera's screen-right on the ground. */
+  setListener(x: number, z: number, rightX: number, rightZ: number) {
+    const n = Math.hypot(rightX, rightZ) || 1;
+    this.listener = { x, z, rx: rightX / n, rz: rightZ / n };
+  }
+  /** Pan (−1..1) and level for a sound at world (x, z). Public for the E2E check. */
+  placeOf(x: number, z: number): { pan: number; gain: number } {
+    const L = this.listener;
+    const dx = x - L.x;
+    const dz = z - L.z;
+    const across = dx * L.rx + dz * L.rz;
+    const dist = Math.hypot(dx, dz);
+    return { pan: Math.max(-1, Math.min(1, across / SPATIAL.panWidth)) * SPATIAL.panMax, gain: 1 / (1 + Math.max(0, dist - SPATIAL.near) / SPATIAL.falloff) };
+  }
+  /** Build one sound at a world position: everything `make` creates goes through its own panner. */
+  private at(pos: { x: number; z: number } | undefined, make: () => void) {
+    if (!pos || !this.ctx) return make();
+    const { pan, gain } = this.placeOf(pos.x, pos.z);
+    const g = this.ctx.createGain();
+    g.gain.value = gain;
+    const p = this.ctx.createStereoPanner();
+    p.pan.value = pan;
+    g.connect(p).connect(this.buses.sfx);
+    this.route = g;
+    try {
+      make();
+    } finally {
+      this.route = null;
+    }
+    // The nodes are released when the sounds feeding them end (no references kept).
+  }
+  /** Stingers duck the effects for a moment so the news cue cuts through. */
+  private duck(depth: number, hold: number) {
+    if (!this.ctx) return;
+    const t = this.ctx.currentTime;
+    const g = this.buses.sfx.gain;
+    g.cancelScheduledValues(t);
+    g.setTargetAtTime(this.vol.sfx * depth, t, 0.03);
+    g.setTargetAtTime(this.vol.sfx, t + hold, 0.25);
+  }
+
   /** Decoded takes per kind (filled after unlock). */
   private samples = new Map<string, AudioBuffer[]>();
 
@@ -59,7 +114,7 @@ export class Audio {
     src.playbackRate.value = rate * (1 + (Math.random() * 2 - 1) * jitter);
     const g = c.createGain();
     g.gain.value = vol;
-    src.connect(g).connect(this.buses.sfx);
+    src.connect(g).connect(this.out());
     src.start(c.currentTime + when);
     return true;
   }
@@ -130,7 +185,7 @@ export class Audio {
     const g = c.createGain();
     g.gain.setValueAtTime(vol, t);
     g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-    src.connect(f).connect(g).connect(this.buses.sfx);
+    src.connect(f).connect(g).connect(this.out());
     src.start(t, Math.random() * 0.5, dur + 0.05);
   }
 
@@ -144,7 +199,7 @@ export class Audio {
     g.gain.setValueAtTime(0.0001, t);
     g.gain.exponentialRampToValueAtTime(vol, t + 0.008);
     g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-    o.connect(g).connect(this.buses.sfx);
+    o.connect(g).connect(this.out());
     o.start(t);
     o.stop(t + dur + 0.05);
   }
@@ -161,8 +216,11 @@ export class Audio {
     this.noise(t, 0.07, 'lowpass', 500 - tier * 80, 0.7, 0.25 + tier * 0.12);
   }
 
-  smash(cls: MassClass) {
+  smash(cls: MassClass, pos?: { x: number; z: number }) {
     if (!this.ready) return;
+    this.at(pos, () => this.smashAt(cls));
+  }
+  private smashAt(cls: MassClass) {
     const t = this.ctx!.currentTime;
     if (cls !== 'immovable' && this.play(`smash-${cls}` as SfxKind, cls === 'heavy' ? 1 : cls === 'medium' ? 0.8 : 0.6)) return;
     if (cls === 'medium') {
@@ -187,8 +245,11 @@ export class Audio {
     this.tone(t, 0.08, 220, 120, 0.2, 'triangle');
   }
 
-  bounce() {
+  bounce(pos?: { x: number; z: number }) {
     if (!this.ready) return;
+    this.at(pos, () => this.bounceAt());
+  }
+  private bounceAt() {
     if (this.play('bounce', 0.9)) return;
     const t = this.ctx!.currentTime;
     // Dull, embarrassing "bwomp".
@@ -197,8 +258,11 @@ export class Audio {
     this.noise(t, 0.12, 'lowpass', 300, 0.5, 0.5);
   }
 
-  scrape() {
+  scrape(pos?: { x: number; z: number }) {
     if (!this.ready) return;
+    this.at(pos, () => this.scrapeAt());
+  }
+  private scrapeAt() {
     if (this.play('scrape', 0.35, 1, 0.08)) return;
     this.noise(this.ctx!.currentTime, 0.12, 'bandpass', 2400, 3, 0.12);
   }
@@ -272,8 +336,11 @@ export class Audio {
     this.tone(t, 0.25, 70, 140, 0.4);
   }
   /** Impact pass: a dodge, air ripping past (rising then falling, like a car passing close). */
-  whoosh() {
+  whoosh(pos?: { x: number; z: number }) {
     if (!this.ready) return;
+    this.at(pos, () => this.whooshAt());
+  }
+  private whooshAt() {
     if (this.play('whoosh', 0.6, 1, 0.08)) return;
     const t = this.ctx!.currentTime;
     this.noise(t, 0.28, 'bandpass', 700, 1.6, 0.45, 2600);
@@ -351,8 +418,11 @@ export class Audio {
   }
 
   /** Phase 0c: car horn, two detuned square tones (deadpan, not angry). */
-  honk(vol: number) {
+  honk(vol: number, pos?: { x: number; z: number }) {
     if (!this.ready) return;
+    this.at(pos, () => this.honkAt(vol));
+  }
+  private honkAt(vol: number) {
     const c = this.ctx!;
     const t = c.currentTime;
     const dur = 0.18 + Math.random() * 0.2;
@@ -364,7 +434,7 @@ export class Audio {
     const f = c.createBiquadFilter();
     f.type = 'lowpass';
     f.frequency.value = 1800;
-    g.connect(f).connect(this.buses.sfx);
+    g.connect(f).connect(this.out());
     const base = 380 + Math.random() * 60;
     for (const m of [1, 1.26]) {
       const o = c.createOscillator();
@@ -401,18 +471,24 @@ export class Audio {
       bp.Q.value = 0.9;
       const g = c.createGain();
       g.gain.value = 0;
-      o.connect(bp).connect(g).connect(this.buses.sfx);
+      const pan = c.createStereoPanner();
+      o.connect(bp).connect(g).connect(pan).connect(this.buses.sfx);
       o.start();
       lfo.start();
       this.sirens.push(g);
+      this.sirenPans.push(pan);
     }
   }
 
-  /** Siren levels 0..1 per cruiser (distance-based; 0 = not in the chase). */
-  setSirens(levels: number[]) {
+  /** Siren levels 0..1 per cruiser (distance-based; 0 = not in the chase), and where each one is (panned like the rest of the mix). */
+  setSirens(levels: number[], positions?: ({ x: number; z: number } | null)[]) {
     if (!this.ctx) return;
     const t = this.ctx.currentTime;
     this.sirens.forEach((g, i) => g.gain.setTargetAtTime(0.022 * (levels[i] ?? 0), t, 0.4));
+    if (positions) this.sirenPans.forEach((p, i) => {
+      const at = positions[i];
+      if (at) p.pan.setTargetAtTime(this.placeOf(at.x, at.z).pan, t, 0.15);
+    });
   }
 
   /**
@@ -470,6 +546,7 @@ export class Audio {
   /** §25/§26 BREAKING stinger: a short brass-like stab on the music bus. */
   breaking() {
     if (!this.ready) return;
+    this.duck(SPATIAL.duckDepth, SPATIAL.duckHold);
     const c = this.ctx!;
     const t = c.currentTime;
     for (const [f, d] of [[293.66, 0], [349.23, 0], [440, 0], [587.33, 0.0]] as const) {
@@ -503,8 +580,11 @@ export class Audio {
   }
 
   /** §11 tells: engine rev (cruiser ram), tyre screech (roadblock), metallic rattle (spikes), brakes (rolling). */
-  tell(kind: 'cruiser' | 'roadblock' | 'spike' | 'rolling' | 'chopper') {
+  tell(kind: 'cruiser' | 'roadblock' | 'spike' | 'rolling' | 'chopper', pos?: { x: number; z: number }) {
     if (!this.ready) return;
+    this.at(pos, () => this.tellAt(kind));
+  }
+  private tellAt(kind: 'cruiser' | 'roadblock' | 'spike' | 'rolling' | 'chopper') {
     const t = this.ctx!.currentTime;
     switch (kind) {
       case 'cruiser':
@@ -542,6 +622,7 @@ export class Audio {
   /** End of the broadcast: a falling sting for busted, a rising one for the sign-off. */
   ending(cleared: boolean) {
     if (!this.ready) return;
+    this.duck(SPATIAL.duckDepth, SPATIAL.duckHold * 1.4);
     const t = this.ctx!.currentTime;
     const chord = cleared ? [293.66, 369.99, 440, 587.33] : [293.66, 349.23, 415.3, 220];
     chord.forEach((f, i) => this.tone(t + i * 0.12, 0.9, f, cleared ? f : f * 0.94, 0.05, 'sawtooth'));

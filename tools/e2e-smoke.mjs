@@ -122,6 +122,10 @@ try {
     const takes = Object.values(sfx).reduce((a, b) => a + b, 0);
     if (Object.keys(sfx).length < 16) fail(`sound effects not all loaded (${JSON.stringify(sfx)})`);
     else ok(`sound effects: ${Object.keys(sfx).length} kinds, ${takes} takes decoded`);
+    // Spatial mix: right of him on screen pans right, left pans left, far away is quieter.
+    const sp = await page.evaluate(() => ({ r: window.__GAME.sfxPlace(10, 0), l: window.__GAME.sfxPlace(-10, 0), far: window.__GAME.sfxPlace(0, 120) }));
+    if (!(sp.r.pan > 0.3 && sp.l.pan < -0.3 && sp.far.gain < 0.3 && sp.r.gain > 0.8)) fail(`spatial mix (${JSON.stringify(sp)})`);
+    else ok(`spatial mix: right pans ${sp.r.pan.toFixed(2)}, left ${sp.l.pan.toFixed(2)}, 120m ahead at ${(sp.far.gain * 100).toFixed(0)}% level`);
     // v0.3: A changes lane left; D changes lane right.
     const lane0 = await page.evaluate(() => window.__GAME.state().lane);
     await page.keyboard.press('KeyA');

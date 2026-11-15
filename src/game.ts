@@ -144,7 +144,8 @@ function placeGiant() {
 }
 let gScale = 1;
 const gAnchor = { x: 0, z: 0 };
-const sizeMode = () => flags.size ?? settings.giantSize;
+// Committed size (Mike, 2026-11-15): 1.3× always; ?size=fixed compares the old 3.6m giant.
+const sizeMode = () => flags.size ?? 'growth';
 /** The size mode this broadcast started with: look and hit-box change together, from the next broadcast. */
 let runSize: 'growth' | 'fixed' | 'big' = 'growth';
 const sizeFor = (tier: number) => (runSize === 'growth' ? TUNING.growth.scale[tier] : runSize === 'big' ? TUNING.growth.big : 1);
@@ -266,6 +267,10 @@ function targetAt(s: number, d: number): CameraTarget {
   return { x: pos.x, z: pos.z, travel: sim.track.headingAt(s), speed: sim.giant.speed, tier: sim.giant.tier };
 }
 
+/** World position of a track point, for the spatial mix (a fresh object: audio keeps nothing). */
+const where = (s: number, d: number) => sim.track.posAt(s, d, { x: 0, z: 0 });
+const sirenRight = new THREE.Vector3();
+
 function newRun(seed: number, segment = 0, upgrades: UpgradeId[] = []) {
   tips.clear();
   if (replay) {
@@ -305,8 +310,8 @@ function newRun(seed: number, segment = 0, upgrades: UpgradeId[] = []) {
   inputLog.length = 0;
   moment = null;
   highway = new HighwayView(sim);
-  highway.onHonk = (v) => audio.honk(v);
-  highway.onBrush = () => audio.scrape();
+  highway.onHonk = (v, at) => audio.honk(v, at);
+  highway.onBrush = (at) => audio.scrape(at);
   giant = new GiantView();
   gait = new Gait();
   director = new Director(seed);
@@ -738,7 +743,7 @@ function present(e: SimEvent) {
       }
       else highway.smash(e.propId, dirX, dirZ, e.speed, side);
       giant.onSmash(e.cls === 'heavy', side);
-      audio.smash(e.cls);
+      audio.smash(e.cls, where(e.s, e.d));
       hitstop = Math.max(hitstop, k.hitstop);
       rig.jolt(k.shake, e.cls === 'heavy' ? TUNING.camera.joltTime : 0.08);
       flash(k.flashFrames);
@@ -748,7 +753,7 @@ function present(e: SimEvent) {
     case 'bounce': {
       tips.want(e.cls === 'immovable' ? 'dozer' : 'bounce');
       const k = I.bounce;
-      audio.bounce();
+      audio.bounce(where(e.s, e.d));
       giant.onBounce();
       hitstop = Math.max(hitstop, k.hitstop);
       rig.jolt(k.shake, 0.15);
@@ -759,7 +764,7 @@ function present(e: SimEvent) {
     }
     case 'wallBump': {
       const k = I.wall;
-      audio.scrape();
+      audio.scrape(where(g.s, g.d + e.dir * 2));
       rig.jolt(k.shake, 0.1);
       haptic(k.haptic, k.hapticStrength);
       break;
@@ -773,12 +778,15 @@ function present(e: SimEvent) {
     case 'nearMiss':
       runStats.nearMiss++;
       pip.trigger(sim, sim.show.tier);
-      audio.whoosh();
+      {
+        const u = sim.pursuit.units.find((x) => x.id === e.id);
+        audio.whoosh(u ? where(u.s, u.d) : undefined);
+      }
       break;
     case 'dodge': {
       tips.want('dodge');
       runStats.nearMiss++;
-      audio.whoosh();
+      audio.whoosh(where(e.s, e.d));
       rig.jolt(I.dodge.shake, 0.1);
       haptic(I.dodge.haptic, I.dodge.hapticStrength);
       sim.track.posAt(e.s, e.d, pos);
@@ -792,9 +800,12 @@ function present(e: SimEvent) {
       if (!e.hit) runStats.dodged++;
       pip.trigger(sim, sim.show.tier);
       break;
-    case 'tell':
-      audio.tell(e.kind);
+    case 'tell': {
+      // From the unit if it's on the road already, else from its lane ahead of him.
+      const u = sim.pursuit.units.find((x) => x.id === e.id);
+      audio.tell(e.kind, u ? where(u.s, u.d) : where(g.s + 40, sim.track.laneCenter(e.lane)));
       break;
+    }
     case 'spiked':
       audio.bounce();
       giant.onBounce();
@@ -937,7 +948,7 @@ function present(e: SimEvent) {
     case 'policeSmash': {
       // A chasing cruiser ploughs through something in its lane: the prop flies along its run.
       highway.smash(e.propId, Math.cos(h), Math.sin(h), e.speed, Math.sign(e.d - g.d) || 1);
-      audio.smash('medium');
+      audio.smash('medium', where(e.s, e.d));
       break;
     }
     case 'policeCrash': {
@@ -947,7 +958,7 @@ function present(e: SimEvent) {
       const side = Math.sign(e.d - g.d) || 1;
       units.smash(e.id, Math.cos(h), Math.sin(h), e.speed, side);
       if (e.propSmashed) highway.smash(e.propId, Math.cos(h), Math.sin(h), e.speed * 0.6, side);
-      audio.smash('heavy');
+      audio.smash('heavy', where(e.s, e.d));
       hitstop = Math.max(hitstop, TUNING.impact.medium.hitstop);
       rig.jolt(TUNING.impact.medium.shake, 0.12);
       haptic(TUNING.impact.medium.haptic, TUNING.impact.medium.hapticStrength);
@@ -1085,8 +1096,8 @@ function startReplay(done: () => void) {
   if (rideMesh) scene.remove(rideMesh);
   sim = rs;
   highway = new HighwayView(rs);
-  highway.onHonk = (v) => audio.honk(v);
-  highway.onBrush = () => audio.scrape();
+  highway.onHonk = (v, at) => audio.honk(v, at);
+  highway.onBrush = (at) => audio.scrape(at);
   gait = new Gait();
   cruisers = new CruiserView(rs);
   cruisers.reduceFlashes = settings.reduceFlashes;
@@ -1307,7 +1318,6 @@ app = await createGameApp({
     settingsExtension: {
       choices: () => [
         { id: 'wyf-howto', label: 'How to Play' },
-        { id: 'wyf-size', label: `Giant Size: ${({ growth: 'Grows With Gear', fixed: 'Fixed', big: 'Big' } as const)[settings.giantSize]}`, description: 'Grows: bigger each gear, hit-box too. Applies from the next broadcast' },
         { id: 'wyf-cuts', label: `Camera Cuts: ${onOff(settings.cameraCuts)}`, description: 'Off holds the Chase High shot' },
         { id: 'wyf-livetime', label: `LIVE TIME: ${onOff(settings.liveTime)}`, description: 'Lighting follows your clock; off is always night' },
         { id: 'wyf-flashes', label: `Reduce Flashes: ${onOff(settings.reduceFlashes)}` },
@@ -1320,8 +1330,7 @@ app = await createGameApp({
           await openBriefing(false);
           return true; // the shell shows Settings again
         }
-        if (id === 'wyf-size') settings.giantSize = settings.giantSize === 'growth' ? 'fixed' : settings.giantSize === 'fixed' ? 'big' : 'growth';
-        else if (id === 'wyf-cuts') settings.cameraCuts = director.enabled = !settings.cameraCuts;
+        if (id === 'wyf-cuts') settings.cameraCuts = director.enabled = !settings.cameraCuts;
         else if (id === 'wyf-livetime') {
           settings.liveTime = !settings.liveTime;
           forcedLook = null;
@@ -1540,7 +1549,13 @@ function frame(now: number) {
   }
   rig.update(paused ? 0 : realDt * flags.timescale, t);
   lighting.update(animDt, { giantX: t.x, giantZ: t.z, travel: t.travel, speed: g.speed, camera: rig.camera, lamps: highway.lamps, sirens: cruisers.sirens, facing: rig.facing, giantScale: gScale });
-  audio.setSirens(sim.escort.cruisers.map((c) => (c.active ? Math.max(0.25, Math.min(1, 1 - (g.s - c.s - 8) / 60)) : 0)));
+  // Spatial mix: the giant is the listener; left/right is the camera's screen-right.
+  sirenRight.setFromMatrixColumn(rig.camera.matrixWorld, 0);
+  audio.setListener(t.x, t.z, sirenRight.x, sirenRight.z);
+  audio.setSirens(
+    sim.escort.cruisers.map((c) => (c.active ? Math.max(0.25, Math.min(1, 1 - (g.s - c.s - 8) / 60)) : 0)),
+    sim.escort.cruisers.map((c) => (c.active ? where(c.s, c.d) : null)),
+  );
 
   const info = rig.info;
   if (started && !paused) {
@@ -1885,6 +1900,13 @@ window.__GAME = {
   toggleHeadOn,
   /** Dev: slow motion (camera included), for filmstrips. */
   sfx: () => audio.loadedKinds(),
+  /** Spatial mix check: pan and level of a sound `across` m to the camera's right of him and `along` m ahead. */
+  sfxPlace: (across: number, along: number) => {
+    const r = new THREE.Vector3().setFromMatrixColumn(rig.camera.matrixWorld, 0);
+    const n = Math.hypot(r.x, r.z) || 1;
+    const t = targetAt(sim.giant.s, sim.giant.d);
+    return audio.placeOf(t.x + (r.x / n) * across + Math.cos(t.travel) * along, t.z + (r.z / n) * across + Math.sin(t.travel) * along);
+  },
   recap: () => (recapEl.hidden ? null : { title: recapEl.querySelector('h2')?.textContent, outcome: recapEl.querySelector('.outcome')?.textContent }),
   /** Recap REPLAY: playing now (sim time, end, rate), and the moment it picked. */
   replay: () => ({ playing: !!replay, t: replay?.sim.time ?? null, end: replay?.end ?? null, rate: replayRate, moment }),
