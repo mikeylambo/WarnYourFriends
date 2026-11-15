@@ -116,6 +116,12 @@ try {
       if (await p.evaluate(() => window.__GAME.started)) fail('broadcast started behind How to Play');
       await p.click('#brief-go');
     });
+    // Authored SFX: every file decodes once audio is unlocked by the start click.
+    await page.waitForFunction(() => Object.keys(window.__GAME.sfx()).length >= 16, null, { timeout: 8000 }).catch(() => {});
+    const sfx = await page.evaluate(() => window.__GAME.sfx());
+    const takes = Object.values(sfx).reduce((a, b) => a + b, 0);
+    if (Object.keys(sfx).length < 16) fail(`sound effects not all loaded (${JSON.stringify(sfx)})`);
+    else ok(`sound effects: ${Object.keys(sfx).length} kinds, ${takes} takes decoded`);
     // v0.3: A changes lane left; D changes lane right.
     const lane0 = await page.evaluate(() => window.__GAME.state().lane);
     await page.keyboard.press('KeyA');

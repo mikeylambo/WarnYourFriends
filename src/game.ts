@@ -1820,6 +1820,7 @@ window.__GAME = {
   director: () => ({ enabled: director.enabled, current: director.current, pinned: director.pinned, awayCuts: director.awayCuts }),
   toggleHeadOn,
   /** Dev: slow motion (camera included), for filmstrips. */
+  sfx: () => audio.loadedKinds(),
   recap: () => (recapEl.hidden ? null : { title: recapEl.querySelector('h2')?.textContent, outcome: recapEl.querySelector('.outcome')?.textContent }),
   /** Recap REPLAY: playing now (sim time, end, rate), and the moment it picked. */
   replay: () => ({ playing: !!replay, t: replay?.sim.time ?? null, end: replay?.end ?? null, rate: replayRate, moment }),

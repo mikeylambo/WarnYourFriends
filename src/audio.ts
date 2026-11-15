@@ -1,7 +1,18 @@
+/// <reference types="vite/client" />
 import type { MassClass } from './tuning';
 
 /**
- * Phase 0 placeholder audio, synthesized with Web Audio (no assets).
+ * Authored sound effects (ElevenLabs, 2026-11-15): `src/assets/sfx/<kind>-<take>.mp3`, trimmed,
+ * peak-normalised to -1 dBFS, mono 96 kbps. Each kind has one or more takes; a call plays a random
+ * take with a little pitch jitter. Kinds without a file (or before they decode) use the synth below.
+ */
+const SFX_FILES = import.meta.glob('./assets/sfx/*.mp3', { eager: true, query: '?url', import: 'default' }) as Record<string, string>;
+export type SfxKind =
+  | 'foot' | 'smash-light' | 'smash-medium' | 'smash-heavy' | 'bounce' | 'scrape' | 'shoulder' | 'leap' | 'land'
+  | 'whoosh' | 'tierup' | 'tierdown' | 'banked' | 'cape' | 'spike' | 'roadblock';
+
+/**
+ * Audio: authored samples where they exist (SFX_FILES), Web Audio synthesis for the rest.
  * §29: separate music, SFX and voice buses. §26: footfalls are the brand;
  * Phase 5 replaces these with authored sounds without touching callers.
  */
@@ -14,6 +25,44 @@ export class Audio {
   private lastWhip = 0;
   private sirens: GainNode[] = [];
   private bed: { next: number; step: number; timer: number } | null = null;
+  /** Decoded takes per kind (filled after unlock). */
+  private samples = new Map<string, AudioBuffer[]>();
+
+  /** Fetch and decode every take once; calls fall back to the synth until theirs are in. */
+  private loadSamples() {
+    for (const [path, url] of Object.entries(SFX_FILES)) {
+      const kind = path.replace(/^.*\/|-[a-z]\.mp3$/g, '');
+      fetch(url)
+        .then((r) => r.arrayBuffer())
+        .then((b) => this.ctx!.decodeAudioData(b))
+        .then((buf) => {
+          const list = this.samples.get(kind) ?? [];
+          list.push(buf);
+          this.samples.set(kind, list);
+        })
+        .catch((e) => console.warn(`sfx ${path} failed to load:`, e));
+    }
+  }
+
+  /** Kinds with at least one decoded take, and how many takes (E2E / debug). */
+  loadedKinds(): Record<string, number> {
+    return Object.fromEntries([...this.samples].map(([k, v]) => [k, v.length]));
+  }
+
+  /** Play a take of `kind`: false when none is loaded (the caller plays its synth instead). */
+  private play(kind: SfxKind, vol: number, rate = 1, jitter = 0.04, when = 0): boolean {
+    const takes = this.samples.get(kind);
+    if (!takes?.length || !this.ctx) return false;
+    const c = this.ctx;
+    const src = c.createBufferSource();
+    src.buffer = takes[Math.floor(Math.random() * takes.length)];
+    src.playbackRate.value = rate * (1 + (Math.random() * 2 - 1) * jitter);
+    const g = c.createGain();
+    g.gain.value = vol;
+    src.connect(g).connect(this.buses.sfx);
+    src.start(c.currentTime + when);
+    return true;
+  }
 
   get ready(): boolean {
     return !!this.ctx && this.ctx.state === 'running';
@@ -40,6 +89,7 @@ export class Audio {
       this.noiseBuf = this.ctx.createBuffer(1, len, this.ctx.sampleRate);
       const d = this.noiseBuf.getChannelData(0);
       for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
+      this.loadSamples();
       this.startRotor();
       this.startSirens(3);
       this.startBed();
@@ -105,6 +155,8 @@ export class Audio {
     const t = this.ctx!.currentTime;
     const base = [72, 60, 50][tier];
     const vol = [0.55, 0.75, 1.0][tier];
+    // Heavier and lower each gear (§10: pitch drops on each tier).
+    if (this.play('foot', [0.5, 0.7, 0.95][tier], [1.0, 0.9, 0.8][tier])) return;
     this.tone(t, 0.22 + tier * 0.05, base, base * 0.45, vol);
     this.noise(t, 0.07, 'lowpass', 500 - tier * 80, 0.7, 0.25 + tier * 0.12);
   }
@@ -112,6 +164,7 @@ export class Audio {
   smash(cls: MassClass) {
     if (!this.ready) return;
     const t = this.ctx!.currentTime;
+    if (cls !== 'immovable' && this.play(`smash-${cls}` as SfxKind, cls === 'heavy' ? 1 : cls === 'medium' ? 0.8 : 0.6)) return;
     if (cls === 'medium') {
       // crunch
       this.noise(t, 0.22, 'bandpass', 1100, 0.8, 0.7, 400);
@@ -136,6 +189,7 @@ export class Audio {
 
   bounce() {
     if (!this.ready) return;
+    if (this.play('bounce', 0.9)) return;
     const t = this.ctx!.currentTime;
     // Dull, embarrassing "bwomp".
     this.tone(t, 0.35, 95, 55, 0.9);
@@ -145,6 +199,7 @@ export class Audio {
 
   scrape() {
     if (!this.ready) return;
+    if (this.play('scrape', 0.35, 1, 0.08)) return;
     this.noise(this.ctx!.currentTime, 0.12, 'bandpass', 2400, 3, 0.12);
   }
 
@@ -163,6 +218,8 @@ export class Audio {
       this.tone(t, 0.3, 160, 70, 0.18, 'sawtooth');
       return;
     }
+    // A till ring, louder and a touch higher for a bigger multiplier.
+    if (this.play('banked', Math.min(0.85, 0.35 + mult * 0.1), 1 + Math.min(4, mult) * 0.03, 0.01)) return;
     for (let i = 0; i < Math.min(4, mult); i++) this.tone(t + i * 0.06, 0.25, 880 * Math.pow(1.26, i), 880 * Math.pow(1.26, i), 0.06, 'triangle');
   }
 
@@ -175,6 +232,8 @@ export class Audio {
 
   tierUp(tier: number) {
     if (!this.ready) return;
+    // Lower and bigger at Rampage.
+    if (this.play('tierup', tier >= 2 ? 1 : 0.8, tier >= 2 ? 0.85 : 1, 0.02)) return;
     const t = this.ctx!.currentTime;
     this.noise(t, 0.45, 'bandpass', 300, 1.5, 0.35, 2600);
     this.tone(t, 0.35, 90 - tier * 12, 45 - tier * 6, 0.6);
@@ -182,12 +241,14 @@ export class Audio {
 
   tierDown() {
     if (!this.ready) return;
+    if (this.play('tierdown', 0.7)) return;
     const t = this.ctx!.currentTime;
     this.noise(t, 0.3, 'bandpass', 1400, 1.5, 0.2, 300);
   }
 
   shoulder() {
     if (!this.ready) return;
+    if (this.play('shoulder', 0.85)) return;
     const t = this.ctx!.currentTime;
     this.noise(t, 0.25, 'lowpass', 900, 1, 0.6, 200);
     this.tone(t, 0.3, 140, 60, 0.6);
@@ -205,6 +266,7 @@ export class Audio {
   /** Leap take-off: a heavy grunt of air. */
   leap() {
     if (!this.ready) return;
+    if (this.play('leap', 0.85)) return;
     const t = this.ctx!.currentTime;
     this.noise(t, 0.35, 'bandpass', 400, 1.2, 0.4, 1800);
     this.tone(t, 0.25, 70, 140, 0.4);
@@ -212,12 +274,14 @@ export class Audio {
   /** Impact pass: a dodge, air ripping past (rising then falling, like a car passing close). */
   whoosh() {
     if (!this.ready) return;
+    if (this.play('whoosh', 0.6, 1, 0.08)) return;
     const t = this.ctx!.currentTime;
     this.noise(t, 0.28, 'bandpass', 700, 1.6, 0.45, 2600);
   }
   /** Leap landing: the biggest thump in the game. */
   land() {
     if (!this.ready) return;
+    if (this.play('land', 1)) return;
     const t = this.ctx!.currentTime;
     this.tone(t, 0.6, 55, 22, 1.0);
     this.noise(t, 0.5, 'lowpass', 700, 0.8, 0.8, 120);
@@ -258,6 +322,7 @@ export class Audio {
     const t = this.ctx!.currentTime;
     if (t - this.lastWhip < 0.35) return;
     this.lastWhip = t;
+    if (this.play('cape', 0.25 * intensity, 1, 0.1)) return;
     this.noise(t, 0.18, 'bandpass', 1800, 1.2, 0.12 * intensity, 600);
   }
 
@@ -447,10 +512,12 @@ export class Audio {
         this.noise(t, 0.6, 'lowpass', 300, 1, 0.15, 900);
         break;
       case 'roadblock':
+        if (this.play('roadblock', 0.6)) break;
         this.noise(t, 1.2, 'bandpass', 2600, 6, 0.22, 1800);
         this.noise(t + 0.3, 1.0, 'bandpass', 3100, 7, 0.16, 2000);
         break;
       case 'spike':
+        if (this.play('spike', 0.7)) break;
         for (let k = 0; k < 8; k++) this.noise(t + k * 0.09, 0.05, 'highpass', 4500, 2, 0.12);
         break;
       case 'rolling':
