@@ -694,3 +694,29 @@ html.touch #ticker { right: 0; }
 /* Zoomed pieces right of centre keep their screen-px offset (clear of the pause button at any scale). */
 #bug { right: calc(64px / var(--hs, 1)); }
 #rivals { right: calc(172px / var(--hs, 1)); }
+
+/* B, carried into the cards (recap, Producer's Meeting): white panel, red edge, navy type and buttons,
+   deep-blue pitch cards so the upgrade art sits on the station's blue (no plum-and-cream left over). */
+.card { background: #ffffff; color: var(--b-deep); border-left-color: var(--b-red); }
+#recap .card { border-left-color: var(--b-red); }
+.go { background: var(--b-blue); color: #fff; font-family: var(--b-font); font-stretch: 112%; font-weight: 800; letter-spacing: 0.04em; }
+#recap .go.alt { background: transparent; color: var(--b-blue); border-color: var(--b-blue); }
+#recap h2 { font-family: var(--b-font); font-stretch: 112%; font-weight: 900; color: var(--b-deep); }
+#recap .outcome { font-family: var(--b-font); font-stretch: 125%; background: var(--b-red); }
+#recap .outcome.cleared { background: var(--b-blue); }
+#recap .best { border-left-color: var(--b-red); background: #eef2fb; }
+#recap .best small { color: var(--b-red); }
+#recap .purse b { color: var(--b-red); font-family: var(--b-font); font-stretch: 112%; font-weight: 900; }
+#recap .pitch { background: var(--b-blue); color: #fff; border-color: rgba(255, 255, 255, 0.14); }
+#recap .pitch b { color: #fff; }
+#recap .pitch .said { color: #ffffff; }
+#recap .pitch .blurb { color: var(--b-mute); opacity: 1; }
+#recap .pitch .price { color: #fff; font-family: var(--b-font); font-stretch: 112%; font-weight: 900; }
+#recap .pitch:hover:not(:disabled), #recap .pitch:focus-visible, #recap .pitch:focus { border-color: #fff; box-shadow: 0 0 0 3px var(--b-red); }
+#recap .pitch .need { color: #ff8a96; }
+#recap ul.asks li.done i { color: var(--b-blue); }
+#recap ul.asks li b { color: var(--b-red); }
+#recap .playdata { color: rgba(11, 26, 61, 0.55); }
+/* LIVE band: the coverage label never wraps (it shortens instead). */
+#live #coverage { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; flex-shrink: 1; }
+#live b, #live #clock, #live .dot { flex-shrink: 0; }
