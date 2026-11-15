@@ -18,24 +18,35 @@ async function shoot(file, seeds, match, after) {
     await page.goto(`${URL}?seed=${seed}&step=1&autostart=1&seg=3&cuts=0&debug=0`);
     await page.waitForFunction(() => window.__GAME && window.__GAME.started, null, { timeout: 15000 });
     await page.waitForFunction(() => !window.__GAME.coverage().cold, null, { timeout: 15000 }); // cold open runs on wall-clock time
-    const res = await page.evaluate(([match, after]) => {
-      const G = window.__GAME;
-      G.setBot(true);
-      const test = new Function('e', `return ${match}`);
-      for (let i = 0; i < 160 * 60; i++) {
-        // G.events is a rolling window: take what came after the last event we saw.
-        const last = G.events[G.events.length - 1];
-        G.step(1);
-        const fresh = G.events.slice(G.events.lastIndexOf(last) + 1);
-        const hit = fresh.find((e) => test(e));
-        if (hit) {
-          G.step(after);
-          return { hit, t: G.state().time, chyron: G.chyron() };
+    // Step in short chunks and let a frame render between them, so every unit has its view
+    // before it crashes (a sim stepped with no frames never builds them).
+    await page.evaluate(() => window.__GAME.setBot(true));
+    let res = null;
+    for (let k = 0; k < 160 * 3 && !res; k++) {
+      res = await page.evaluate(([match, after]) => {
+        const G = window.__GAME;
+        const test = new Function('e', `return ${match}`);
+        for (let i = 0; i < 20; i++) {
+          // G.events is a rolling window: take what came after the last event we saw.
+          const last = G.events[G.events.length - 1];
+          G.step(1);
+          const hit = G.events.slice(G.events.lastIndexOf(last) + 1).find((e) => test(e));
+          if (hit) return { hit, at: G.state().time };
+          if (!G.sim.live) return { over: true };
         }
-        if (!G.sim.live) break;
+        return null;
+      }, [match, after]);
+      if (res?.over) res = null, k = Infinity;
+      await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => r())));
+    }
+    if (res) {
+      // Let the aftermath play out with frames, so debris and wrecks are mid-flight.
+      for (let i = 0; i < after; i++) {
+        await page.evaluate(() => window.__GAME.step(1));
+        await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => r())));
       }
-      return null;
-    }, [match, after]);
+      res.chyron = await page.evaluate(() => window.__GAME.chyron());
+    }
     if (res) {
       await page.waitForTimeout(300);
       await page.screenshot({ path: `${OUT}/${file}.png` });
@@ -50,6 +61,6 @@ async function shoot(file, seeds, match, after) {
 
 await shoot('police-chopper-sweep', [4, 7, 11], "e.type === 'tell' && e.kind === 'chopper'", 50);
 await shoot('police-chopper-locked', [4, 7, 11], "e.type === 'spotlight'", 40);
-await shoot('police-crash', [3, 5, 8, 13, 21, 34, 55, 89, 144], "e.type === 'policeCrash'", 9);
+await shoot('police-crash', [3, 5, 8, 13, 21, 34, 55, 89, 144], "e.type === 'policeCrash'", 12);
 await browser.close();
 server.kill();
