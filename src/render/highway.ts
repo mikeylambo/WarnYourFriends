@@ -822,13 +822,14 @@ export class HighwayView {
     const omega = T.bounceHz * Math.PI * 2;
     this.fxTime += dt;
     this.honkCd = Math.max(0, this.honkCd - dt);
+    this.alarmT = Math.max(0, this.alarmT - dt);
     const blink = this.fxTime * 3 % 1 < 0.55;
     for (const c of this.cars.values()) {
       const p = c.prop;
       const ds = p.s - giantS;
       const dd = p.d - giantD;
       const inReach = ds > 0 && Math.abs(dd) < T.lateralReach;
-      if (inReach && ds < T.brakeAt && !c.braking) {
+      if (inReach && ds < (this.alarmT > 0 ? TUNING.gear.trafficAlarmBrakeAt : T.brakeAt) && !c.braking) {
         c.braking = true;
         for (const t of c.tails) {
           t.material = GLOW.brakeHalo;
@@ -863,6 +864,12 @@ export class HighwayView {
   }
 
   // --- Effects ------------------------------------------------------------------
+
+  /** Gear-up: traffic further ahead notices and brakes early for a moment. */
+  private alarmT = 0;
+  alarm() {
+    this.alarmT = TUNING.gear.trafficAlarm;
+  }
 
   /** Debris spray from a smash, biased along `dir` (world). */
   spawnDebris(x: number, z: number, dirX: number, dirZ: number, speed: number, count: number, colors: number[], size: [number, number], height = 1) {

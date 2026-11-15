@@ -331,6 +331,14 @@ export const TUNING = {
     poseSnap: 0.55,
   },
 
+  /**
+   * Gear tells (presentation): the natural speed build has to be seen. The last `buildUp` s before a
+   * gear-up the footfalls swell and tick upward; on the gear-up a shockwave ring, a brief lens punch
+   * (wider FOV, off under Reduced Motion), traffic ahead brakes early, and a tag rides the chyron.
+   * Stride and Rampage kick dust back off every step (particles per footfall by tier).
+   */
+  gear: { buildUp: 1.0, buildRingScale: 0.9, fovPunch: 0.14, fovPunchTime: 0.5, shockRadius: 10, trafficAlarm: 1.6, trafficAlarmBrakeAt: 85, tagTime: 2.4, dustKick: [0, 3, 8] },
+
   /** Footfall presentation (v0.3). */
   footfall: {
     /** 2px camera pulse on every plant. */

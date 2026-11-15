@@ -46,6 +46,7 @@ tools/shots-title.mjs   title screen (desktop, phone, glide)
 tools/filmstrip.mjs     slow-motion strip of an impact (smash-heavy, bounce, bounce-immovable)
 tools/shots-onboarding.mjs  producer tip, live budget, recap and meeting
 tools/shots-police.mjs  Police evidence: chopper spotlight sweep and lock, a police crash
+tools/shots-gear.mjs    Gear tells: build-up, gear-up moment, Rampage dust
 ```
 
 ## Commands

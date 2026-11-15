@@ -148,6 +148,13 @@ export class Audio {
     this.noise(this.ctx!.currentTime, 0.12, 'bandpass', 2400, 3, 0.12);
   }
 
+  /** Gear build-up: a short rising tick on each step of the last second before a gear-up (k 0..1). */
+  gearTick(k: number) {
+    if (!this.ready) return;
+    const t = this.ctx!.currentTime;
+    this.tone(t, 0.09, 420 + k * 520, 520 + k * 700, 0.05 + k * 0.05, 'triangle');
+  }
+
   tierUp(tier: number) {
     if (!this.ready) return;
     const t = this.ctx!.currentTime;

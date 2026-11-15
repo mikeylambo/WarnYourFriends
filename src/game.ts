@@ -43,6 +43,13 @@ const canvas = $<HTMLCanvasElement>('view');
 const flashEl = $('flash');
 const debugEl = $('debug');
 const tierbar = $('tierbar');
+const gearsEl = $('gears');
+const gearPips = [...gearsEl.querySelectorAll('i')] as HTMLElement[];
+const gearName = gearsEl.querySelector('.nm') as HTMLElement;
+const gearTag = $('geartag');
+let gearTagT = 0;
+/** A shockwave waits for the first footfall after a gear-up (it lands with his foot). */
+let gearShockPending = false;
 const tierName = tierbar.querySelector('.name') as HTMLElement;
 const tierMeter = tierbar.querySelector('.meter i') as HTMLElement;
 const touchUi = $('touch-ui');
@@ -716,6 +723,13 @@ function present(e: SimEvent) {
     case 'tierUp': {
       tips.want(e.tier === 1 ? 'stride' : 'rampage');
       rig.tierUpPulse();
+      rig.gearPunch();
+      highway.alarm();
+      gearShockPending = true;
+      // The station notices: a tag rides the chyron (true: he did just speed up).
+      gearTag.textContent = e.tier >= 2 ? 'FULL RAMPAGE' : 'PICKING UP SPEED';
+      gearTag.className = e.tier >= 2 ? 'on rampage' : 'on';
+      gearTagT = TUNING.gear.tagTime;
       audio.tierUp(e.tier);
       giant.onTierUp();
       tierbar.classList.remove('flick');
@@ -1040,7 +1054,23 @@ function frame(now: number) {
     if (gf.plantedNow === 0 || gf.plantedNow === 1) {
       // v0.3 footfall: dust ring, 2px camera pulse, bass thump; Rampage adds a crack decal.
       const f = gf.legs[gf.plantedNow as 0 | 1].foot;
-      highway.ring(f.x, f.z, 1.6 + g.tier * 0.7, PALETTE.dust, 0.5, 0.55);
+      // Gear build-up: the last second before a gear-up, steps swell and tick upward.
+      const G = TUNING.gear;
+      const build = sim.live && sim.tierUpIn <= G.buildUp && sim.tierUpProgress > 0 ? 1 - sim.tierUpIn / G.buildUp : 0;
+      highway.ring(f.x, f.z, (1.6 + g.tier * 0.7) * (1 + build * G.buildRingScale), build > 0 ? 0xfff1d6 : PALETTE.dust, 0.5 + build * 0.3, 0.55);
+      if (build > 0) audio.gearTick(build);
+      if (gearShockPending) {
+        gearShockPending = false;
+        highway.ring(f.x, f.z, G.shockRadius, 0xffffff, 0.6, 0.85);
+        highway.ring(f.x, f.z, G.shockRadius * 0.55, PALETTE.dust, 0.75, 0.7);
+      }
+      // Stride and Rampage kick dust back off every step.
+      const kick = G.dustKick[g.tier];
+      // Out to the side of the planted foot and a little back: straight back would land under the chyron.
+      const side = gf.plantedNow === 0 ? -1 : 1;
+      const kx = -Math.cos(t.travel) * 0.4 - Math.sin(t.travel) * side;
+      const kz = -Math.sin(t.travel) * 0.4 + Math.cos(t.travel) * side;
+      if (kick) highway.spawnDebris(f.x, f.z, kx, kz, 2 + g.tier * 1.5, kick, [0x6e6152, 0x857664, 0x4a4038], [0.16, 0.34 + g.tier * 0.1], 0.4); // darker than the lit pool he runs in
       rig.jolt(TUNING.footfall.pulsePx, TUNING.footfall.pulseTime);
       audio.footfall(g.tier);
       if (g.tier === 2) {
@@ -1312,6 +1342,17 @@ function updateHud(dt: number) {
   const falling = sim.live && sh.ratings < lastRatings - 1e-6;
   trendEl.textContent = falling ? '▼' : '';
   lastRatings = sh.ratings;
+  // Gear pips: filled per gear; the next one fills as he holds top speed (the build, made visible).
+  const prog = sim.tierUpProgress;
+  gearPips.forEach((p, i) => {
+    p.style.setProperty('--fill', i <= g.tier ? '1' : i === g.tier + 1 ? prog.toFixed(3) : '0');
+    p.classList.toggle('filling', i === g.tier + 1);
+    p.classList.toggle('next', i === g.tier + 1 && sim.tierUpIn <= TUNING.gear.buildUp);
+  });
+  gearsEl.dataset.tier = String(g.tier);
+  gearName.textContent = TUNING.tiers[g.tier].name.toUpperCase();
+  gearTagT = Math.max(0, gearTagT - dt);
+  if (gearTagT <= 0 && gearTag.classList.contains('on')) gearTag.className = '';
   heatStars.forEach((el, i) => el.classList.toggle('on', i < sh.heat));
   // Phase 3: segment number and the ability chip (cooldown fills back up).
   segEl.hidden = !run;

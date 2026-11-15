@@ -138,6 +138,23 @@ export class Sim {
     return TUNING.tiers[this.giant.tier];
   }
 
+  /** Progress toward the next gear, 0..1 (0 at top gear): the HUD pip and the build-up cue read it. */
+  get tierUpProgress(): number {
+    const g = this.giant;
+    const t = this.tierTuning;
+    if (!Number.isFinite(t.tierUpAfter)) return 0;
+    const after = t.tierUpAfter * (this.upgrades.has('tailwind') ? TUNING.passives.tailwindTierUp : 1);
+    return clamp(g.tierTimer / after, 0, 1);
+  }
+
+  /** Seconds to the next gear if he keeps it up (Infinity at top gear). */
+  get tierUpIn(): number {
+    const t = this.tierTuning;
+    if (!Number.isFinite(t.tierUpAfter)) return Infinity;
+    const after = t.tierUpAfter * (this.upgrades.has('tailwind') ? TUNING.passives.tailwindTierUp : 1);
+    return Math.max(0, after - this.giant.tierTimer);
+  }
+
   /** A lateral move (lane change, knock-back or wall bump) is in progress. */
   get laneBusy(): boolean {
     return this.giant.move !== null;

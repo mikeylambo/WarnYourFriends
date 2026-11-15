@@ -457,3 +457,19 @@ html:has(#budget:not([hidden])) #gainpop { top: calc(108px + env(safe-area-inset
   #recap .meeting { max-width: 860px; }
   #recap .pitch { --art: 104px; }
 }
+
+/* --- Gear tells: pips over the chyron's left end, a tag riding its right end (sheet style) --- */
+#gears { position: absolute; left: 16px; bottom: calc(68px + env(safe-area-inset-bottom)); display: flex; align-items: center; gap: 3px; padding: 4px 10px 4px 14px; background: rgba(30, 24, 33, 0.78); color: var(--wyf-cream); font: italic 900 11px/1 ui-sans-serif, system-ui, sans-serif; letter-spacing: 0.12em; clip-path: polygon(8px 0, 100% 0, calc(100% - 8px) 100%, 0 100%); }
+#hud.cov1 #gears, #hud.cov2 #gears, #hud.cov3 #gears { bottom: calc(72px + env(safe-area-inset-bottom)); }
+#gears .lbl { font-size: 9px; opacity: 0.7; margin-right: 4px; letter-spacing: 0.2em; }
+#gears i { --fill: 0; position: relative; width: 18px; height: 10px; background: rgba(236, 224, 200, 0.18); clip-path: polygon(4px 0, 100% 0, calc(100% - 4px) 100%, 0 100%); overflow: hidden; }
+#gears i::after { content: ''; position: absolute; inset: 0; transform-origin: left; transform: scaleX(var(--fill)); background: var(--wyf-cream); }
+#gears[data-tier='1'] i::after { background: #f2cc8f; }
+#gears[data-tier='2'] i::after { background: #ff6b4a; }
+#gears i.filling::after { background: rgba(236, 224, 200, 0.55) !important; }
+#gears i.next { animation: gearnext 0.4s steps(2) infinite; } /* 2.5 blinks/s, under the 3/s photosensitivity limit */
+@keyframes gearnext { 50% { background: rgba(255, 241, 214, 0.55); } }
+#gears .nm { margin-left: 6px; min-width: 7ch; }
+#geartag { position: absolute; right: 18px; bottom: calc(100% + 6px); padding: 4px 16px; background: var(--wyf-cream); color: var(--wyf-red); font: italic 900 13px/1 ui-sans-serif, system-ui, sans-serif; letter-spacing: 0.14em; clip-path: polygon(8px 0, 100% 0, calc(100% - 8px) 100%, 0 100%); opacity: 0; transform: translateY(8px); transition: opacity 0.15s, transform 0.2s cubic-bezier(.2,.8,.2,1); pointer-events: none; }
+#geartag.on { opacity: 1; transform: none; }
+#geartag.rampage { background: var(--wyf-red); color: var(--wyf-cream); }

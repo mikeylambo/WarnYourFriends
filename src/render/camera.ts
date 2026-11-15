@@ -289,7 +289,15 @@ export class CameraRig {
   }
 
   private fov(): number {
-    return this.angle.fov;
+    return this.angle.fov * (1 + this.fovKick);
+  }
+
+  /** Gear-up lens punch: briefly wider, easing back (presentation only; off under Reduced Motion). */
+  private fovKick = 0;
+  private fovKickT = 1;
+  gearPunch() {
+    if (this.reducedMotion) return;
+    this.fovKickT = 0;
   }
 
   private applyLens() {
@@ -390,6 +398,12 @@ export class CameraRig {
       this.tierScale = this.tierFrom + (this.tierTo - this.tierFrom) * smoothstep(this.tierT);
     }
     this.pullOut *= Math.exp(-dt / (C.tierUpPullOutTime / 3));
+    if (this.fovKickT < 1) {
+      this.fovKickT = Math.min(1, this.fovKickT + dt / TUNING.gear.fovPunchTime);
+      // Fast out, slow back: a kick, not a zoom.
+      const k = this.fovKickT;
+      this.fovKick = TUNING.gear.fovPunch * Math.min(1, k * 6) * (1 - smoothstep(k));
+    } else this.fovKick = 0;
 
     if (this.swoop) {
       this.updateSwoop(dt, t);
