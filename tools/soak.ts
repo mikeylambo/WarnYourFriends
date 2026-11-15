@@ -52,6 +52,8 @@ const OFF_SEEDS = new Set([7, 77, 177]);
 const swoop = { n: 0, frames: 0, maxLen: 0 };
 const p3 = { segments: [0, 0, 0, 0, 0], uses: {} as Record<string, number>, duds: 0, leapLands: 0, leapSmash: 0, stareMoved: 0, hijackBails: 0, poseGain: 0, maxPose: 0, maxAir: 0 };
 const p2 = { tellsOffscreen: 0, spawns: {} as Record<string, number>, tells: {} as Record<string, number>, minSpawnDist: Infinity, spawnOnCamera: 0, maxTells: 0, ramHits: 0, ramMisses: 0, spotlights: 0, choppersShaken: 0, policeCrash: 0, policeSmash: 0, crashOffscreen: 0, spiked: 0, nearMiss: 0, dodges: 0, lostTrack: 0, maxPin: 0, ends: {} as Record<string, number>, endTime: 0, peak: 0, banked: 0 };
+/** The producer's asks: offered and finished, per ask. */
+const asksAgg: Record<string, { offered: number; done: number }> = {};
 const stepSamples: number[] = [];
 let maxStepMs = 0;
 const t0 = performance.now();
@@ -333,6 +335,11 @@ for (let seed = 1; seed <= seeds; seed++) {
   agg.wallBumps += st.wallBumps;
   agg.laneChanges += st.laneChanges;
   agg.merges += sim.track.segments.filter((s) => s.kind === 'merge').length > 0 ? 1 : 0;
+  for (const x of sim.asks.list) {
+    asksAgg[x.id] ??= { offered: 0, done: 0 };
+    asksAgg[x.id].offered++;
+    if (x.done) asksAgg[x.id].done++;
+  }
 }
 
 const secs = ((performance.now() - t0) / 1000).toFixed(1);
@@ -365,6 +372,7 @@ console.log(
     `rams hit ${p2.ramHits} / missed ${p2.ramMisses}; spotlight locks ${p2.spotlights}, choppers shaken ${p2.choppersShaken}; police crashes ${p2.policeCrash} (${p2.crashOffscreen} outside the frame), ploughed through ${p2.policeSmash}; spiked ${p2.spiked}; near-misses ${p2.nearMiss}; traffic dodges ${p2.dodges}; lost track ${p2.lostTrack}; max Pin ${p2.maxPin.toFixed(0)}`,
 );
 console.log(`  run (Phase 3): segments ${p3.segments.join('/')}; ability uses ${JSON.stringify(p3.uses)}, no-target presses ${p3.duds}; leap landings ${p3.leapLands} (smashed ${p3.leapSmash}); stare pulled over ${p3.stareMoved}; hijack bails ${p3.hijackBails}; pose Ratings +${p3.poseGain.toFixed(0)}`);
+console.log(`  producer's asks (offered → done): ${Object.entries(asksAgg).sort().map(([k, v]) => `${k} ${v.done}/${v.offered}`).join(', ')}`);
 console.log(`  escort: ${esc.joins} joins, nearest join ${esc.minJoinBehind.toFixed(1)}m back, ${esc.joinsOnCamera} on camera; closest gap ever ${esc.minGap.toFixed(2)}m (floor ${TUNING.escort.minGap}m)`);
 if (Object.keys(aheadBy).length) console.log('  road-ahead shortfalls (min s by angle/tier):', JSON.stringify(Object.fromEntries(Object.entries(aheadBy).map(([k, v]) => [k, +v.toFixed(2)]))));
 for (let t = 0; t < 3; t++) {

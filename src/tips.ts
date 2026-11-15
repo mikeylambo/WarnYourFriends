@@ -15,7 +15,7 @@ export const TIP_TEXT: Record<TipId, string> = {
   dozer: 'Bulldozer ahead. Nothing smashes that. Go round.',
   losing: "We're losing them. Smash something.",
   exit: "Exit's open. Take it to sign off.",
-  budget: 'Viewers × gear = budget. Spend it between segments.',
+  budget: 'Stunts and chains pay the budget. Spend it between segments.',
 };
 
 const KEY = 'gal.tips.seen.v1';
@@ -23,7 +23,9 @@ const KEY = 'gal.tips.seen.v1';
 export class Tips {
   private seen = new Set<TipId>();
   private queue: TipId[] = [];
-  private showing: TipId | null = null;
+  private showing: TipId | 'say' | null = null;
+  /** One-off producer lines (asks landing): shown ahead of tips, never remembered. */
+  private says: string[] = [];
   private t = 0;
   private gap = 0;
 
@@ -47,9 +49,15 @@ export class Tips {
     this.queue.push(id);
   }
 
+  /** A one-off line from the producer (not an onboarding tip): shown next, not remembered. */
+  say(text: string) {
+    this.says.push(text);
+  }
+
   /** Drop pending tips and hide (a new broadcast, the menus). */
   clear() {
     this.queue.length = 0;
+    this.says.length = 0;
     this.showing = null;
     this.el.classList.remove('show');
   }
@@ -69,6 +77,16 @@ export class Tips {
       return;
     }
     this.gap = Math.max(0, this.gap - dt);
+    const line = this.says.shift();
+    if (line) {
+      this.showing = 'say';
+      this.t = this.showTime * 0.6;
+      this.el.querySelector('.txt')!.textContent = line;
+      this.el.classList.remove('show');
+      void this.el.offsetWidth;
+      this.el.classList.add('show');
+      return;
+    }
     const next = this.queue.shift();
     if (!next || this.gap > 0) {
       if (next) this.queue.unshift(next);

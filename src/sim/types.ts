@@ -128,6 +128,8 @@ export type SimEvent =
   | { type: 'signOff'; ratings: number; banked: number }
   /** Spectacle chain (Mike's score): a stunt joined the chain. `add` is this stunt's points (before the chain multiplier). */
   | { type: 'chain'; count: number; mult: number; pending: number; add: number; cause: StuntType }
+  /** A producer's ask moved: progress toward `n`; `done` banks `reward`; `failed` is for good. */
+  | { type: 'ask'; id: string; progress: number; n: number; done: boolean; failed: boolean; reward: number }
   /** The chain ended: banked `points` (pending × mult, or × 1 when `dropped`). */
   | { type: 'chainEnd'; count: number; mult: number; points: number; dropped: boolean }
   | { type: 'busted'; reason: BustReason }

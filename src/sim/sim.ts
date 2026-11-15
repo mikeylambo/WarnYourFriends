@@ -5,6 +5,7 @@ import { Track } from './track';
 import { Escort } from './escort';
 import { Show } from './show';
 import { Pursuit } from './pursuit';
+import { Asks } from './asks';
 import type { GainType, GiantState, Prop, SimEvent, SimInput, StuntType, TierDropReason, Unit } from './types';
 
 export const CLASS_RANK: Record<MassClass, number> = { light: 0, medium: 1, heavy: 2, immovable: 3 };
@@ -72,6 +73,8 @@ export class Sim {
   /** Phase 2: Ratings, Heat, Pin and how the segment ends (§12). */
   readonly show = new Show();
   readonly pursuit: Pursuit;
+  /** The producer's asks for this segment (Mike, 2026-11-15). */
+  readonly asks: Asks;
   /** Phase 3: upgrades owned this run, and the one equipped ability (if any). */
   readonly upgrades: Set<UpgradeId>;
   readonly ability: AbilityId | null;
@@ -93,6 +96,7 @@ export class Sim {
     this.upgrades = new Set(opts.upgrades ?? []);
     this.ability = (['leap', 'stare', 'hijack', 'pose'] as AbilityId[]).find((a) => this.upgrades.has(a)) ?? null;
     this.show.startSegment(opts.segment ?? 0);
+    this.asks = new Asks(opts.seed, opts.segment ?? 0, this.track);
     if (this.upgrades.has('showman')) this.show.freshMult = TUNING.passives.showmanFresh;
     if (this.upgrades.has('secondWind')) this.show.pinDrainMult = TUNING.passives.secondWindDrain;
     const lane = Math.floor(TUNING.lanes.start / 2);
@@ -193,6 +197,7 @@ export class Sim {
     this.pursuit.step(dt);
     this.stepExit();
     const outnumbered = this.pursuit.chasing >= TUNING.show.outnumberedAt;
+    for (const a of this.asks.step(dt, this.giant.tier === TUNING.tiers.length - 1, this.events)) this.show.banked += a.reward;
     this.show.stepPin(dt, this.boxedIn(), this.giant.speed, this.events);
     this.show.step(dt, this.time + dt, this.giant.tier, outnumbered, this.events);
     for (const id of this.escort.step(dt, this.time, this.giant)) {
@@ -229,9 +234,23 @@ export class Sim {
     this.emit(e);
   }
 
+  /** Count an event toward the producer's asks; a finished ask banks its reward into the score. */
+  private observeAsks(e: SimEvent) {
+    if (e.type !== 'signOff' && !this.live) return;
+    const unit = e.type === 'smash' && e.propId >= 1_000_000 ? this.pursuit.units.find((u) => u.id === e.propId)?.unit ?? null : null;
+    for (const a of this.asks.observe(e, this.track.segmentAt(this.giant.s).zone, unit, this.events)) this.show.banked += a.reward;
+  }
+
   /** Spectacle: a stunt joins the chain (score; Ratings are separate). */
   private stunt(cause: StuntType, base?: number) {
+    const n = this.events.length;
     this.show.stunt(cause, this.time, this.giant.tier, this.events, base);
+    this.observeShowEvents(n);
+  }
+
+  /** Show pushes its own events (chain, sign-off); the asks count them too. */
+  private observeShowEvents(from: number) {
+    for (const e of this.events.slice(from)) if (e.type === 'chain' || e.type === 'signOff') this.observeAsks(e);
   }
 
   /** §12 gain, with "outnumbered" applied. */
@@ -302,7 +321,9 @@ export class Sim {
     if (this.exit && g.s >= this.exit.gore) {
       const lanes = this.track.lanesAt(this.exit.gore);
       if (g.lane === lanes - 1 && g.move !== 'wallBump') {
+        const n = this.events.length;
         this.show.clear(this.events);
+        this.observeShowEvents(n);
         return;
       }
       this.emit({ type: 'exitMissed', s: this.exit.gore });
@@ -333,6 +354,7 @@ export class Sim {
 
   private emit(e: SimEvent) {
     this.events.push(e);
+    this.observeAsks(e);
     const st = this.stats;
     switch (e.type) {
       case 'smash': {

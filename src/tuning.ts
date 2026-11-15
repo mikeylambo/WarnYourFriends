@@ -367,6 +367,32 @@ export const TUNING = {
     maxMult: 6,
   },
 
+  /**
+   * The producer's asks (Mike, 2026-11-15): each segment opens with `perSegment` seeded requests from
+   * this pool; finishing one banks `reward` points straight into the score (not the chain). `n` is the
+   * target; `fromSegment` holds an ask back until later segments; `zone` asks are only offered when
+   * that kind of road comes up within `zoneLookahead` m (so every ask is possible). Text is the
+   * producer's line ({n} is the target).
+   */
+  asks: {
+    perSegment: 3,
+    zoneLookahead: 1500,
+    pool: [
+      { id: 'units', text: 'Flatten {n} police cars', n: 6, reward: 30000 },
+      { id: 'crash', text: 'Get a police car to crash', n: 1, reward: 30000 },
+      { id: 'roadblock', text: 'Smash through a roadblock', n: 1, reward: 25000 },
+      { id: 'chain', text: 'Chain {n} stunts', n: 12, reward: 35000 },
+      { id: 'across', text: '{n} smashes across lanes', n: 8, reward: 25000 },
+      { id: 'heavy', text: 'Flatten {n} cars or vans', n: 15, reward: 20000 },
+      { id: 'bridge', text: 'Smash {n} things on the bridge', n: 4, reward: 25000, zone: 'bridge' },
+      { id: 'tunnel', text: 'Smash {n} things in the tunnel', n: 4, reward: 25000, zone: 'tunnel' },
+      { id: 'chopper', text: 'Shake the police chopper', n: 1, reward: 25000, fromSegment: 1 },
+      { id: 'dodge', text: "Dodge a cruiser's swerve", n: 1, reward: 20000 },
+      { id: 'clean', text: 'Sign off without a bounce', n: 1, reward: 35000 },
+      { id: 'rampage', text: 'Hold Rampage for {n} seconds', n: 60, reward: 25000 },
+    ] as { id: string; text: string; n: number; reward: number; zone?: 'bridge' | 'tunnel' | 'avenue'; fromSegment?: number }[],
+  },
+
   /** Footfall presentation (v0.3). */
   footfall: {
     /** 2px camera pulse on every plant. */

@@ -117,14 +117,15 @@ describe('spectacle chain (Mike, 2026-11-15)', () => {
     expect(Show.chainMult(999)).toBe(C.maxMult);
   });
 
-  it('a bot broadcast banks points only through chains, and the score spreads with play', () => {
+  it('a bot broadcast banks points only through chains and asks, and the score spreads with play', () => {
     const scores: number[] = [];
     for (const seed of [1, 2, 3, 4, 5, 6]) {
       const sim = new Sim({ seed });
       const bot = new Bot(sim);
       let fromChains = 0;
       while (sim.live && sim.time < 200) for (const e of sim.step(bot.input())) if (e.type === 'chainEnd') fromChains += e.points;
-      expect(sim.show.banked).toBe(fromChains);
+      // Score = chains + the producer's asks that landed.
+      expect(sim.show.banked).toBe(fromChains + sim.asks.list.reduce((n, x) => n + (x.done ? x.reward : 0), 0));
       scores.push(sim.show.banked);
     }
     expect(Math.max(...scores)).toBeGreaterThan(Math.min(...scores) * 1.2);

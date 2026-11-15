@@ -220,7 +220,7 @@ try {
         const r = await page.evaluate(() => window.__GAME.silhouette());
         // Diagnostic: the nearest police car (a dark car beside him is in the surround the contrast is measured against).
         const near = await page.evaluate(() => { const G = window.__GAME.sim; let m = Infinity; for (const u of G.pursuit.units) if (u.alive && u.solid) m = Math.min(m, Math.hypot(u.s - G.giant.s, u.d - G.giant.d)); return m; });
-        const line = `${look}/${['Chase High', 'Wide Side', 'Long Lens', 'Head-On', 'High Head-On', 'Overhead'][a]}: ${r.heightPx.toFixed(0)}px tall, contrast ${r.contrast.toFixed(2)}:1 (${r.polarity}), edge ${(r.edgeShare * 100).toFixed(0)}%${near < 12 ? `, police car ${near.toFixed(1)}m away` : ''}`;
+        const line = `${look}/${['Chase High', 'Wide Side', 'Long Lens', 'Head-On', 'High Head-On', 'Overhead'][a]}: ${r.heightPx.toFixed(0)}px tall, contrast ${r.contrast.toFixed(2)}:1 (${r.polarity}; giant ${r.giantLuma.toFixed(3)}, surround ${r.surroundLuma.toFixed(3)}), edge ${(r.edgeShare * 100).toFixed(0)}%${near < 12 ? `, police car ${near.toFixed(1)}m away` : ''}`;
         if (!r.pass) fail(`silhouette ${line}`);
         else ok(`silhouette ${line}`);
       }

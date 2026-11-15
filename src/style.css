@@ -508,3 +508,24 @@ html.replay #chyron:has(.text.empty) { visibility: hidden; }
 #chain.dropped { animation: chaindrop 0.35s steps(4) 1; }
 @keyframes chaindrop { 25% { transform: translateX(-4px); } 75% { transform: translateX(4px); } }
 #chain[hidden] { display: none; }
+
+/* --- The producer's asks (right side, below the desk window; sheet style) ------------------------- */
+#asks { position: absolute; right: 12px; top: calc(232px + env(safe-area-inset-top)); width: min(230px, 46vw); color: var(--wyf-cream); font: 700 12px/1.25 ui-sans-serif, system-ui, sans-serif; pointer-events: none; }
+#asks .hd { display: inline-block; background: var(--wyf-red); font: italic 900 10px/1 ui-sans-serif, system-ui, sans-serif; letter-spacing: 0.18em; padding: 4px 12px 3px 10px; clip-path: polygon(0 0, 100% 0, calc(100% - 6px) 100%, 0 100%); }
+#asks ol { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+#asks li { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; background: rgba(30, 24, 33, 0.78); padding: 5px 9px; }
+#asks li b { font-variant-numeric: tabular-nums; color: #f2cc8f; white-space: nowrap; }
+#asks li.done { opacity: 0.55; }
+#asks li.done span { text-decoration: line-through; }
+#asks li.done b { color: #7dffb0; }
+#asks li.failed { opacity: 0.4; }
+#asks li.failed b { color: #ff6b6b; }
+#asks li.flash { animation: askflash 0.5s steps(2) 2; }
+@keyframes askflash { 50% { background: var(--wyf-red); opacity: 1; } }
+html.replay #asks { visibility: hidden; }
+#recap ul.asks { list-style: none; margin: 8px 0; padding: 0; display: grid; gap: 3px; font-size: 13px; }
+#recap ul.asks li { display: flex; gap: 8px; align-items: baseline; opacity: 0.55; }
+#recap ul.asks li.done { opacity: 1; font-weight: 700; }
+#recap ul.asks li i { font-style: normal; width: 1.2em; color: #d7263d; }
+#recap ul.asks li.done i { color: #1e6b3a; }
+#recap ul.asks li b { margin-left: auto; color: #8a4b0f; font-variant-numeric: tabular-nums; }

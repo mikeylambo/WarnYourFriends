@@ -44,6 +44,24 @@ const flashEl = $('flash');
 const debugEl = $('debug');
 const tierbar = $('tierbar');
 const gearsEl = $('gears');
+const asksEl = $('asks');
+const asksList = asksEl.querySelector('ol') as HTMLElement;
+/** Draw the producer's asks (on a new broadcast and whenever one moves). */
+function renderAsks() {
+  asksList.replaceChildren(
+    ...sim.asks.list.map((a) => {
+      const li = document.createElement('li');
+      li.className = a.done ? 'done' : a.failed ? 'failed' : '';
+      li.dataset.id = a.id;
+      const txt = document.createElement('span');
+      txt.textContent = a.text;
+      const pr = document.createElement('b');
+      pr.textContent = a.done ? '✓' : a.failed ? '✕' : a.n > 1 ? `${a.progress}/${a.n}` : '';
+      li.append(txt, pr);
+      return li;
+    }),
+  );
+}
 const chainEl = $('chain');
 const chainMult = chainEl.querySelector('.mult') as HTMLElement;
 const chainStunt = chainEl.querySelector('.stunt') as HTMLElement;
@@ -241,6 +259,7 @@ function newRun(seed: number, segment = 0, upgrades: UpgradeId[] = []) {
   triggerLog.length = 0;
   chyKicker.textContent = 'SPOTTED';
   chyText.innerHTML = '<span>&nbsp;</span>';
+  renderAsks();
   scene.add(highway.group, cruisers.group, units.group, ...giant.objects);
   giant.reset();
   const g = sim.giant;
@@ -483,6 +502,7 @@ function showRecap() {
       ${runStatsHtml}
       ${!run && lastBest ? `<span>Best score <b>${lastBest.bestBanked.toLocaleString()}</b></span><span>Signed off <b>${lastBest.signOffs} / ${lastBest.broadcasts}</b></span>` : ''}
     </div>
+    ${sim.asks.list.length ? `<ul class="asks">${sim.asks.list.map((a) => `<li class="${a.done ? 'done' : ''}"><i>${a.done ? '✓' : '✕'}</i>${esc(a.text)}${a.done ? `<b>+${a.reward.toLocaleString()}</b>` : ''}</li>`).join('')}</ul>` : ''}
     <p class="anchor">${esc(anchorLine)}</p>
     <div class="row">${buttons}</div>
     <div class="padhint"></div>
@@ -727,6 +747,15 @@ function present(e: SimEvent) {
       rig.jolt(TUNING.impact.heavy.shake, TUNING.camera.joltTime);
       flash(TUNING.impact.heavy.flashFrames);
       haptic(120, 0.8);
+      break;
+    }
+    case 'ask': {
+      renderAsks();
+      if (e.done) {
+        tips.say(`That's the shot. +${e.reward.toLocaleString()}`);
+        audio.chainEnd(4, false);
+        asksList.querySelector(`[data-id="${e.id}"]`)?.classList.add('flash');
+      }
       break;
     }
     case 'chain': {
