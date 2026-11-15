@@ -387,3 +387,50 @@ html:has(#budget:not([hidden])) #gainpop { top: calc(108px + env(safe-area-inset
 #recap .meeting .how { font-size: 13px; opacity: 0.75; margin: 4px 0 10px; }
 #recap .pitch .need { display: block; font-size: 11px; font-weight: 700; color: #d7263d; margin-top: 2px; }
 #recap .stats .how { grid-column: 1 / -1; font-size: 12px; opacity: 0.7; }
+
+/* --- Broadcast package from Mike's sheet (docs/refs/broadcast-and-upgrades-sheet.webp) -------------
+   Rebuilt as CSS shapes, not the raster: slanted parallelograms, heavy italic caps, the sheet's
+   red / ink / purple / cream. Crisp at any size, no fringing. ------------------------------------- */
+:root { --wyf-red: #ab2530; --wyf-ink: #1e1821; --wyf-purple: #4b2a63; --wyf-cream: #ece0c8; --wyf-blue: #465a7a; --slant: 12px; }
+#live b, #live #clock, #live #segno, #live #coverage {
+  font-style: italic; font-weight: 900;
+  clip-path: polygon(var(--slant) 0, 100% 0, calc(100% - var(--slant)) 100%, 0 100%);
+  padding-left: calc(8px + var(--slant) * 0.6); padding-right: calc(8px + var(--slant) * 0.6);
+}
+#live { gap: 0; }
+#live .dot { margin-right: 6px; }
+#live b { background: var(--wyf-red); color: var(--wyf-cream); box-shadow: none; font-size: 15px; letter-spacing: 0.06em; }
+#live #clock, #live #segno, #live #coverage { background: rgba(30, 24, 33, 0.82); color: var(--wyf-cream); margin-left: -4px; }
+#live #clock.count { background: #1e6b3a; }
+/* Station bug: WYF / NEWS on ink, the 6 on purple, one slanted block. */
+#bug { opacity: 0.9; filter: drop-shadow(0 3px 8px rgba(0, 0, 0, 0.45)); }
+#bug .call { order: 0; background: var(--wyf-ink); color: var(--wyf-cream); font-style: italic; font-weight: 900; font-size: 19px; letter-spacing: 0.02em; padding: 5px 6px 4px 18px; clip-path: polygon(12px 0, 100% 0, 100% 100%, 0 100%); }
+#bug .call i { color: var(--wyf-cream); font-size: 9px; letter-spacing: 0.18em; display: flex; align-items: center; gap: 4px; }
+#bug .call i::before { content: ''; width: 16px; height: 3px; background: var(--wyf-red); }
+#bug .ch { order: 1; background: var(--wyf-purple); color: var(--wyf-cream); font-style: italic; font-size: 30px; padding: 2px 12px 0 6px; clip-path: polygon(0 0, 100% 0, calc(100% - 10px) 100%, 0 100%); }
+/* Chyron: red kicker + cream field, slanted ends. */
+#chyron { box-shadow: none; filter: drop-shadow(0 6px 16px rgba(0, 0, 0, 0.45)); }
+#chyron .kicker { background: var(--wyf-red); color: var(--wyf-cream); font-style: italic; padding: 0 14px 0 calc(14px + var(--slant)); clip-path: polygon(var(--slant) 0, 100% 0, 100% 100%, 0 100%); }
+#chyron .kicker.breaking { background: var(--wyf-cream); color: var(--wyf-red); }
+#chyron .kicker.busted { background: var(--wyf-red); }
+#chyron .kicker.signoff { background: var(--wyf-purple); }
+#chyron .text { background: rgba(236, 224, 200, 0.97); color: var(--wyf-ink); clip-path: polygon(0 0, 100% 0, calc(100% - var(--slant)) 100%, 0 100%); }
+#breaking { background: var(--wyf-red); color: var(--wyf-cream); font-style: italic; box-shadow: none; clip-path: polygon(18px 0, 100% 0, calc(100% - 18px) 100%, 0 100%); }
+.card .kicker, #recap .kicker { font-style: italic; clip-path: polygon(8px 0, 100% 0, calc(100% - 8px) 100%, 0 100%); padding-left: 14px; padding-right: 14px; }
+/* Producer's Meeting cards: the sheet's art up top, the producer's line, then what it does. */
+#recap .pitch { padding: 0 0 12px; overflow: hidden; }
+#recap .pitch > :not(.art) { margin-left: 12px; margin-right: 12px; }
+#recap .pitch .art { position: relative; display: block; width: 100%; aspect-ratio: 16 / 10; overflow: hidden; background: #191230; }
+#recap .pitch .art img { width: 100%; height: 100%; object-fit: cover; display: block; }
+#recap .pitch .art .tag { position: absolute; left: 8px; top: 8px; font-style: italic; font-weight: 900; clip-path: polygon(5px 0, 100% 0, calc(100% - 5px) 100%, 0 100%); padding: 3px 9px; background: var(--wyf-ink); color: var(--wyf-cream); }
+#recap .pitch.ability .art .tag { background: var(--wyf-red); }
+#recap .pitch.passive .art .tag { background: var(--wyf-purple); }
+#recap .pitch .said { font-size: 13px; font-style: italic; color: var(--wyf-cream); line-height: 1.35; quotes: '“' '”'; }
+#recap .pitch .blurb { font-size: 12px; opacity: 0.7; }
+#recap .pitch:disabled .art img { filter: grayscale(0.7); }
+/* Ability chip and touch button carry the art. */
+#abil .ic { width: 34px; height: 34px; object-fit: cover; margin: -2px 0 -2px -4px; border: 1px solid rgba(236, 224, 200, 0.35); }
+#abil:not(.ready) .ic { filter: grayscale(0.8) brightness(0.7); }
+#btn-ability { background-size: cover; background-position: center; color: var(--wyf-cream); text-shadow: 0 1px 3px #000; display: grid; align-items: end; padding-bottom: 6px; }
+#btn-ability:not(.ready) { filter: grayscale(0.8); }
+#btn-ability.ready { background-color: transparent; color: var(--wyf-cream); box-shadow: 0 0 0 3px #f2cc8f; }

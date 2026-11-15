@@ -560,15 +560,15 @@ export const TUNING = {
    * segment affords the cheaper half; saving up for Leap/Hijack is a real choice.
    */
   upgrades: {
-    leap: { kind: 'ability', price: 26000, label: 'Leap', blurb: 'Hop lanes of trouble. The landing flattens what you land on.' },
-    stare: { kind: 'ability', price: 21000, label: 'The Stare', blurb: 'Traffic and police ahead pull out of your lane.' },
-    hijack: { kind: 'ability', price: 30000, label: 'Hijack Hop', blurb: 'Ride a car through everything, then bail at Rampage.' },
-    pose: { kind: 'ability', price: 21000, label: 'Pose for the Camera', blurb: 'Stop for the cameras. Heat becomes a Ratings spike.' },
-    ironShins: { kind: 'passive', price: 17000, label: 'Iron Shins', blurb: 'Medium objects never bounce you.' },
-    secondWind: { kind: 'passive', price: 17000, label: 'Second Wind', blurb: 'The box-in meter drains 50% faster.' },
-    showman: { kind: 'passive', price: 22000, label: 'Showman', blurb: 'Something new on air pays double.' },
-    tailwind: { kind: 'passive', price: 19000, label: 'Tailwind', blurb: 'Tier up 30% sooner.' },
-  } as Record<UpgradeId, { kind: 'ability' | 'passive'; price: number; label: string; blurb: string }>,
+    leap: { kind: 'ability', price: 26000, label: 'Leap', blurb: 'Hop lanes of trouble. The landing flattens what you land on.', pitch: 'Get a clean shot of him clearing the spike strip.' },
+    stare: { kind: 'ability', price: 21000, label: 'The Stare', blurb: 'Traffic and police ahead pull out of your lane.', pitch: 'Stay tight on the eyes. We have time.' },
+    hijack: { kind: 'ability', price: 30000, label: 'Hijack Hop', blurb: 'Ride a car through everything, then bail at Rampage.', pitch: 'Follow him across the car roofs. Keep it wide.' },
+    pose: { kind: 'ability', price: 21000, label: 'Pose for the Camera', blurb: 'Stop for the cameras. Heat becomes a Ratings spike.', pitch: 'Hold the close-up. He’s giving us a usable still.' },
+    ironShins: { kind: 'passive', price: 17000, label: 'Iron Shins', blurb: 'Medium objects never bounce you.', pitch: 'Keep rolling. The street furniture won’t slow him down.' },
+    secondWind: { kind: 'passive', price: 17000, label: 'Second Wind', blurb: 'The box-in meter drains 50% faster.', pitch: 'Stay with him. He’s slipping out of the box-in faster.' },
+    showman: { kind: 'passive', price: 22000, label: 'Showman', blurb: 'Something new on air pays double.', pitch: 'Double the variety bonus when he gives us something we haven’t aired.' },
+    tailwind: { kind: 'passive', price: 19000, label: 'Tailwind', blurb: 'Tier up 30% sooner.', pitch: 'Cue the wide shot. He’s hitting the next speed tier 30% sooner.' },
+  } as Record<UpgradeId, { kind: 'ability' | 'passive'; price: number; label: string; blurb: string; /** The producer's line on the meeting card (flavour). */ pitch: string }>,
 
   /** Phase 3 abilities (lane-runner versions of §17's pool). 5f input buffer (§8). */
   abilities: {

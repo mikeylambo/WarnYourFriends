@@ -23,6 +23,7 @@ import { Input } from './input';
 import { registerGlyphs, padFamily, type GlyphAction } from './glyphs';
 import { Tips } from './tips';
 import coverUrl from './assets/title-cover.webp';
+import { UPGRADE_ART } from './upgradeArt';
 import { readFlags } from './debug';
 import { loadSettings, saveSettings } from './settings';
 import { applyStoredTuning, mountTuningPanel } from './tuningPanel';
@@ -61,6 +62,7 @@ const signoffArrow = signoffEl.querySelector('.arrow') as HTMLElement;
 const segEl = $('segno');
 const abilEl = $('abil');
 const abilName = abilEl.querySelector('.nm') as HTMLElement;
+const abilIcon = abilEl.querySelector('.ic') as HTMLImageElement;
 const abilKey = abilEl.querySelector('.key') as HTMLElement;
 const abilCd = abilEl.querySelector('.cd i') as HTMLElement;
 const abilBtn = $<HTMLButtonElement>('btn-ability');
@@ -390,8 +392,8 @@ function showMeeting() {
         const u = TUNING.upgrades[id];
         const swap = u.kind === 'ability' && held ? `<small class="swap">Replaces ${esc(TUNING.upgrades[held].label)}</small>` : '';
         return `<button class="pitch ${u.kind}" data-id="${id}" ${r.canAfford(id) ? '' : 'disabled'}>
-          <span class="tag">${u.kind === 'ability' ? 'ABILITY' : 'PASSIVE'}</span>
-          <b>${esc(u.label)}</b><span class="blurb">${esc(u.blurb)}</span>${swap}<span class="price">${u.price.toLocaleString()}</span>${r.canAfford(id) ? '' : `<small class="need">Need ${(u.price - r.purse).toLocaleString()} more</small>`}</button>`;
+          <span class="art"><img src="${UPGRADE_ART[id]}" alt="" /><span class="tag">${u.kind === 'ability' ? 'ABILITY' : 'PASSIVE'}</span></span>
+          <b>${esc(u.label)}</b><q class="said">${esc(u.pitch)}</q><span class="blurb">${esc(u.blurb)}</span>${swap}<span class="price">${u.price.toLocaleString()}</span>${r.canAfford(id) ? '' : `<small class="need">Need ${(u.price - r.purse).toLocaleString()} more</small>`}</button>`;
       })
       .join('')}</div>
     <div class="row"><button class="go alt" id="skip">Skip</button></div>
@@ -476,6 +478,8 @@ function recapToMenu() {
 function showHeadline(h: Headline) {
   chyKicker.textContent = h.kicker;
   chyKicker.classList.toggle('breaking', h.breaking);
+  chyKicker.classList.toggle('busted', h.kicker === 'BUSTED');
+  chyKicker.classList.toggle('signoff', h.kicker === 'SIGN-OFF');
   const span = document.createElement('span');
   span.textContent = h.text;
   span.className = 'in';
@@ -1320,6 +1324,8 @@ function updateHud(dt: number) {
     const label = TUNING.upgrades[ab].label;
     if (abilName.textContent !== label) {
       abilName.textContent = label;
+      abilIcon.src = UPGRADE_ART[ab];
+      abilBtn.style.backgroundImage = `url(${UPGRADE_ART[ab]})`;
       abilBtn.textContent = label.split(' ')[0].toUpperCase().slice(0, 5);
       abilBtn.setAttribute('aria-label', label);
     }
