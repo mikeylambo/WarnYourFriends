@@ -408,7 +408,8 @@ export class Sim {
     const gore = seg.s0 + X.goreAt;
     const lane = this.track.lanesAt(gore) - 1;
     const c = this.track.laneCenter(lane);
-    for (const p of this.track.propsBetween(gore - X.exitClear, gore + 6)) if (Math.abs(p.d - c) < p.hw + 1.2) p.alive = false;
+    // Clear the exit lane up to the gore and on past it while the ramp pulls away (he crosses it on the way out).
+    for (const p of this.track.propsBetween(gore - X.exitClear, gore + X.exitClearAfter)) if (Math.abs(p.d - c) < p.hw + 1.2) p.alive = false;
     this.exit = { s: seg.s0, gore, segment: seg.index, lane };
     this.emit({ type: 'exitOpen', s: gore, segment: seg.index, lane });
   }
@@ -822,7 +823,10 @@ export class Sim {
       // that swerved into him shoves him sideways instead (knock-back below), no jump back.
       const unit = (p as Unit).unit;
       const moving = unit === 'cruiser' || unit === 'rolling';
-      if (!moving && g.s < p.s) g.s = Math.min(g.s, p.s - p.hl - Math.sqrt(Math.max(0, r * r - dd * dd)) - 0.01);
+      // Only a head-on hit pushes him back along the road. A side-on one (a lane change into it) knocks him
+      // sideways only: pushing him back too let repeated attempts stall him (Law 1: he never stops).
+      const headOn = Math.abs(g.d - p.d) < p.hw + r * 0.5;
+      if (!moving && headOn && g.s < p.s) g.s = Math.min(g.s, p.s - p.hl - Math.sqrt(Math.max(0, r * r - dd * dd)) - 0.01);
       if (unit) (p as Unit).hit = true;
       p.judged = true; // touched it: never a dodge
       if (g.stumble > 0 || g.move === 'knock') continue; // already reeling: no double penalty

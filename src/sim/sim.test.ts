@@ -237,6 +237,18 @@ describe('smash-across and unsmashable hits (v0.3)', () => {
     expect(sim.giant.stumble).toBe(0);
   });
 
+  it('steering into a blocked lane over and over never stalls him (Law 1)', () => {
+    const sim = emptySim();
+    setTier(sim, 0);
+    const lane = sim.giant.lane;
+    // A long wall of heavy cars in the next lane: every lane change into it bounces him back.
+    for (let k = 0; k < 12; k++) placeProp(sim, 'car', 'heavy', sim.giant.s + 4 + k * 4.4, lane - 1).hl = 2.2;
+    const s0 = sim.giant.s;
+    for (let i = 0; i < 4 * HZ; i++) sim.step({ ...NO_INPUT, lane: i % 20 === 0 ? -1 : 0 });
+    expect(sim.stats.bounces).toBeGreaterThan(3);
+    expect(sim.giant.s - s0).toBeGreaterThan(TUNING.giant.speedFloor * 4 * 0.75);
+  });
+
   it('Shoulder Check lifts the smash class by one (Stride vs heavy, head-on)', () => {
     const sim = emptySim();
     setTier(sim, 1);

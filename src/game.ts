@@ -250,6 +250,7 @@ function newRun(seed: number, segment = 0, upgrades: UpgradeId[] = []) {
   moment = null;
   highway = new HighwayView(sim);
   highway.onHonk = (v) => audio.honk(v);
+  highway.onBrush = () => audio.scrape();
   giant = new GiantView();
   gait = new Gait();
   director = new Director(seed);
@@ -692,11 +693,11 @@ function present(e: SimEvent) {
       break;
     case 'exitOpen':
       tips.want('exit');
-      highway.rebuild([e.segment - 1, e.segment, e.segment + 1]);
+      highway.rebuild([e.segment - 1, e.segment, e.segment + 1, e.segment + 2]);
       break;
     case 'forkOpen':
       // The ramp opens on segments already built ahead; the producer calls it.
-      highway.rebuild([e.segment - 1, e.segment, e.segment + 1]);
+      highway.rebuild([e.segment - 1, e.segment, e.segment + 1, e.segment + 2]);
       tips.say(`Exit for ${e.name} coming up. Right lane takes it.`);
       break;
     case 'fork':
@@ -877,9 +878,16 @@ function present(e: SimEvent) {
     case 'shoulder': {
       giant.onShoulder();
       audio.shoulder();
-      sim.track.posAt(e.s + 2, e.d, pos);
-      highway.ring(pos.x, pos.z, 6, 0xffffff, 0.35, 0.8);
-      rig.jolt(2, 0.1);
+      // The charge: a shockwave wedge thrown ahead of him (three rings marching forward), dust off the
+      // shoulder line, a jolt and a small lens punch.
+      for (const [ahead, size, op] of [[2, 6, 0.8], [5, 4.5, 0.6], [8, 3, 0.45]] as const) {
+        sim.track.posAt(e.s + ahead, e.d, pos);
+        highway.ring(pos.x, pos.z, size, 0xffffff, 0.3 + ahead * 0.02, op);
+      }
+      sim.track.posAt(e.s + 1.5, e.d, pos);
+      highway.spawnDebris(pos.x, pos.z, Math.cos(h), Math.sin(h), g.speed + 6, 12, [PALETTE.dust, 0xb8ad9c, 0xf1f1ee], [0.12, 0.32], 1.4);
+      rig.gearPunch();
+      rig.jolt(3, 0.12);
       haptic(80, 0.5);
       break;
     }
@@ -968,6 +976,7 @@ function startReplay(done: () => void) {
   sim = rs;
   highway = new HighwayView(rs);
   highway.onHonk = (v) => audio.honk(v);
+  highway.onBrush = () => audio.scrape();
   gait = new Gait();
   cruisers = new CruiserView(rs);
   cruisers.reduceFlashes = settings.reduceFlashes;

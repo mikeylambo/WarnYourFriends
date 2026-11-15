@@ -109,6 +109,8 @@ export class GiantView {
   private lean = 0;
   private bank = 0;
   private shoulderAnim = 0;
+  /** Shoulder Check: how far the hips drop into the charge (m). */
+  private shoulderDrop = 0;
   private tierFlare = 0;
   private stumbleWobble = 0;
   private smashKick = 0;
@@ -331,19 +333,27 @@ export class GiantView {
     this.root.position.set(p.x, lift, p.z);
     this.legs.position.y = lift;
     this.root.rotation.y = -p.heading;
-    this.hips.position.y = gait.hipY;
+    this.hips.position.y = gait.hipY - this.shoulderDrop;
     this.shadow.position.set(p.x + 0.4, 0.07, p.z + 0.4);
     // Off the ground (Leap): the shadow shrinks and fades, so height reads from straight above.
     const air = p.leap ? Math.min(1, lift / 4) : 0;
     this.shadow.scale.setScalar(3.2 * (1 - 0.45 * air)).setY(1);
     (this.shadow.material as THREE.MeshBasicMaterial).opacity = 1 - 0.5 * air;
 
-    // Low, forward-driving lean; more while braking upright; shoulder windup then lunge.
-    this.shoulderAnim = Math.max(0, this.shoulderAnim - dt / 0.35);
+    // Shoulder Check: wind-up (turn away, drop), drive (pauldron leads, deep lean), recover.
+    const SA = TUNING.shoulderAnim;
+    this.shoulderAnim = Math.max(0, this.shoulderAnim - dt / SA.time);
     const sh = this.shoulderAnim;
-    const shoulderLean = sh > 0.85 ? ((1 - sh) / 0.15) * 0.35 : sh * 0.35;
+    const u = 1 - sh; // 0 → 1 through the move
+    const ease = (x: number) => x * x * (3 - 2 * x);
+    // Weights: wind-up rises then hands over to the drive; the drive holds, then eases out.
+    const wind = sh > 0 ? (u < SA.windup ? ease(u / SA.windup) : Math.max(0, 1 - (u - SA.windup) / 0.08)) : 0;
+    const drive = sh > 0 ? (u < SA.windup ? 0 : u < SA.strikeEnd ? ease(Math.min(1, (u - SA.windup) / 0.1)) : 1 - ease((u - SA.strikeEnd) / (1 - SA.strikeEnd))) : 0;
+    const shoulderTwist = wind * SA.twistBack + drive * SA.twistDrive;
+    const shoulderLean = wind * SA.leanBack + drive * SA.leanDrive;
+    this.shoulderDrop = (wind * 0.6 + drive) * SA.drop;
     const targetLean = (T.leanDeg * Math.PI) / 180 + (p.braking ? -0.3 : 0) + shoulderLean;
-    this.lean += (targetLean - this.lean) * k(0.12);
+    this.lean += (targetLean - this.lean) * k(sh > 0 ? 0.03 : 0.12); // the charge snaps in
     // Bank into a lane change (roll about the forward axis).
     const targetBank = -p.lateralVel * 0.025;
     this.bank += (targetBank - this.bank) * k(0.08);
@@ -360,7 +370,7 @@ export class GiantView {
     this.recoil = Math.max(0, this.recoil - dt / 0.4);
     const kick = Math.sin(Math.PI * this.smashKick) * this.smashKick;
     const rec = Math.sin(Math.PI * Math.min(1, this.recoil * 1.2)) * this.recoil;
-    this.torso.rotation.set(this.bank + wob + kick * 0.3 * this.smashSide, twist + (sh > 0 ? -0.5 * sh : 0) - kick * 0.35 * this.smashSide, -this.lean - kick * 0.18 + rec * 0.55);
+    this.torso.rotation.set(this.bank + wob + kick * 0.3 * this.smashSide, twist * (1 - drive) + shoulderTwist - kick * 0.35 * this.smashSide, -this.lean - kick * 0.18 + rec * 0.55);
     this.hips.rotation.set(this.bank * 0.4, -twist * 0.5, -this.lean * 0.2);
 
     // Head steady: counter the lean and most of the plant drop so the eyes stay level.
@@ -390,8 +400,12 @@ export class GiantView {
       this.torso.rotation.z += this.lean * po * 0.8; // stand up for it
     }
     if (sh > 0) {
-      this.armL.rotation.set(0.6 * sh, 0, 0.9 * sh);
-      this.elbowL.rotation.set(0, 0, 0.3 * (1 - sh));
+      // The pauldron arm tucks across the chest (elbow folded hard); the other is flung back for drive.
+      const w = Math.max(wind * 0.5, drive);
+      this.armL.rotation.set(SA.armTuck * w, 0, 0.5 * w + aL * (1 - w));
+      this.elbowL.rotation.set(0, 0, 2.0 * w + this.elbowL.rotation.z * (1 - w));
+      this.armR.rotation.set(-0.3 * w, 0, -SA.armFling * drive + aR * (1 - drive));
+      this.elbowR.rotation.set(0, 0, 0.4 * w + this.elbowR.rotation.z * (1 - w));
     }
 
     this.root.updateMatrixWorld(true);

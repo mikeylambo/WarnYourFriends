@@ -205,7 +205,9 @@ export class Track {
   /** Can the sign-off ramp leave from this segment? (Not a merge; not into or out of a tunnel; not a fork.) */
   exitEligible(seg: Segment): boolean {
     const next = this.segments.find((x) => x.index === seg.index + 1);
-    return seg.kind !== 'merge' && seg.lanes0 === seg.lanes1 && seg.zone !== 'tunnel' && (!next || next.zone !== 'tunnel') && !seg.fork && !next?.fork;
+    // Not on a bridge either: the ramp would hang over the water.
+    const ok = (z: ZoneKind) => z !== 'tunnel' && z !== 'bridge';
+    return seg.kind !== 'merge' && seg.lanes0 === seg.lanes1 && ok(seg.zone) && (!next || ok(next.zone)) && !seg.fork && !next?.fork;
   }
 
   /** Can a fork leave from this segment? Highway, no merge here or next, and the next segment is highway too. */

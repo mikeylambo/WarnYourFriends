@@ -52,6 +52,7 @@ tools/shots-replay.mjs  Recap REPLAY in real time: lead-in, slow motion at the m
 tools/shots-chain.mjs   Spectacle combo counter: mid-chain and banked
 tools/shots-asks.mjs    The producer's asks: panel, an ask landing, the recap list
 tools/shots-fork.mjs    Forks: the exit sign and ramp on approach, the avenue after the cut
+tools/shots-shoulder.mjs  Shoulder Check filmstrip: wind-up, drive, recover
 ```
 
 ## Commands

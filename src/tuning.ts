@@ -104,6 +104,14 @@ export const TUNING = {
   },
 
   /** Model pass (Mike's sheet): one horned pauldron, the cape clasped under it. */
+  /**
+   * Shoulder Check animation (Mike: "we need an attack animation for shoulder"), presentation only over the
+   * sim's 0.25s burst. `time` s in all: a wind-up (shoulders turn away, a drop) for `windup` of it, then the
+   * drive (pauldron shoulder leads: a hard twist, a deep lean, that arm tucked across the chest, the other
+   * flung back), held to `strikeEnd`, then the recovery. Angles in radians, the drop in metres.
+   */
+  shoulderAnim: { time: 0.5, windup: 0.18, strikeEnd: 0.6, twistBack: 0.45, twistDrive: -1.15, leanDrive: 0.55, leanBack: -0.12, drop: 0.22, armTuck: 1.25, armFling: 1.1 },
+
   giantModel: {
     /** Cape length from the clasp line (m): knee length at Jog (v0.3 §10). */
     capeLength: 1.9,
@@ -526,6 +534,8 @@ export const TUNING = {
     goreAt: 26,
     /** Keep the exit lane clear of props this far before the gore (m). */
     exitClear: 40,
+    /** ...and this far past it: he crosses the exit lane while the ramp pulls clear (no collisions after sign-off). */
+    exitClearAfter: 40,
   },
 
   /** §12 Ratings / Heat / Pin. */
@@ -679,6 +689,12 @@ export const TUNING = {
     swerveYawDeg: 7,
     /** At most one honk this often (s). */
     honkGap: 0.45,
+    /**
+     * Brush (presentation): his shoulders and arms reach over the next lane, so a car he passes within
+     * `brushReach` m of its side (and `brushAlong` m of its ends) rocks away from him: a roll up to
+     * `brushRollDeg`, a `brushShove` m nudge inside its own footprint, a suspension kick. The hitbox never moves.
+     */
+    brushReach: 1.6, brushAlong: 0.6, brushRollDeg: 24, brushShove: 0.3, brushKick: 1.6, brushTime: 0.9,
     /** Rampage footfalls bounce cars within this radius (m) on their suspension. */
     bounceRadius: 16,
     /** Suspension spring: peak drop (m) at the foot, frequency (Hz), damping ratio. */

@@ -62,6 +62,9 @@ interface CarFx {
   honked: boolean;
   bounceY: number;
   bounceV: number;
+  /** He brushed past it (his body sweeps over the next lane): time since, or −1; and which way it rocks. */
+  brushT: number;
+  brushDir: number;
 }
 
 /**
@@ -420,7 +423,10 @@ export class HighwayView {
   /** Phase 2 avenue: storefronts shoulder to shoulder, lit windows at night, awnings at street level. */
   private buildStorefronts(seg: Segment, group: THREE.Group, rng: Rng) {
     const track = this.sim.track;
+    // An exit ramp curves out through the right-hand plots: leave them empty near it.
+    const ramp = this.nearRamp(seg);
     for (const left of [true, false]) {
+      if (!left && ramp) continue;
       let a = 0;
       while (a < seg.length) {
         const wid = rng.range(9, 15);
@@ -574,7 +580,7 @@ export class HighwayView {
       const w = track.widthAt(s);
       const h = track.headingAt(s);
       const left = Math.round(s / sp) % 2 === 0;
-      if (!left && this.exitFor(seg)) continue; // the ramp peels off on the right
+      if (!left && (this.exitFor(seg) || this.nearRamp(seg))) continue; // the ramp peels off on the right
       const baseD = left ? -1.6 : w + 1.6;
       const headD = left ? 2.0 : w - 2.0;
       const H = 9;
@@ -609,6 +615,11 @@ export class HighwayView {
       lamps.push({ x: head.x, y: H, z: head.z });
     }
     return lamps;
+  }
+
+  /** An exit ramp leaves within a segment before or two after this one (its path out crosses the right side). */
+  private nearRamp(seg: Segment): boolean {
+    return this.sim.track.segments.some((x) => (x.exit || x.fork) && x.index >= seg.index - 2 && x.index <= seg.index + 1);
   }
 
   /** The exit (sign-off or fork) segment this segment's ramp belongs to (the exit segment itself or the one after it). */
@@ -807,7 +818,7 @@ export class HighwayView {
     beam.scale.set(13, 1, 6.5);
     beam.renderOrder = 1;
     g.add(beam);
-    this.cars.set(p.id, { prop: p, group: g, body, tails, hazards, braking: false, swerveT: -1, swerveDir: 1, honked: false, bounceY: 0, bounceV: 0 });
+    this.cars.set(p.id, { prop: p, group: g, body, tails, hazards, braking: false, swerveT: -1, swerveDir: 1, honked: false, bounceY: 0, bounceV: 0, brushT: -1, brushDir: 1 });
   }
 
   /** Rampage footfall: cars nearby bounce on their suspension (presentation only). */
@@ -857,7 +868,17 @@ export class HighwayView {
           this.onHonk?.(Math.max(0.25, 1 - ds / T.swerveAt));
         }
       }
-      for (const hz of c.hazards) hz.visible = c.braking && blink;
+      // Brushed: his shoulders and arms sweep over the next lane, so a car he passes close to takes the hit
+      // visibly (a hard rock away from him, a jolt, a puff) though the lane's hitbox never moves.
+      if (c.brushT < 0 && Math.abs(ds) < p.hl + T.brushAlong && Math.abs(dd) < p.hw + T.brushReach) {
+        c.brushT = 0;
+        c.brushDir = Math.sign(dd) || 1;
+        c.bounceV += T.brushKick;
+        this.sim.track.posAt(p.s, p.d - c.brushDir * p.hw, this.pos);
+        this.spawnDebris(this.pos.x, this.pos.z, -Math.sin(this.sim.track.headingAt(p.s)) * c.brushDir, Math.cos(this.sim.track.headingAt(p.s)) * c.brushDir, 3, 6, [0xd9d2c4, 0x9fa4ad], [0.08, 0.2], 0.8);
+        this.onBrush?.();
+      }
+      for (const hz of c.hazards) hz.visible = (c.braking || c.brushT >= 0) && blink;
       let off = 0;
       let yaw = 0;
       if (c.swerveT >= 0) {
@@ -870,12 +891,23 @@ export class HighwayView {
       const acc = -omega * omega * c.bounceY - 2 * T.bounceDamping * omega * c.bounceV;
       c.bounceV += acc * dt;
       c.bounceY += c.bounceV * dt;
+      // Brush: roll away from him (rotation.x is roll; the car's length runs along local X), then settle.
+      let roll = 0;
+      if (c.brushT >= 0) {
+        c.brushT += dt;
+        const k = c.brushT / T.brushTime;
+        roll = k < 1 ? c.brushDir * T.brushRollDeg * (Math.PI / 180) * Math.sin(Math.PI * k) * Math.exp(-1.5 * k) : 0;
+        off += c.brushDir * T.brushShove * Math.min(1, k * 3);
+      }
       c.body.position.set(0, c.bounceY, off);
-      c.body.rotation.set(c.bounceY * 0.25, -yaw, c.braking ? -0.02 : 0);
+      c.body.rotation.set(c.bounceY * 0.25 + roll, -yaw, c.braking ? -0.02 : 0);
     }
   }
 
   // --- Effects ------------------------------------------------------------------
+
+  /** A car took a brush from him (audio hook). */
+  onBrush?: () => void;
 
   /** Gear-up: traffic further ahead notices and brakes early for a moment. */
   private alarmT = 0;
