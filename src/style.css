@@ -529,3 +529,6 @@ html.replay #asks { visibility: hidden; }
 #recap ul.asks li i { font-style: normal; width: 1.2em; color: #d7263d; }
 #recap ul.asks li.done i { color: #1e6b3a; }
 #recap ul.asks li b { margin-left: auto; color: #8a4b0f; font-variant-numeric: tabular-nums; }
+/* Playtest export on the recap: small, out of the way of the real buttons. Hide before release. */
+#recap .playdata { margin-top: 10px; background: none; border: 0; padding: 4px 0; font: 600 12px/1 ui-sans-serif, system-ui, sans-serif; color: rgba(28, 11, 48, 0.55); text-decoration: underline; cursor: pointer; }
+#recap .playdata:focus-visible { outline: 2px solid var(--ink); }

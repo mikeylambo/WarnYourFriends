@@ -31,6 +31,7 @@ src/audio.ts         Web Audio, music/sfx/voice buses (synth placeholders)
 src/input.ts         KBM, gamepad, touch → SimInput
 src/glyphs.ts        button labels per device family (PS4: L1/R1/L2/✕), via the shell's glyph registry
 src/tips.ts          onboarding producer notes (each once, first time it matters)
+src/playlog.ts       playtest export: per-broadcast numbers kept locally, "Copy play data" on the recap (hide before release)
 src/main.ts          bootstrap: WebGL check, then loads game.ts; boot errors shown on screen
 src/game.ts          fixed-step loop, event presentation, window.__GAME
 tools/soak.ts        headless N-seed soak: sim + gait + camera invariants (cadence, foot slide, screen-up, cuts, framing)

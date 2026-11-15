@@ -304,6 +304,16 @@ try {
     if (!/\d/.test(mid.viewers)) fail(`Ratings viewer count not shown (${mid.viewers})`);
     if (!recap?.title) fail('no recap after the broadcast ended');
     else ok(`recap: "${recap.title}" · ${recap.outcome}`);
+    // Playtest export: this broadcast is in the log with the sim's own score, and the button exports JSON.
+    const logged = await page.evaluate(() => JSON.parse(localStorage.getItem('gal.playlog.v1') ?? '[]').slice(-1)[0] ?? null);
+    if (!logged || logged.score !== Math.round(end.banked)) fail(`play log entry missing or wrong (${JSON.stringify(logged)?.slice(0, 120)}, banked ${Math.round(end.banked)})`);
+    else ok(`play log: ${logged.outcome}, score ${logged.score}, ${logged.chains.length} chains, asks ${logged.asks.map((a) => a.id + (a.done ? '✓' : '')).join(' ')}`);
+    await page.evaluate(() => { window.__copied = null; navigator.clipboard.writeText = async (t) => { window.__copied = t; }; });
+    await page.click('#playdata');
+    const copied = await page.waitForFunction(() => window.__copied, null, { timeout: 5000 }).then((h) => h.jsonValue()).catch(() => null);
+    const parsed = copied ? JSON.parse(copied) : null;
+    if (!parsed?.broadcasts?.length) fail('Copy play data produced no JSON');
+    else ok(`Copy play data: ${parsed.broadcasts.length} broadcast(s), ${copied.length} bytes`);
     const last = heads[heads.length - 1];
     if (!last || !['SIGN-OFF', 'BUSTED'].includes(last.kicker)) fail(`last headline isn't the ending (${JSON.stringify(last)})`);
     // Run it again: Enter restarts from the recap.

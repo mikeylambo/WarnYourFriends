@@ -24,6 +24,7 @@ import { registerGlyphs, padFamily, type GlyphAction } from './glyphs';
 import { Tips } from './tips';
 import coverUrl from './assets/title-cover.webp';
 import { UPGRADE_ART } from './upgradeArt';
+import { PlayLog, appendLog, exportLog, type PlayEntry } from './playlog';
 import { readFlags } from './debug';
 import { loadSettings, saveSettings } from './settings';
 import { applyStoredTuning, mountTuningPanel } from './tuningPanel';
@@ -184,6 +185,9 @@ let menuGuard = 0;
 let acc = 0;
 let camTagT = 0;
 const recentEvents: SimEvent[] = [];
+/** Playtest export: this broadcast's numbers (the replay never feeds it). */
+const playLog = new PlayLog();
+let lastEntry: PlayEntry | null = null;
 // Recap REPLAY state (declared up here: newRun runs at boot). See startReplay below.
 let simOpts: { seed: number; segment: number; upgrades: UpgradeId[] } = { seed: 0, segment: 0, upgrades: [] };
 const inputLog: SimInput[] = [];
@@ -241,6 +245,7 @@ function newRun(seed: number, segment = 0, upgrades: UpgradeId[] = []) {
   $('coldts').textContent = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
   sim = new Sim({ seed, segment, upgrades });
   simOpts = { seed, segment, upgrades: [...upgrades] };
+  playLog.reset();
   inputLog.length = 0;
   moment = null;
   highway = new HighwayView(sim);
@@ -505,15 +510,29 @@ function showRecap() {
     ${sim.asks.list.length ? `<ul class="asks">${sim.asks.list.map((a) => `<li class="${a.done ? 'done' : ''}"><i>${a.done ? '✓' : '✕'}</i>${esc(a.text)}${a.done ? `<b>+${a.reward.toLocaleString()}</b>` : ''}</li>`).join('')}</ul>` : ''}
     <p class="anchor">${esc(anchorLine)}</p>
     <div class="row">${buttons}</div>
+    <button class="playdata" id="playdata">Copy play data</button>
     <div class="padhint"></div>
   </div>`;
   recapEl.hidden = false;
+  // Playtest export: log this broadcast once, then copy everything logged so far.
+  if (!lastEntry || lastEntry.seed !== simOpts.seed || lastEntry.segment !== simOpts.segment || lastEntry.seconds !== Math.round(sim.time * 10) / 10) {
+    lastEntry = playLog.entry(sim, simOpts.seed, run ? 'run' : 'single', simOpts.segment, simOpts.upgrades);
+    appendLog(lastEntry);
+  }
   recapArmedAt = performance.now() + 250;
   const btn = (id: string) => document.getElementById(id) as HTMLButtonElement | null;
   if (btn('meet')) btn('meet')!.onclick = () => showMeeting();
   if (btn('again')) btn('again')!.onclick = () => restart(false);
   if (btn('same')) btn('same')!.onclick = () => restart(true);
   if (btn('tomenu')) btn('tomenu')!.onclick = () => recapToMenu();
+  if (btn('playdata')) {
+    const b = btn('playdata')!;
+    b.onclick = async () => {
+      const how = await exportLog(lastEntry ?? undefined);
+      b.textContent = how === 'copied' ? 'Copied' : 'Saved as a file';
+      (recapEl.querySelector('.row button') as HTMLButtonElement | null)?.focus(); // back to the real choice
+    };
+  }
   (recapEl.querySelector('.row button') as HTMLButtonElement).focus();
 }
 
@@ -568,6 +587,7 @@ function present(e: SimEvent) {
   }
   news.observe(e, sim.time);
   noteMoment(e);
+  if (!replay && !attract) playLog.observe(e);
   const trig = cutTriggerFor(e);
   if (trig) {
     triggerLog.push({ t: sim.time, kind: trig });
@@ -868,6 +888,7 @@ function present(e: SimEvent) {
 
 function stepSim(inp: SimInput) {
   if (!replay) inputLog.push(inp);
+  if (!replay && !attract && sim.live) playLog.tick(sim, bot ? 'bot' : input.device);
   const g = sim.giant;
   prev.s = g.s;
   prev.d = g.d;
