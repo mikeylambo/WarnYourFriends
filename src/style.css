@@ -274,25 +274,52 @@ html:not(.coldopen).playing #hud { animation: slam 0.35s cubic-bezier(.2,1.4,.4,
 @keyframes slam { from { transform: scale(1.06); opacity: 0; } }
 
 /* --- SLU Web Shell screens in the WYF broadcast look ------------------------------- */
-#ui .slu-screen { background: linear-gradient(180deg, rgba(10, 8, 20, 0.15), rgba(10, 8, 20, 0.6)); z-index: 40; }
+/* --- Menus (shell screens) in the broadcast language (Direction D): slanted plates on ink, a red
+   plate for the screen name, the focused choice goes red and steps right. Cards (How to Play, recap,
+   meeting) stay paper like the chyron's headline bar; their buttons are the same plates. --- */
+#ui .slu-screen { background: linear-gradient(180deg, rgba(7, 5, 13, 0.35), rgba(7, 5, 13, 0.7)); z-index: 40; }
 #ui [data-screen-id="gameplay-placeholder"] { display: none; }
 #ui .slu-panel {
-  width: min(100%, 520px); background: var(--paper); color: var(--ink); backdrop-filter: none;
-  border: 0; border-left: 8px solid var(--red); border-radius: 0; box-shadow: 0 10px 40px rgba(0, 0, 0, 0.45);
-  padding: 22px 24px;
+  width: min(100%, 440px); max-height: calc(100vh - 32px); overflow: auto; padding: 4px 16px 4px 0;
+  background: none; color: var(--c-text, #ece0c8); backdrop-filter: none; border: 0; border-radius: 0; box-shadow: none;
+  font-family: var(--f-head); filter: drop-shadow(0 8px 24px rgba(0, 0, 0, 0.5)); scrollbar-width: thin;
 }
-#ui .slu-header h1 { font-size: clamp(26px, 6vw, 40px); letter-spacing: 0.02em; line-height: 1; text-transform: uppercase; color: var(--ink); }
-#ui [data-screen-id="title"] .slu-header h1, #ui [data-screen-id="main-menu"] .slu-header h1 { font-size: clamp(30px, 7vw, 48px); }
-#ui .slu-header p { color: var(--ink); opacity: 0.75; font-weight: 700; margin-bottom: 16px; }
+#ui .slu-header { margin: 0 0 10px; }
+#ui .slu-header:has(h1:empty) { display: none; }
+#ui .slu-header h1 {
+  display: inline-block; margin: 0; padding: 10px 40px 9px 16px; background: var(--c-red); color: var(--c-text);
+  font: italic 900 clamp(22px, 3.2vw, 30px)/1 var(--f-head); letter-spacing: 0.04em; text-transform: uppercase;
+  clip-path: polygon(0 0, 100% 0, calc(100% - 14px) 100%, 0 100%);
+}
+#ui .slu-header p { margin: 8px 0 0; color: var(--c-text); opacity: 0.85; font: 700 15px/1.3 var(--f-head); }
+#ui .slu-choices { display: flex; flex-direction: column; gap: 4px; }
 #ui .slu-choice, #ui .slu-back {
-  background: transparent; color: var(--ink); border: 2px solid rgba(28, 11, 48, 0.18); border-radius: 0; padding: 12px 14px;
+  display: flex; flex-direction: column; align-items: flex-start; gap: 3px; width: 100%; text-align: left;
+  background: var(--c-panel); color: var(--c-text); border: 0; border-radius: 0; padding: 12px 36px 11px 16px;
+  clip-path: polygon(0 0, 100% 0, calc(100% - 12px) 100%, 0 100%); cursor: pointer;
+  transition: transform 0.12s ease-out, background-color 0.12s;
 }
-#ui .slu-choice:hover, #ui .slu-choice[data-focused="true"], #ui .slu-choice:focus-visible {
-  background: var(--ink); color: var(--paper); border-color: var(--ink); transform: none;
+#ui .slu-choice-label { display: block; font: italic 900 18px/1.1 var(--f-head); letter-spacing: 0.05em; text-transform: uppercase; }
+#ui .slu-choice-desc { display: block; margin: 0; font: 600 13px/1.25 var(--f-head); color: var(--c-mute); opacity: 1; }
+#ui .slu-choice[data-focused="true"], #ui .slu-choice:focus-visible, #ui .slu-back:focus-visible {
+  background: var(--c-red); color: var(--c-text); transform: translateX(10px); outline: none;
 }
-#ui .slu-choice-label { font-size: 15px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; }
-#ui .slu-choice-desc { font-size: 13px; opacity: 0.7; }
-#ui .slu-back { color: var(--ink); }
+/* The pointer gets a quieter plate, so only one choice ever reads as selected. */
+#ui .slu-choice:hover:not([data-focused="true"]), #ui .slu-back:hover { background: var(--c-alt); transform: translateX(5px); }
+#ui .slu-choice[data-focused="true"] .slu-choice-desc, #ui .slu-choice:focus-visible .slu-choice-desc { color: var(--c-text); opacity: 0.9; }
+#ui .slu-choice:disabled { opacity: 0.4; cursor: not-allowed; transform: none; background: var(--c-panel); }
+#ui .slu-back { width: auto; margin-top: 10px; padding: 9px 30px 8px 16px; opacity: 1; font: italic 900 14px/1 var(--f-head); letter-spacing: 0.12em; text-transform: uppercase; background: rgba(7, 5, 13, 0.7); }
+/* Settings is long: tighter rows so it fits a 720p screen without scrolling. */
+#ui [data-screen-id="settings"] .slu-choice { padding: 8px 36px 7px 16px; }
+#ui [data-screen-id="settings"] .slu-choice-label { font-size: 15px; }
+#ui [data-screen-id="settings"] .slu-choice-desc { font-size: 12px; }
+/* Main menu: the game's wordmark instead of a plate. */
+#ui [data-screen-id="main-menu"] .slu-header h1 {
+  background: none; clip-path: none; padding: 0 0 14px 2px; white-space: pre-line; color: var(--c-text);
+  font: italic 900 clamp(40px, 6vw, 76px)/0.86 'Arial Black', 'Helvetica Neue', Impact, system-ui, sans-serif;
+  letter-spacing: -0.03em; transform: skewX(-6deg); text-shadow: 0 6px 30px rgba(0, 0, 0, 0.5);
+}
+@media (prefers-reduced-motion: reduce) { #ui .slu-choice, #ui .slu-back { transition: none; } }
 /* Attract: the bot's broadcast plays behind the menus; no touch controls. */
 html.attract #touch-ui { display: none; }
 #recap .row { flex-wrap: wrap; }
@@ -349,7 +376,6 @@ html.attract #gainpop { display: none; }
 /* Menus (html.title is on for every menu behind the title too): the chopper shot, no broadcast HUD,
    the panel on the left like the wordmark so the giant stays in view on the right. */
 html.title #ui .slu-screen:not([data-screen-id="title"]) { place-items: center start; padding: 0 0 0 clamp(16px, 7vw, 110px); background: linear-gradient(90deg, rgba(5, 3, 12, 0.85) 0%, rgba(5, 3, 12, 0.45) 40%, rgba(5, 3, 12, 0) 65%); }
-html.title #ui [data-screen-id="main-menu"] .slu-header { display: none; }
 @media (max-width: 640px) { html.title #ui .slu-screen:not([data-screen-id="title"]) { place-items: center; padding: 16px; } }
 /* How to Play: on its own, nothing of the cold open or the controls strip behind it. */
 html.briefing #hud, html.briefing #controls, html.briefing #coldopen, html.briefing #camtag, html.briefing #btn-pause, html.briefing #abil, html.briefing #tip { display: none !important; }
@@ -362,7 +388,7 @@ html.title #hud, html.title #abil, html.title #controls, html.title #camtag, htm
 #ui [data-screen-id="title"] .slu-header h1 { white-space: pre-line; font: italic 900 clamp(52px, 9vw, 140px)/0.86 'Arial Black', 'Helvetica Neue', Impact, system-ui, sans-serif; letter-spacing: -0.03em; color: #f4ead6; text-transform: uppercase; margin: 0; transform: skewX(-6deg); text-shadow: 0 6px 30px rgba(0, 0, 0, 0.5); }
 #ui [data-screen-id="title"] .slu-header p { color: #f4ead6; opacity: 1; font-weight: 800; letter-spacing: 0.04em; text-transform: none; font-size: clamp(16px, 2.4vw, 32px); margin: 14px 0 clamp(28px, 6vh, 64px) 4px; }
 #ui [data-screen-id="title"] .slu-choice { border: 0; background: none; padding: 0 0 0 4px; color: #f4ead6; }
-#ui [data-screen-id="title"] .slu-choice:hover, #ui [data-screen-id="title"] .slu-choice[data-focused="true"], #ui [data-screen-id="title"] .slu-choice:focus-visible { background: none; color: #f4ead6; outline: none; }
+#ui [data-screen-id="title"] .slu-choice:hover, #ui [data-screen-id="title"] .slu-choice[data-focused="true"], #ui [data-screen-id="title"] .slu-choice:focus-visible { background: none; color: #f4ead6; outline: none; transform: none; }
 #ui [data-screen-id="title"] .slu-choice-label { font-size: clamp(14px, 1.7vw, 22px); letter-spacing: 0.32em; animation: pressstart 1.6s ease-in-out infinite; }
 @keyframes pressstart { 50% { opacity: 0.35; } }
 @media (prefers-reduced-motion: reduce) { #ui [data-screen-id="title"] .slu-choice-label { animation: none; } }
@@ -685,8 +711,11 @@ html.touch #ticker { right: 128px; }
 .card { background: var(--c-paper); color: var(--c-on-paper); border-left-color: var(--c-red); }
 #recap .card { border-left-color: var(--c-red); }
 .card .kicker, #recap .kicker { background: var(--c-ink); color: var(--c-text); font: italic 900 12px/1 var(--f-head); letter-spacing: 0.16em; padding: 7px 18px 7px 12px; clip-path: polygon(0 0, 100% 0, calc(100% - 8px) 100%, 0 100%); }
-.go { background: var(--c-ink); color: var(--c-text); font-family: var(--f-head); font-weight: 900; font-style: italic; letter-spacing: 0.04em; }
-#recap .go.alt { background: transparent; color: var(--c-on-paper); border-color: var(--c-on-paper); }
+.go { background: var(--c-ink); color: var(--c-text); font-family: var(--f-head); font-weight: 900; font-style: italic; letter-spacing: 0.06em; text-transform: uppercase; text-align: left; padding: 13px 36px 12px 16px; clip-path: polygon(0 0, 100% 0, calc(100% - 12px) 100%, 0 100%); transition: transform 0.12s ease-out, background-color 0.12s; }
+.go:hover, .go:focus-visible, #recap .go:focus { background: var(--c-red); color: var(--c-text); outline: none; transform: translateX(6px); }
+#recap .go.alt { background: rgba(30, 24, 33, 0.12); color: var(--c-on-paper); border: 0; }
+#recap .go.alt:hover, #recap .go.alt:focus-visible, #recap .go.alt:focus { background: var(--c-red); color: var(--c-text); }
+@media (prefers-reduced-motion: reduce) { .go { transition: none; } .go:hover, .go:focus-visible, #recap .go:focus { transform: none; } }
 #recap h2 { font-family: var(--f-head); font-weight: 900; font-style: italic; color: var(--c-on-paper); }
 #recap .outcome { background: var(--c-red); color: var(--c-text); font-style: italic; }
 #recap .outcome.cleared { background: var(--c-alt); }
@@ -700,7 +729,8 @@ html.touch #ticker { right: 128px; }
 #recap .pitch .price { color: var(--c-text); font-family: var(--f-num); font-weight: 900; font-size: 20px; }
 #recap .pitch .art .tag { background: var(--c-ink); color: var(--c-text); }
 #recap .pitch.ability .art .tag { background: var(--c-red); }
-#recap .pitch:hover:not(:disabled), #recap .pitch:focus-visible, #recap .pitch:focus { border-color: var(--c-text); box-shadow: 0 0 0 3px var(--c-red); }
+#recap .pitch:focus-visible, #recap .pitch:focus { border-color: var(--c-text); box-shadow: 0 0 0 3px var(--c-red); }
+#recap .pitch:hover:not(:disabled):not(:focus) { border-color: var(--c-text); }
 #recap .pitch .need { color: #ff8a96; }
 #recap ul.asks li.done i { color: var(--c-alt); }
 #recap ul.asks li b { color: var(--c-red); }

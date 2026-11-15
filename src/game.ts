@@ -1295,7 +1295,7 @@ app.ui.updateScreen('title', { title: 'Giant\nat Large', subtitle: 'Warn your fr
 // One menu (Mike: "clean up main menu/UX flow"): the two modes sit on it directly, so there's no
 // separate mode screen between Start and the broadcast.
 app.ui.updateScreen('main-menu', {
-  title: '',
+  title: 'Giant\nat Large',
   choices: [
     { id: 'run', label: 'Full Broadcast', description: 'Five segments, upgrades between them' },
     { id: 'broadcast', label: 'Single Segment' },
