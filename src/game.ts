@@ -44,6 +44,7 @@ const canvas = $<HTMLCanvasElement>('view');
 const flashEl = $('flash');
 const debugEl = $('debug');
 const tierbar = $('tierbar');
+const chyPlace = document.querySelector('#chyron .place') as HTMLElement;
 const gearsEl = $('gears');
 const asksEl = $('asks');
 const asksList = asksEl.querySelector('ol') as HTMLElement;
@@ -1167,6 +1168,9 @@ const rendererAdapter: RendererAdapter = {
 let app: Awaited<ReturnType<typeof createGameApp>> | null = null;
 // --- Resize -------------------------------------------------------------------
 function resize() {
+  // HUD scale (Direction B): the top-of-screen pieces are drawn for 1280×720 and zoomed by this.
+  const hs = Math.max(TUNING.hud.minScale, Math.min(TUNING.hud.maxScale, Math.min(window.innerWidth / 1280, window.innerHeight / 720)));
+  document.documentElement.style.setProperty('--hs', hs.toFixed(3));
   const w = window.innerWidth;
   const h = window.innerHeight;
   renderer.setSize(w, h, false);
@@ -1598,6 +1602,10 @@ function updateHud(dt: number) {
   const falling = sim.live && sh.ratings < lastRatings - 1e-6;
   trendEl.textContent = falling ? '▼' : '';
   lastRatings = sh.ratings;
+  // Lower third, top band: the road he's on and which way (facts from the sim; only written on change).
+  const seg = sim.track.segmentAt(g.s);
+  const place = `${seg.zoneName} · ${compass(sim.track.headingAt(g.s))}bound`.toUpperCase();
+  if (chyPlace.textContent !== place) chyPlace.textContent = place;
   // Gear pips: filled per gear; the next one fills as he holds top speed (the build, made visible).
   const prog = sim.tierUpProgress;
   gearPips.forEach((p, i) => {

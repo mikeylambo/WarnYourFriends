@@ -53,6 +53,7 @@ tools/shots-chain.mjs   Spectacle combo counter: mid-chain and banked
 tools/shots-asks.mjs    The producer's asks: panel, an ask landing, the recap list
 tools/shots-fork.mjs    Forks: the exit sign and ramp on approach, the avenue after the cut
 tools/shots-shoulder.mjs  Shoulder Check filmstrip: wind-up, drive, recover
+tools/shots-hud.mjs     HUD (Direction B · Cable News Wall): desktop, phone landscape, phone portrait
 ```
 
 ## Commands

@@ -410,6 +410,9 @@ export const TUNING = {
    */
   forks: { at: [30, 58, 86] as number[], lastAt: 108, distance: [150, 330] as [number, number], clearOfExit: 320, propsAfter: 35 },
 
+  /** HUD scale (Direction B): pieces are laid out for 1280×720 and zoomed by min(w/1280, h/720), clamped. */
+  hud: { minScale: 0.5, maxScale: 1.3 },
+
   /** Footfall presentation (v0.3). */
   footfall: {
     /** 2px camera pulse on every plant. */
