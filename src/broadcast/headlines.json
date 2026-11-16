@@ -666,6 +666,16 @@
         "Giant Wriggles Free Of Police Box"
       ]
     ],
+    "caughtSlip": [
+      [
+        "Shakes",
+        "Police Catch Up To Giant; Giant Leaves Anyway"
+      ],
+      [
+        "Shrugs",
+        "Giant Shrugs Off Police At Walking Pace"
+      ]
+    ],
     "netEscape": [
       [
         "Breaks Out",

@@ -64,6 +64,18 @@ export class Pursuit {
     }
   }
 
+  /** Cruisers right on him (within `caught.reach`, his lane or the next): who catches him if he crawls. */
+  onHisTail(): Unit[] {
+    const g = this.sim.giant;
+    const C = TUNING.pursuit.caught;
+    return this.units.filter((u) => u.alive && u.unit === 'cruiser' && !u.lost && u.phase !== 'leave' && !u.backOff && Math.abs(u.s - g.s) <= u.hl + C.reach && Math.abs(u.d - g.d) < TUNING.lanes.width * 1.5);
+  }
+
+  /** He shook off the police on his tail: they drop back for a moment (still in the chase). */
+  shakeOff() {
+    for (const u of this.onHisTail()) u.backOff = TUNING.pursuit.caught.backOff;
+  }
+
   /** Any threat is winding up (camera director: no cuts during a tell). */
   get tellActive(): boolean {
     return this.units.some((u) => u.alive && (u.phase === 'tell' || (u.unit === 'roadblock' && u.phase === 'act' && u.phaseT < TUNING.pursuit.roadblock.tell)));
@@ -454,10 +466,26 @@ export class Pursuit {
     }
     switch (u.phase) {
       case 'approach': {
+        const CA = TUNING.pursuit.caught;
+        if (u.backOff) {
+          // Shaken off: it drops back (it can't reverse; at his crawl it simply stops gaining).
+          u.backOff = Math.max(0, u.backOff - dt);
+          u.speed = Math.max(0, g.speed - C.closeSpeed);
+          u.s += u.speed * dt;
+          u.phaseT = 0;
+          break;
+        }
+        if (g.speed < CA.below && u.s >= g.s - CA.from) {
+          // He's crawling: it pulls right up on his tail, in whatever lane it's in. Caught.
+          u.speed = g.speed + C.closeSpeed * 0.5;
+          u.s = Math.min(u.s + u.speed * dt, g.s - u.hl - CA.gap);
+          u.phaseT = 0;
+          break;
+        }
         const close = u.s >= g.s - 9;
         if (!close) {
-          // Far behind: ride the giant's own path (it's clear: he smashed or avoided everything).
-          u.speed = g.speed + C.closeSpeed;
+          // Far behind: ride the giant's own path (it's clear: he smashed or avoided everything). He's crawling: they run him down.
+          u.speed = g.speed + (g.speed < CA.below ? CA.runDown : C.closeSpeed);
           u.s += u.speed * dt;
           const pd = sim.escort.pathAt(u.s);
           u.d += clamp(pd - u.d, -C.sideSpeed * 2 * dt, C.sideSpeed * 2 * dt);
@@ -468,6 +496,19 @@ export class Pursuit {
         // Close: pull into a clear lane next to his and come alongside.
         // It watches him, not the road: only what's just ahead of it counts.
         const clear = (l: number) => l >= 0 && l < lanes && l !== g.lane && !this.propIn(l, u.s - u.hl - 2, Math.max(u.s + u.hl + TUNING.pursuit.crash.react, g.s + 2));
+        const alongside = u.s >= g.s - 4 && Math.abs(u.lane - g.lane) === 1;
+        if (!alongside && ![g.lane - 1, g.lane + 1].some(clear)) {
+          // No room beside him: it tails him in his lane, steering for where he was a beat ago. It watches him,
+          // not the road, so a late sidestep round something solid leaves it to plough straight in (kiting).
+          const T = C.tail;
+          u.speed = g.speed + (u.s < g.s - T.gap - 1 ? C.closeSpeed * 0.5 : 0);
+          u.s = Math.min(u.s + u.speed * dt, g.s - u.hl - T.gap);
+          const want = sim.escort.pathAt(g.s - g.speed * T.react);
+          u.d += clamp(want - u.d, -T.sideSpeed * dt, T.sideSpeed * dt);
+          u.lane = clamp(Math.round(u.d / TUNING.lanes.width - 0.5), 0, lanes - 1);
+          if (u.phaseT > T.giveUp) this.setPhase(u, 'leave');
+          break;
+        }
         if (u.lane !== g.lane && Math.abs(u.d - g.d) < TUNING.lanes.width * 1.5 && !clear(u.lane)) {
           // Alongside him and its lane is blocked just ahead: the only way out is away from him.
           const away = u.lane + Math.sign(u.lane - g.lane);

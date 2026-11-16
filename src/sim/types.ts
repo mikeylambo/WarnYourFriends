@@ -157,7 +157,7 @@ export type SimEvent =
   | { type: 'zone'; zone: 'highway' | 'avenue' | 'bridge' | 'tunnel'; name: string }
   | { type: 'landmark'; kind: LandmarkKind; name: string; s: number }
   /** Police Net (2026-11-16): the first catch in a segment costs a gear and Ratings; the second busts him. */
-  | { type: 'netSlip'; ratings: number }
+  | { type: 'netSlip'; ratings: number; cause: PinCause }
   /** He broke out of a Police Net (it disperses). */
   | { type: 'netEscape'; id: number }
   /** A car carrier drops a car into a lane (presentation animates it off the deck). */
@@ -169,6 +169,8 @@ export type GainType = 'medium' | 'heavy' | 'nearMiss' | 'lostTrack' | 'rampage'
 /** Spectacle stunts (score, not Ratings). */
 export type StuntType = 'medium' | 'heavy' | 'unit' | 'policeCrash' | 'collateral' | 'nearMiss' | 'ramDodge' | 'lostTrack' | 'chopperShaken' | 'leapLand' | 'hijackBail' | 'pose';
 export type BustReason = 'ratings' | 'pin' | 'missed';
+/** What filled the meter: boxed in by a Police Net, or caught crawling with police on his tail. */
+export type PinCause = 'net' | 'caught';
 export type ShowState = 'live' | 'cleared' | 'busted';
 
 /** A pursuer or police hazard. Solid units collide like props (same class rules). */
@@ -185,6 +187,8 @@ export interface Unit extends Prop {
   /** Rolling/static roadblock row this car belongs to. */
   group: number;
   solid: boolean;
+  /** Caught: seconds it stays dropped back after he shook it off. */
+  backOff?: number;
   /** Rams: the lane it will swerve into. */
   target: number;
   hit: boolean;

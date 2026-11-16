@@ -53,7 +53,7 @@ type Kind = 'zone' | 'spotted' | 'ratingsTier' | 'tierUp' | 'tierDown' | 'smash'
 /** `at`: where he was when it happened (places come from here, not from publish time). */
 type Item = { kind: Kind; t: number; prio: number; events: SimEvent[]; at?: NewsContext };
 
-const PRIO: Partial<Record<Kind, number>> = { netSlip: 96, netEscape: 74, landmark: 60, zone: 66, spotted: 95, ratingsTier: 100, end: 200, exitOpen: 90, tell: 75, ramHit: 65, ramMiss: 58, lostTrack: 57, spiked: 62, heat: 52, escort: 60, merge: 55, leap: 64, stare: 61, hijack: 68, pose: 72, forkZone: 98, spotlight: 63, chopperLost: 59, policeCrash: 70, policeSmash: 35, tierUp: 50, bounce: 45, tierDown: 40, wall: 10 };
+const PRIO: Partial<Record<Kind, number>> = { netSlip: 96, netEscape: 74, landmark: 60, zone: 66, spotted: 95, ratingsTier: 100, end: 200, exitOpen: 90, tell: 75, ramHit: 65, ramMiss: 58, lostTrack: 57, spiked: 62, heat: 52, escort: 60, merge: 55, leap: 86, stare: 84, hijack: 87, pose: 88, forkZone: 98, spotlight: 63, chopperLost: 59, policeCrash: 70, policeSmash: 35, tierUp: 50, bounce: 45, tierDown: 40, wall: 10 };
 /** The player's own ability moments: kept queued longer so they get their headline. */
 const ABILITY_NEWS: Kind[] = ['leap', 'stare', 'hijack', 'pose'];
 /** These break in immediately, ignoring the 4s cadence (§21: tier changes; and the end of the broadcast). */
@@ -295,7 +295,7 @@ export class Newsroom {
       }
       case 'netSlip': {
         // Caught once: it breaks in (the chyron says exactly what happened).
-        const line = this.freshLine(L.netSlip);
+        const line = this.freshLine(q.events[0]?.type === 'netSlip' && q.events[0].cause === 'caught' ? L.caughtSlip : L.netSlip);
         return line ? mk(line[1], line[0], null, true) : null;
       }
       case 'spotlight':

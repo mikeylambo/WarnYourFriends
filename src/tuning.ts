@@ -244,9 +244,6 @@ export const TUNING = {
     bounce: { hitstop: 7, shake: 10, flashFrames: 0, haptic: 160, hapticStrength: 0.8 },
     /** A dodge: a small kick and a buzz, no freeze (it must not interrupt the line he's taking). */
     dodge: { hitstop: 0, shake: 3, flashFrames: 0, haptic: 40, hapticStrength: 0.25 },
-    /** Ratings pops under the meter: gains this close together add up into one pop (s); pop shows this long. */
-    popMerge: 0.6,
-    popTime: 1.3,
     wall: { hitstop: 0, shake: 2, flashFrames: 0, haptic: 50, hapticStrength: 0.3 },
     /**
      * Impact pass (Mike: hits "don't have much impact"): a smashed body is swatted off his line
@@ -275,6 +272,10 @@ export const TUNING = {
 
   /** v0.3 procedural highway. */
   track: {
+    /** A lane line is painted only where the lane beyond it is at least this share of a full lane (an opening lane gets its line late, not as a sliver). */
+    laneLineAt: 0.9,
+    /** The built road edge (walls, verge, pavement) smooths lane-count changes over ±this many m, twice (max, then average): a ~3° drift, not a 40m S-bend. */
+    edgeSmooth: 40,
     /** v0.3: built from 40m segments. */
     segmentLength: 40,
     /** v0.3: curves turn at most 8° per segment, eased (no curvature kinks). */
@@ -390,7 +391,7 @@ export const TUNING = {
    * (wider FOV, off under Reduced Motion), traffic ahead brakes early, and a tag rides the chyron.
    * Stride and Rampage kick dust back off every step (particles per footfall by tier).
    */
-  gear: { buildUp: 1.0, buildRingScale: 0.9, fovPunch: 0.14, fovPunchTime: 0.5, shockRadius: 10, trafficAlarm: 1.6, trafficAlarmBrakeAt: 85, tagTime: 2.4, dustKick: [0, 3, 8] },
+  gear: { buildUp: 1.0, buildRingScale: 0.9, fovPunch: 0.14, fovPunchTime: 0.5, shockRadius: 10, trafficAlarm: 1.6, trafficAlarmBrakeAt: 85, dustKick: [0, 3, 8] },
 
   /**
    * Recap REPLAY (presentation): the night's top moment, re-simulated from the recorded inputs and
@@ -400,6 +401,12 @@ export const TUNING = {
    */
   replay: {
     lead: 2.2, slow: 0.35, slowBefore: 0.35, slowAfter: 1.0, after: 1.6, angle: 'Long Lens',
+    /** The recap's picture: grabbed this long after the moment (debris in the air), at this width in px (a still, not a screenshot). */
+    shotAfter: 0.2, shotWidth: 960,
+    /** The recap's looping clip: recorded off the canvas during the replay at this frame rate and bitrate; under `clipMin` s (skipped early) the still stays. */
+    clipFps: 30, clipBitrate: 2_500_000, clipMin: 1.5,
+    /** Between plays of the clip, the still (the moment as it lands) holds this long (s). Mike: "alternate photos and clips". */
+    clipStillHold: 3,
     score: { policeCrash: 10, unitSmash: 7, leapLand: 4, hijackBail: 5, heavyAcross: 6, heavy: 4, nearMiss: 4, ramMiss: 4, pose: 3 },
   },
 
@@ -434,7 +441,7 @@ export const TUNING = {
       { id: 'units', text: 'Flatten {n} police cars', n: 6, reward: 30000 },
       { id: 'crash', text: 'Get a police car to crash', n: 1, reward: 30000 },
       { id: 'roadblock', text: 'Smash through a roadblock', n: 1, reward: 25000 },
-      { id: 'chain', text: 'Chain {n} stunts', n: 12, reward: 35000 },
+      { id: 'chain', text: 'Combo {n} stunts', n: 12, reward: 35000 },
       { id: 'across', text: '{n} smashes across lanes', n: 8, reward: 25000 },
       { id: 'heavy', text: 'Flatten {n} cars or vans', n: 15, reward: 20000 },
       { id: 'bridge', text: 'Smash {n} things on the bridge', n: 4, reward: 25000, zone: 'bridge' },
@@ -493,6 +500,8 @@ export const TUNING = {
      * bounded by `time` (soak-checked).
      */
     swoop: { time: 1.4, apexPitchDeg: 70 },
+    /** Sign-off outro: the chopper swivels into Head-On as he takes the ramp (the swoop's 1.4s), holds, then the recap cuts in (s). */
+    signOffHold: 2.4,
     /** LOCKED (v0.3): direction of travel points up the screen within this many degrees. */
     screenUpMaxDeg: 35,
     /** Yaw is clamped this far inside the law, for lag on curves and wobble. */
@@ -649,7 +658,15 @@ export const TUNING = {
     spawnBehind: 100,
     spawnAheadMin: 110,
     /** Cruiser ram (v0.3: blinker + 0.6s drift, then swerve into your lane). */
-    cruiser: { closeSpeed: 7, tell: 0.6, drift: 0.6, swerve: 0.35, fallBack: 6, sideSpeed: 5 },
+    cruiser: {
+      closeSpeed: 7, tell: 0.6, drift: 0.6, swerve: 0.35, fallBack: 6, sideSpeed: 5,
+      /**
+       * Kiting (Mike, 2026-11-16: "still not able to kite the following police"): with no room beside him a cruiser
+       * tails him `gap` m back in his lane, steering at `sideSpeed` m/s for where he was `react` s ago; it gives up
+       * after `giveUp` s. It doesn't watch the road, so a late sidestep round a Heavy or a bulldozer crashes it.
+       */
+      tail: { gap: 2, react: 0.3, sideSpeed: 4, giveUp: 14 },
+    },
     /** Rolling roadblock (v0.3: brake lights 1.5s, 2–3 cruisers abreast slowing). */
     /** Tells start inside the visible road (the frame shows ≥2s ahead; capped at 28m for the faster Hijack ride), or nobody sees them. */
     rolling: { cruiseFactor: 0.55, tellAhead: 1.9, tellMin: 25, tellMax: 28, tell: 1.5, decel: 6, crawl: 3, actMax: 12 },
@@ -673,7 +690,7 @@ export const TUNING = {
      * a Heavy prop goes flying with it. Only within `visibleBehind` m behind him and ahead of that, so every
      * crash is in the chopper's frame (§1).
      */
-    crash: { react: 6, plowKeep: 0.8, visibleBehind: 3 },
+    crash: { react: 6, plowKeep: 0.8, visibleBehind: 5 },
     /**
      * Police Net (Mike, 2026-11-16: "a real box-in", one goal and two threats). From Heat 3, at most
      * `perSegment[heat - 1]` a segment, `minGap` s apart. An armoured truck (nothing smashes it) takes his
@@ -697,6 +714,14 @@ export const TUNING = {
      * (`dropLead` s), never one that closes the last open lane. Heavy: Rampage (or a Stride Shoulder Check) smashes the carrier itself.
      */
     carrier: { firstAt: 30, every: [40, 60] as [number, number], cruiseFactor: 0.62, tellAhead: 1.9, tellMin: 25, tellMax: 28, firstDrop: 0.8, drops: 6, dropEvery: 0.9, dropLead: 1.2, leaveSpeed: 8 },
+    /**
+     * Caught (Mike, 2026-11-16: "the run doesn't end when police catch up"). Every segment, no Heat gate: while he
+     * crawls under `below` m/s (braking; Jog's top is 6), any cruiser within `from` m behind pulls up to `gap` m off
+     * his back (police further back close at `runDown` m/s over his speed, not the usual 7), and police within
+     * `reach` m of him fill the meter at `fill`/s (≈3.3s). The first fill in a segment
+     * he shakes them (they drop back for `backOff` s; a gear, a stumble and `net.slipRatings` lost), the second busts.
+     */
+    caught: { below: 4, from: 20, gap: 2.5, reach: 3.5, fill: 30, backOff: 2.5, runDown: 14 },
     /** Near-miss (§12): a pursuer passes within 1.5m without contact. */
     nearMiss: 1.5,
     /** A unit this far behind the giant has lost track (§12) and leaves. */
@@ -785,8 +810,11 @@ export const TUNING = {
 
   /** Phase 0c broadcast (§21). */
   broadcast: {
-    /** §21: a new headline at most every 4s; tier changes interrupt with BREAKING. */
-    headlineEvery: 4,
+    /**
+     * Each headline holds at least 12s (§21 said 4; Mike, 2026-11-16: 7 still "feels excessive"). Broadcast lower thirds hold
+     * ~8–15s (read twice); a cable news banner holds far longer. Tier changes still interrupt with BREAKING.
+     */
+    headlineEvery: 12,
     /** §21: no verb or place reused within the last 5 headlines. */
     antiRepeat: 5,
     /** Smashes inside one headline window are counted together ("3 Cars"). */
@@ -794,9 +822,9 @@ export const TUNING = {
     /** Opening headline after this long. */
     openAt: 1.2,
     /** Queued news older than this is dropped, not shown late (s). */
-    staleAfter: 6,
+    staleAfter: 14,
     /** ...except the player's own ability moments (Leap, Stare, Hijack, Pose): they wait longer for a slot. */
-    staleAfterAbility: 10,
+    staleAfterAbility: 18,
   },
 
   /** Phase 2 broadcast escalation (presentation). */
@@ -830,21 +858,6 @@ export const TUNING = {
     chopperShadowEvery: [16, 32] as [number, number],
     /** Siren flash rate (Hz). */
     sirenHz: 2.2,
-  },
-
-  /** Onboarding producer notes (src/tips.ts): on screen this long, at least this far apart (s); thresholds. */
-  tips: {
-    showTime: 4.5,
-    minGap: 3,
-    /** "He shifts up a gear" if he's still at Jog this far in (s). */
-    gearAfter: 4,
-    /** Warn about a bulldozer this far ahead (m). */
-    dozerAhead: 70,
-    /** "We're losing them" below this Ratings, after this long on air. */
-    losingBelow: 12,
-    losingAfter: 10,
-    /** Budget note this far into the first Full Broadcast segment (s). */
-    budgetAfter: 8,
   },
 
   /** Title screen chopper shot (Mike's visual direction): metres relative to the giant's travel. */

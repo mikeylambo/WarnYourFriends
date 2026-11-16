@@ -14,7 +14,7 @@ const browser = await chromium.launch({ args: ['--use-gl=angle', '--use-angle=sw
 for (const palette of ['wyf', 'network']) for (const [w, h, dsf, name] of [[1280, 720, 2, 'desktop'], [844, 390, 2, 'phone-landscape'], [390, 844, 2, 'phone-portrait']]) {
   const file = `${palette}-${name}`;
   const page = await browser.newPage({ viewport: { width: w, height: h }, deviceScaleFactor: dsf });
-  await page.addInitScript((p) => localStorage.setItem('wyf.settings.v1', JSON.stringify({ hudColors: p, producerTips: true, cameraCuts: false })), palette);
+  await page.addInitScript((p) => localStorage.setItem('wyf.settings.v1', JSON.stringify({ hudColors: p, cameraCuts: false })), palette);
   await page.goto('http://localhost:4185/?seed=6&step=1&autostart=1&cuts=0&debug=0&time=night&seg=2');
   await page.waitForFunction(() => window.__GAME?.started, null, { timeout: 30000 });
   await page.waitForFunction(() => !window.__GAME.coverage().cold, null, { timeout: 15000 });

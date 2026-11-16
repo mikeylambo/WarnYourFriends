@@ -30,7 +30,6 @@ src/broadcast/       headline generator (§21) + headlines.json word bank (pure 
 src/audio.ts         Web Audio, music/sfx/voice buses: authored SFX (assets/sfx, ElevenLabs) with synth fallback
 src/input.ts         KBM, gamepad, touch → SimInput
 src/glyphs.ts        button labels per device family (PS4: L1/R1/L2/✕), via the shell's glyph registry
-src/tips.ts          onboarding producer notes (each once, first time it matters)
 src/playlog.ts       playtest export: per-broadcast numbers kept locally, "Copy play data" on the recap (hide before release)
 src/main.ts          bootstrap: WebGL check, then loads game.ts; boot errors shown on screen
 src/game.ts          fixed-step loop, event presentation, window.__GAME
@@ -45,7 +44,10 @@ tools/clips.mjs         compare candidate run clips (GLBs) on the giant, eight m
 tools/shots-model.mjs   model pass evidence: tiers in game, cape on a lane change, PS4 HUD
 tools/shots-title.mjs   title screen (desktop, phone, glide)
 tools/filmstrip.mjs     slow-motion strip of an impact (smash-heavy, bounce, bounce-immovable)
-tools/shots-onboarding.mjs  producer tip, live budget, recap and meeting
+tools/shots-onboarding.mjs  live budget, recap and meeting
+tools/shots-recap.mjs   The 11 O'Clock Recap: through the real replay (its picture) and stepped, desktop and phones (ONLY=, SEED=)
+tools/shots-caught.mjs  Caught: Brake held with police behind, the CAUGHT meter, then busted
+tools/shots-signoff.mjs Sign-off outro: on the ramp, the swivel to Head-On, the cut to the replay
 tools/shots-police.mjs  Police evidence: chopper spotlight sweep and lock, a police crash
 tools/shots-gear.mjs    Gear tells: build-up, gear-up moment, Rampage dust
 tools/shots-replay.mjs  Recap REPLAY in real time: lead-in, slow motion at the moment, recap after

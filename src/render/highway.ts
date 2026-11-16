@@ -343,6 +343,33 @@ export class HighwayView {
     }
   }
 
+  /**
+   * The road's built width at s (walls, verge, pavement, scenery): the lane width smoothed, a max over
+   * ±`edgeSmooth` m and then a ±`edgeSmooth` m average. A lane opening or closing then reads as a shoulder
+   * becoming a lane (only the paint angles), not the whole road kinking (Mike, 2026-11-16: "angled edges").
+   * Never narrower than the lanes. Needs the track `2 × edgeSmooth` ahead: segments are built two behind its end.
+   */
+  private edgeW(s: number): number {
+    const key = Math.round(s * 4);
+    const hit = this.edgeCache.get(key);
+    if (hit !== undefined) return hit;
+    const track = this.sim.track;
+    const R = TUNING.track.edgeSmooth;
+    const n = 8;
+    let sum = 0;
+    for (let k = 0; k <= n; k++) {
+      const x = s - R + (2 * R * k) / n;
+      let m = 0;
+      for (let j = 0; j <= n; j++) m = Math.max(m, track.widthAt(x - R + (2 * R * j) / n));
+      sum += m;
+    }
+    const w = sum / (n + 1);
+    if (this.edgeCache.size > 20000) this.edgeCache.clear();
+    this.edgeCache.set(key, w);
+    return w;
+  }
+  private edgeCache = new Map<number, number>();
+
   /** Sweep cross-sections along the segment's samples into one geometry. */
   private sweep(seg: Segment, section: (i: number, s: number, w: number) => [number, number][], from = 0, to = seg.length): THREE.BufferGeometry {
     const verts: number[] = [];
@@ -385,19 +412,19 @@ export class HighwayView {
     const zone = seg.zone;
     if (zone === 'highway') {
       add(this.sweep(seg, () => [[-8, 0], [-0.9, 0.01]]), PALETTE.verge);
-      add(this.sweep(seg, (_i, _s, w) => [[w + 0.9, 0.01], [w + 8, 0]]), PALETTE.verge);
+      add(this.sweep(seg, (_i, s) => [[this.edgeW(s) + 0.9, 0.01], [this.edgeW(s) + 8, 0]]), PALETTE.verge);
     } else if (zone === 'avenue') {
       // Sidewalks with a curb face.
       add(this.sweep(seg, () => [[-6, 0.16], [-0.9, 0.16], [-0.9, 0]]), PALETTE.sidewalk);
-      add(this.sweep(seg, (_i, _s, w) => [[w + 0.9, 0], [w + 0.9, 0.16], [w + 6, 0.16]]), PALETTE.sidewalk);
+      add(this.sweep(seg, (_i, s) => [[this.edgeW(s) + 0.9, 0], [this.edgeW(s) + 0.9, 0.16], [this.edgeW(s) + 6, 0.16]]), PALETTE.sidewalk);
     } else if (zone === 'bridge') {
       // Open water under a deck slab.
-      add(this.sweep(seg, (_i, _s, w) => [[-160, -0.03], [w + 160, -0.03]]), PALETTE.water);
-      add(this.sweep(seg, (_i, _s, w) => [[-1.4, 0.02], [-1.4, -1.6], [w + 1.4, -1.6], [w + 1.4, 0.02]]), PALETTE.deck);
+      add(this.sweep(seg, (_i, s) => [[-160, -0.03], [this.edgeW(s) + 160, -0.03]]), PALETTE.water);
+      add(this.sweep(seg, (_i, s) => [[-1.4, 0.02], [-1.4, -1.6], [this.edgeW(s) + 1.4, -1.6], [this.edgeW(s) + 1.4, 0.02]]), PALETTE.deck);
     } else {
-      add(this.sweep(seg, (_i, _s, w) => [[-1.6, 0.01], [w + 1.6, 0.01]]), PALETTE.deck);
+      add(this.sweep(seg, (_i, s) => [[-1.6, 0.01], [this.edgeW(s) + 1.6, 0.01]]), PALETTE.deck);
     }
-    add(this.sweep(seg, (_i, _s, w) => [[-0.9, 0.02], [w + 0.9, 0.02]]), PALETTE.road);
+    add(this.sweep(seg, (_i, s) => [[-0.9, 0.02], [this.edgeW(s) + 0.9, 0.02]]), PALETTE.road);
     add(this.sweep(seg, () => [[0.15, 0.035], [0.35, 0.035]]), PALETTE.edgeLineLeft, false, true);
     add(this.sweep(seg, (_i, _s, w) => [[w - 0.35, 0.035], [w - 0.15, 0.035]]), PALETTE.edgeLineRight, false, true);
     // Edge barriers (the sim's walls): concrete on the highway, a curb on the avenue,
@@ -406,11 +433,12 @@ export class HighwayView {
     add(this.sweep(seg, () => [[-0.4, 0], [-0.4, eh], [-0.9, eh], [-0.9, 0]]), ec);
     const exitSeg = this.exitFor(seg);
     if (exitSeg) this.buildRamp(seg, exitSeg, group);
-    else add(this.sweep(seg, (_i, _s, w) => [[w + 0.4, 0], [w + 0.4, eh], [w + 0.9, eh], [w + 0.9, 0]]), ec);
+    else add(this.sweep(seg, (_i, s) => [[this.edgeW(s) + 0.4, 0], [this.edgeW(s) + 0.4, eh], [this.edgeW(s) + 0.9, eh], [this.edgeW(s) + 0.9, 0]]), ec);
     const nextExit = this.sim.track.segments.find((x) => (x.exit || x.fork) && x.index === seg.index + 1);
     if (nextExit) this.signGantry(seg, seg.s0 + 6, group, nextExit.fork?.name);
 
-    // Dashed lane lines (3m dash, 6m gap), only where both lanes exist.
+    // Dashed lane lines (3m dash, 6m gap), only where both lanes exist: an opening lane gets its line once it's
+    // nearly full width (a line hugging the tapering edge read as a mistake; Mike, 2026-11-16).
     const dashGeo = new THREE.PlaneGeometry(1, 1);
     dashGeo.rotateX(-Math.PI / 2);
     const dashes: [number, number, number][] = [];
@@ -419,7 +447,7 @@ export class HighwayView {
       if (((s % 9) + 9) % 9 >= 3) continue;
       const w = this.sim.track.widthAt(s);
       for (let b = 1; b < TUNING.lanes.max; b++) {
-        if (b * W > w - 1.5) break;
+        if (b * W > w - W * TUNING.track.laneLineAt) break;
         dashes.push([s, b * W, this.sim.track.headingAt(s)]);
       }
     }
@@ -441,7 +469,7 @@ export class HighwayView {
     if (merge) {
       const closing = merge.lanes1 < merge.lanes0;
       const sAt = merge.index === seg.index ? seg.s0 + 2 : seg.s0 + 20;
-      const w = this.sim.track.widthAt(sAt);
+      const w = this.edgeW(sAt);
       this.sim.track.posAt(sAt, w + 2.5, this.pos);
       const sign = new THREE.Group();
       const post = new THREE.Mesh(this.box, toon(PALETTE.pole));
@@ -474,7 +502,7 @@ export class HighwayView {
     // Roadside scenery (cosmetic, seeded per segment): sodium streetlights, trees, the odd building, gantries.
     const rng = new Rng((seg.index * 2654435761) >>> 0);
     const s = seg.s0 + 20;
-    const w = this.sim.track.widthAt(s);
+    const w = this.edgeW(s);
     const h = this.sim.track.headingAt(s);
     group.userData.lamps = zone === 'tunnel' ? this.buildTunnel(seg, group) : this.buildLamps(seg, group);
     if (zone === 'avenue') this.buildStorefronts(seg, group, rng);
@@ -486,7 +514,7 @@ export class HighwayView {
       const left = rng.chance(0.5);
       const off = rng.range(12, 40);
       const ss = seg.s0 + rng.range(0, seg.length);
-      this.sim.track.posAt(ss, left ? -off : this.sim.track.widthAt(ss) + off, this.pos);
+      this.sim.track.posAt(ss, left ? -off : this.edgeW(ss) + off, this.pos);
       const scale = rng.range(0.8, 1.5);
       const crown = new THREE.Mesh(new THREE.ConeGeometry(2.2 * scale, 5 * scale, 6), toon(rng.pick(PALETTE.tree)));
       crown.position.set(this.pos.x, 3.5 * scale, this.pos.z);
@@ -498,7 +526,7 @@ export class HighwayView {
     if (rng.chance(0.35)) {
       const left = rng.chance(0.5);
       const ss = seg.s0 + 20;
-      this.sim.track.posAt(ss, left ? -rng.range(45, 70) : this.sim.track.widthAt(ss) + rng.range(45, 70), this.pos);
+      this.sim.track.posAt(ss, left ? -rng.range(45, 70) : this.edgeW(ss) + rng.range(45, 70), this.pos);
       // Off-road blocks: lit windows like the avenue's, a roof cap and a rooftop unit.
       const b = new THREE.Mesh(this.box, facade(rng.pick(PALETTE.buildings), toonRamp()));
       const bh = rng.range(6, 16);
@@ -562,7 +590,7 @@ export class HighwayView {
         const wid = rng.range(9, 15);
         const sMid = seg.s0 + a + wid / 2;
         if (sMid > seg.s0 + seg.length) break;
-        const w = track.widthAt(sMid);
+        const w = this.edgeW(sMid);
         const depth = rng.range(10, 16);
         const ht = rng.range(8, 20);
         const d = left ? -6 - depth / 2 : w + 6 + depth / 2;
@@ -606,7 +634,7 @@ export class HighwayView {
     const track = this.sim.track;
     const H = 38;
     const tower = (s: number) => {
-      const w = track.widthAt(s);
+      const w = this.edgeW(s);
       for (const d of [-2.4, w + 2.4]) {
         const p = track.posAt(s, d, { x: 0, z: 0 });
         const m = new THREE.Mesh(this.box, toon(0x8a6f62));
@@ -627,7 +655,7 @@ export class HighwayView {
       const pts: THREE.Vector3[] = [];
       for (let i = 0; i <= seg.length; i += 4) {
         const s = seg.s0 + i;
-        const w = track.widthAt(s);
+        const w = this.edgeW(s);
         const p = track.posAt(s, side ? w + 2.4 : -2.4, { x: 0, z: 0 });
         const k = (i / seg.length) * Math.PI;
         pts.push(new THREE.Vector3(p.x, H - 4 - Math.sin(k) * 26 * (seg.zoneStart ? 0.5 : 1), p.z));
@@ -643,7 +671,7 @@ export class HighwayView {
     const lamps: LampPos[] = [];
     for (let i = 4; i < seg.length; i += 10) {
       const s = seg.s0 + i;
-      const w = track.widthAt(s);
+      const w = this.edgeW(s);
       const h = track.headingAt(s);
       const mid = track.posAt(s, w / 2, { x: 0, z: 0 });
       const beam = new THREE.Mesh(this.box, toon(PALETTE.tunnelWall));
@@ -668,7 +696,7 @@ export class HighwayView {
     // Portals: a roofed mouth where the tunnel starts and ends.
     const next = track.segments.find((x) => x.index === seg.index + 1);
     const portal = (s: number) => {
-      const w = track.widthAt(s);
+      const w = this.edgeW(s);
       const mid = track.posAt(s, w / 2, { x: 0, z: 0 });
       const roofMat = new THREE.MeshToonMaterial({ color: PALETTE.tunnelWall, gradientMap: toonRamp(), transparent: true });
       this.overpasses.push({ s, mat: roofMat }); // fades like an overpass while he passes under
@@ -724,7 +752,7 @@ export class HighwayView {
       }
       case 'foodtrucks': {
         // Festoon lights strung across the street.
-        const w = track.widthAt(seg.s0 + 20);
+        const w = this.edgeW(seg.s0 + 20);
         const bulbs = [0xffd27a, 0xff9a5a, 0xfff2c4];
         for (const s of [seg.s0 + 4, seg.s0 + 19, seg.s0 + 34]) {
           add(s, w / 2, 6.6, 0.05, 0.05, w + 12, toon(0x2a2230));
@@ -753,7 +781,7 @@ export class HighwayView {
   private buildOverpass(seg: Segment, group: THREE.Group) {
     const track = this.sim.track;
     const s = seg.s0 + 20;
-    const w = track.widthAt(s);
+    const w = this.edgeW(s);
     const h = track.headingAt(s);
     const mat = new THREE.MeshToonMaterial({ color: 0x9a948a, gradientMap: toonRamp(), transparent: true, opacity: 1 });
     const mid = track.posAt(s, w / 2, { x: 0, z: 0 });
@@ -788,7 +816,7 @@ export class HighwayView {
     const pool = new THREE.PlaneGeometry(1, 1);
     pool.rotateX(-Math.PI / 2);
     for (let s = Math.ceil(seg.s0 / sp) * sp; s < seg.s0 + seg.length; s += sp) {
-      const w = track.widthAt(s);
+      const w = this.edgeW(s);
       const h = track.headingAt(s);
       const left = Math.round(s / sp) % 2 === 0;
       if (!left && (this.exitFor(seg) || this.nearRamp(seg))) continue; // the ramp peels off on the right
