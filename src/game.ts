@@ -75,14 +75,12 @@ const chainStunt = chainEl.querySelector('.stunt') as HTMLElement;
 const chainPts = chainEl.querySelector('.pts') as HTMLElement;
 const chainCnt = chainEl.querySelector('.cnt') as HTMLElement;
 const chainClock = chainEl.querySelector('.clock i') as HTMLElement;
-const chainResult = chainEl.querySelector('.result') as HTMLElement;
 /** Spectacle stunt names on the combo counter (what just counted, so the player learns the menu). */
 const STUNT_LABEL: Record<string, string> = { medium: 'SMASH', heavy: 'HEAVY SMASH', unit: 'POLICE CAR', policeCrash: 'POLICE CRASH', collateral: 'COLLATERAL', nearMiss: 'NEAR MISS', ramDodge: 'DODGED', lostTrack: 'SHOOK ONE', chopperShaken: 'LOST THE CHOPPER', leapLand: 'LANDING', hijackBail: 'BAIL OUT', pose: 'POSE' };
 let chainResultT = 0;
 const gearPips = [...gearsEl.querySelectorAll('i')] as HTMLElement[];
 const gearName = gearsEl.querySelector('.nm') as HTMLElement;
-const gearTag = $('geartag');
-let gearTagT = 0;
+const gearMultEl = gearsEl.querySelector('.x') as HTMLElement;
 /** A shockwave waits for the first footfall after a gear-up (it lands with his foot). */
 let gearShockPending = false;
 const tierName = tierbar.querySelector('.name') as HTMLElement;
@@ -92,7 +90,6 @@ const camTag = $('camtag');
 const clockEl = $('clock');
 const chyKicker = document.querySelector('#chyron .kicker') as HTMLElement;
 const chyText = document.querySelector('#chyron .text') as HTMLElement;
-const breakingEl = $('breaking');
 const viewersEl = $('viewers');
 const ratingsEl = $('ratings');
 const ratingsBar = $('ratingsbar');
@@ -115,7 +112,7 @@ const abilCd = abilEl.querySelector('.cd i') as HTMLElement;
 const abilBtn = $<HTMLButtonElement>('btn-ability');
 const controlsEl = $('controls');
 const budgetEl = $('budget');
-const tips = new Tips($('tip'), TUNING.tips.showTime, TUNING.tips.minGap);
+const tips = new Tips();
 
 // --- Renderer ---------------------------------------------------------------
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
@@ -408,7 +405,7 @@ function hideRecap() {
   recapEl.hidden = true;
 }
 /** Onboarding producer notes: what triggers each one (events trigger the rest). */
-function updateTips(dt: number) {
+function updateTips() {
   const T = TUNING.tips;
   const on = settings.producerTips && !attract && !replay && started && sim.live && !document.documentElement.classList.contains('coldopen');
   if (on) {
@@ -418,7 +415,6 @@ function updateTips(dt: number) {
     if (sim.show.ratings < T.losingBelow && sim.time > T.losingAfter) tips.want('losing');
     if (run && sim.time > T.budgetAfter) tips.want('budget');
   }
-  tips.update(dt, on);
 }
 
 /** What an ability just did, beside its chip: the payoff has to read even when the chopper is far out. */
@@ -610,6 +606,8 @@ function showRecap() {
   const runStatsHtml = run && run.phase !== 'meeting'
     ? `<span>Run score <b>${Math.round(run.earned).toLocaleString()}</b></span><span>Segments cleared <b>${run.results.filter((x) => x.cleared).length} / ${N}</b></span>`
     : run ? `<span>Added to budget <b>+${Math.round(sh.banked).toLocaleString()}</b></span><span>Budget <b>${run.purse.toLocaleString()}</b></span><span class="how">Spend it at the meeting.</span>` : '';
+  // Producer's notes: the onboarding lines this broadcast earned, handed over here instead of over the road.
+  const notes = settings.producerTips ? tips.take(TUNING.tips.perRecap) : [];
   const buttons = run?.phase === 'meeting'
     ? `<button class="go" id="meet">Producer's Meeting</button>`
     : run
@@ -629,6 +627,7 @@ function showRecap() {
       ${!run && lastBest ? `<span>Best score <b>${lastBest.bestBanked.toLocaleString()}</b></span><span>Signed off <b>${lastBest.signOffs} / ${lastBest.broadcasts}</b></span>` : ''}
     </div>
     ${sim.asks.list.length ? `<ul class="asks">${sim.asks.list.map((a) => `<li class="${a.done ? 'done' : ''}"><i>${a.done ? '✓' : '✕'}</i>${esc(a.text)}${a.done ? `<b>+${a.reward.toLocaleString()}</b>` : ''}</li>`).join('')}</ul>` : ''}
+    ${notes.length ? `<div class="notes"><span class="who">Producer</span><ul>${notes.map((n) => `<li>${esc(n)}</li>`).join('')}</ul></div>` : ''}
     <p class="anchor">${esc(anchorLine)}</p>
     <div class="row">${buttons}</div>
     <button class="playdata" id="playdata">Copy play data</button>
@@ -670,7 +669,7 @@ function recapToMenu() {
   app.flow.onActivate('results', 'menu');
 }
 
-/** §21 chyron: show a headline; tier changes break in with the BREAKING wipe and stinger. */
+/** §21 chyron: show a headline; tier changes break in with the stinger and the cream BREAKING kicker. */
 function showHeadline(h: Headline) {
   chyKicker.textContent = h.kicker;
   chyKicker.classList.toggle('breaking', h.breaking);
@@ -680,13 +679,7 @@ function showHeadline(h: Headline) {
   span.textContent = h.text;
   span.className = 'in';
   chyText.replaceChildren(span);
-  if (h.breaking) {
-    audio.breaking();
-    breakingEl.classList.toggle('soft', settings.reduceFlashes);
-    breakingEl.classList.remove('go');
-    void breakingEl.offsetWidth;
-    breakingEl.classList.add('go');
-  }
+  if (h.breaking) audio.breaking();
 }
 
 /** The stunt just before this chain event was a smash-across (for the counter's label). */
@@ -815,12 +808,11 @@ function present(e: SimEvent) {
       break;
     }
     case 'netSlip': {
-      // Caught once: a jolt, the BREAKING sting, and the producer's warning that next time is the last.
+      // Caught once: a jolt and the BREAKING sting.
       audio.breaking();
       rig.jolt(TUNING.impact.heavy.shake, TUNING.camera.joltTime);
       flash(TUNING.impact.heavy.flashFrames);
       haptic(160, 0.9);
-      tips.say("Slipped the net. Next time they've got him.");
       break;
     }
     case 'netEscape':
@@ -841,9 +833,8 @@ function present(e: SimEvent) {
       highway.rebuild([e.segment - 1, e.segment, e.segment + 1, e.segment + 2]);
       break;
     case 'forkOpen':
-      // The ramp opens on segments already built ahead; the producer calls it.
+      // The ramp opens on segments already built ahead; the exit sign on the gantry calls it.
       highway.rebuild([e.segment - 1, e.segment, e.segment + 1, e.segment + 2]);
-      tips.say(`Exit for ${e.name} coming up. Right lane takes it.`);
       break;
     case 'fork':
       if (e.taken) {
@@ -856,7 +847,6 @@ function present(e: SimEvent) {
         rig.cut(director.current, director.side, targetAt(sim.giant.s, sim.giant.d));
         flash(TUNING.camera.cutFlashFrames);
         showCamTag();
-        if (e.shaken > 0) tips.say(e.shaken === 1 ? 'They missed the exit.' : `${e.shaken} cars missed the exit.`);
       }
       break;
     case 'busted':
@@ -937,7 +927,6 @@ function present(e: SimEvent) {
     case 'ask': {
       renderAsks();
       if (e.done) {
-        tips.say(`That's the shot. +${e.reward.toLocaleString()}`);
         audio.chainEnd(4, false);
         asksList.querySelector(`[data-id="${e.id}"]`)?.classList.add('flash');
       }
@@ -956,7 +945,6 @@ function present(e: SimEvent) {
       chainStunt.textContent = STUNT_LABEL[e.cause] + ((e.cause === 'medium' || e.cause === 'heavy' || e.cause === 'unit') && recentAcross(e) ? ' · ACROSS' : '');
       chainPts.textContent = Math.round(e.pending).toLocaleString();
       chainCnt.textContent = e.count > 1 ? `${e.count} in a row` : '';
-      chainResult.textContent = '';
       runStats.bestChain = Math.max(runStats.bestChain, e.count);
       audio.chainTick(e.mult);
       break;
@@ -964,7 +952,10 @@ function present(e: SimEvent) {
     case 'chainEnd': {
       chainEl.classList.remove('up');
       chainEl.classList.add(e.dropped ? 'dropped' : 'banked');
-      chainResult.textContent = e.dropped ? 'DROPPED' : `+${e.points.toLocaleString()}`;
+      // The result takes the counter's own lines: no extra row under it.
+      chainPts.textContent = e.dropped ? chainPts.textContent : `+${e.points.toLocaleString()}`;
+      chainStunt.textContent = e.dropped ? 'DROPPED' : 'BANKED';
+      chainCnt.textContent = e.count > 1 ? `${e.count} in a row` : '';
       chainResultT = 1.4;
       if (e.count > 1 || !e.dropped) audio.chainEnd(e.mult, e.dropped);
       break;
@@ -1006,10 +997,6 @@ function present(e: SimEvent) {
       rig.gearPunch();
       highway.alarm();
       gearShockPending = true;
-      // The station notices: a tag rides the chyron (true: he did just speed up).
-      gearTag.textContent = e.tier >= 2 ? 'FULL RAMPAGE' : 'PICKING UP SPEED';
-      gearTag.className = e.tier >= 2 ? 'on rampage' : 'on';
-      gearTagT = TUNING.gear.tagTime;
       audio.tierUp(e.tier);
       giant.onTierUp();
       tierbar.classList.remove('flick');
@@ -1797,13 +1784,12 @@ function updateHud(dt: number) {
   ratingsBar.style.width = `${sh.ratings.toFixed(1)}%`;
   for (let k = 1; k <= 3; k++) ratingsEl.classList.toggle(`t${k}`, sh.tier === k);
   ratingsEl.classList.toggle('danger', sh.ratings < 8 && sim.live);
-  // Score (Single Segment) or Budget (Full Broadcast: banked so far plus this segment), with the gear's multiplier.
+  // Score (Single Segment) or Budget (Full Broadcast: banked so far plus this segment). The gear's multiplier rides the gear strip.
   budgetEl.hidden = attract;
   if (!attract) {
     budgetEl.querySelector('span')!.textContent = run ? 'Budget' : 'Score';
     // While live, this segment's banked score isn't in the purse yet; once it ends, it is.
     budgetEl.querySelector('b')!.textContent = Math.floor((run ? run.purse : 0) + (!run || run.phase === 'live' ? sh.banked : 0)).toLocaleString();
-    budgetEl.querySelector('i')!.textContent = `×${TUNING.show.bankMult[g.tier]}`;
   }
   // Combo counter: the clock drains over the chain window; the result lingers after it ends.
   const ch = sh.chain;
@@ -1811,7 +1797,7 @@ function updateHud(dt: number) {
   chainResultT = Math.max(0, chainResultT - dt);
   if (ch.count === 0 && chainResultT <= 0 && chainEl.classList.contains('on')) chainEl.className = '';
   chainEl.hidden = attract;
-  updateTips(dt);
+  updateTips();
   const falling = sim.live && sh.ratings < lastRatings - 1e-6;
   trendEl.textContent = falling ? '▼' : '';
   lastRatings = sh.ratings;
@@ -1828,8 +1814,7 @@ function updateHud(dt: number) {
   });
   gearsEl.dataset.tier = String(g.tier);
   gearName.textContent = TUNING.tiers[g.tier].name.toUpperCase();
-  gearTagT = Math.max(0, gearTagT - dt);
-  if (gearTagT <= 0 && gearTag.classList.contains('on')) gearTag.className = '';
+  gearMultEl.textContent = `×${TUNING.show.bankMult[g.tier]}`;
   heatStars.forEach((el, i) => el.classList.toggle('on', i < sh.heat));
   // Phase 3: segment number and the ability chip (cooldown fills back up).
   segEl.hidden = !run;

@@ -156,16 +156,6 @@ html.touch #chyron { right: 128px; }
 #chyron .text span { display: block; padding: 0 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 #chyron .text span.in { animation: chyin 0.35s cubic-bezier(.2,.8,.2,1); }
 @keyframes chyin { from { transform: translateY(100%); opacity: 0; } to { transform: none; opacity: 1; } }
-#breaking {
-  /* Top of frame: never over the giant (he sits in the lower part of the shot). */
-  position: absolute; left: 0; right: 0; top: calc(96px + env(safe-area-inset-top)); height: 34px;
-  background: var(--red); color: #fff; display: grid; place-items: center; transform: translateX(-102%);
-  font: 900 18px/1 ui-sans-serif, system-ui, sans-serif; letter-spacing: 0.3em; box-shadow: 0 0 30px rgba(215, 38, 61, 0.6);
-}
-#breaking.go { animation: wipe 1.5s cubic-bezier(.15,.9,.2,1) forwards; }
-#breaking.soft.go { animation: wipesoft 1.5s ease forwards; }
-@keyframes wipe { 0% { transform: translateX(-102%); } 14% { transform: none; } 80% { transform: none; opacity: 1; } 100% { transform: none; opacity: 0; } }
-@keyframes wipesoft { 0% { transform: none; opacity: 0; } 20% { opacity: 0.9; } 80% { opacity: 0.9; } 100% { opacity: 0; transform: none; } }
 
 /* --- Phase 2 HUD: Ratings (viewer count), Heat stars, sign-off arrow (§21) ------- */
 #ratings {
@@ -214,10 +204,6 @@ html.touch #chyron { right: 128px; }
 html.ended #view { filter: saturate(0.25) contrast(1.1); transition: filter 0.6s; }
 
 /* --- Phase 2 broadcast escalation ----------------------------------------------- */
-#live #coverage { background: rgba(10, 8, 20, 0.55); padding: 5px 7px 4px; font-size: 10px; letter-spacing: 0.16em; opacity: 0.9; }
-#rivals { position: absolute; top: calc(10px + env(safe-area-inset-top)); right: 196px; display: none; gap: 6px; }
-#hud.cov3 #rivals { display: flex; }
-#rivals span { background: rgba(255,255,255,0.9); color: #222; font: 900 11px/1 ui-sans-serif, system-ui, sans-serif; padding: 6px 7px; letter-spacing: 0.08em; opacity: 0.85; }
 #hud.cov3::after { content: ''; position: absolute; inset: 0; border: 4px solid rgba(215, 38, 61, 0.65); animation: chaos 1.2s ease-in-out infinite; pointer-events: none; }
 @keyframes chaos { 50% { border-color: rgba(215, 38, 61, 0.2); } }
 
@@ -390,7 +376,7 @@ html.attract #gainpop { display: none; }
 html.title #ui .slu-screen:not([data-screen-id="title"]) { place-items: center start; padding: 0 0 0 clamp(16px, 7vw, 110px); background: linear-gradient(90deg, rgba(5, 3, 12, 0.85) 0%, rgba(5, 3, 12, 0.45) 40%, rgba(5, 3, 12, 0) 65%); }
 @media (max-width: 640px) { html.title #ui .slu-screen:not([data-screen-id="title"]) { place-items: center; padding: 16px; } }
 /* How to Play: on its own, nothing of the cold open or the controls strip behind it. */
-html.briefing #hud, html.briefing #controls, html.briefing #coldopen, html.briefing #camtag, html.briefing #btn-pause, html.briefing #abil, html.briefing #tip { display: none !important; }
+html.briefing #hud, html.briefing #controls, html.briefing #coldopen, html.briefing #camtag, html.briefing #btn-pause, html.briefing #abil { display: none !important; }
 html.briefing #recap { background: rgba(7, 5, 13, 0.92); }
 
 /* Title screen (Mike's chopper-feed direction): wordmark left, the live chase right, LIVE bug. */
@@ -426,19 +412,12 @@ html.cover #titlebug { display: none; }
 #ui [data-screen-id="title"] .slu-panel { transition: opacity 0.5s; }
 
 /* Onboarding producer notes (src/tips.ts): top centre, under the controls strip. */
-#tip { position: absolute; left: 50%; top: calc(108px + env(safe-area-inset-top)); transform: translate(-50%, -6px); display: flex; align-items: stretch; max-width: min(92vw, 560px); background: var(--paper, #f4ead6); color: #140824; font: 700 14px/1.3 ui-sans-serif, system-ui, sans-serif; box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35); opacity: 0; pointer-events: none; transition: opacity 0.2s, transform 0.2s; z-index: 30; }
-#tip.show { opacity: 1; transform: translate(-50%, 0); }
-#tip .who { background: #d7263d; color: #fff; font-size: 10px; letter-spacing: 0.16em; text-transform: uppercase; padding: 8px 9px; display: flex; align-items: center; }
-#tip .txt { padding: 8px 12px; }
-html.attract #tip, html.title #tip { display: none; }
 /* Full Broadcast: the budget ticking up under the viewers meter. */
 #budget { position: absolute; top: calc(80px + env(safe-area-inset-top)); left: 10px; display: flex; gap: 6px; align-items: baseline; padding: 4px 9px; background: rgba(10, 8, 20, 0.7); color: #f2cc8f; font: 800 12px/1 ui-sans-serif, system-ui, sans-serif; letter-spacing: 0.08em; }
 #budget[hidden] { display: none; }
 #budget span { font-size: 10px; letter-spacing: 0.18em; text-transform: uppercase; opacity: 0.8; color: #fff; }
 #budget b { font-size: 14px; font-variant-numeric: tabular-nums; }
-#budget i { font-style: normal; font-size: 11px; color: #fff; opacity: 0.85; }
 /* The gain pop sits under the budget when it's showing. */
-html:has(#budget:not([hidden])) #gainpop { top: calc(108px + env(safe-area-inset-top)); }
 #recap .meeting .how { font-size: 13px; opacity: 0.75; margin: 4px 0 10px; }
 #recap .pitch .need { display: block; font-size: 11px; font-weight: 700; color: #d7263d; margin-top: 2px; }
 #recap .stats .how { grid-column: 1 / -1; font-size: 12px; opacity: 0.7; }
@@ -447,7 +426,7 @@ html:has(#budget:not([hidden])) #gainpop { top: calc(108px + env(safe-area-inset
    Rebuilt as CSS shapes, not the raster: slanted parallelograms, heavy italic caps, the sheet's
    red / ink / purple / cream. Crisp at any size, no fringing. ------------------------------------- */
 :root { --wyf-red: #ab2530; --wyf-ink: #1e1821; --wyf-purple: #4b2a63; --wyf-cream: #ece0c8; --wyf-blue: #465a7a; --slant: 12px; }
-#live b, #live #clock, #live #segno, #live #coverage {
+#live b, #live #clock, #live #segno {
   font-style: italic; font-weight: 900;
   clip-path: polygon(var(--slant) 0, 100% 0, calc(100% - var(--slant)) 100%, 0 100%);
   padding-left: calc(8px + var(--slant) * 0.6); padding-right: calc(8px + var(--slant) * 0.6);
@@ -455,7 +434,7 @@ html:has(#budget:not([hidden])) #gainpop { top: calc(108px + env(safe-area-inset
 #live { gap: 0; }
 #live .dot { margin-right: 6px; }
 #live b { background: var(--wyf-red); color: var(--wyf-cream); box-shadow: none; font-size: 15px; letter-spacing: 0.06em; }
-#live #clock, #live #segno, #live #coverage { background: rgba(30, 24, 33, 0.82); color: var(--wyf-cream); margin-left: -4px; }
+#live #clock, #live #segno { background: rgba(30, 24, 33, 0.82); color: var(--wyf-cream); margin-left: -4px; }
 #live #clock.count { background: #1e6b3a; }
 /* Station bug: WYF / NEWS on ink, the 6 on purple, one slanted block. */
 #bug { opacity: 0.9; filter: drop-shadow(0 3px 8px rgba(0, 0, 0, 0.45)); }
@@ -470,7 +449,6 @@ html:has(#budget:not([hidden])) #gainpop { top: calc(108px + env(safe-area-inset
 #chyron .kicker.busted { background: var(--wyf-red); }
 #chyron .kicker.signoff { background: var(--wyf-purple); }
 #chyron .text { background: rgba(236, 224, 200, 0.97); color: var(--wyf-ink); clip-path: polygon(0 0, 100% 0, calc(100% - var(--slant)) 100%, 0 100%); }
-#breaking { background: var(--wyf-red); color: var(--wyf-cream); font-style: italic; box-shadow: none; clip-path: polygon(18px 0, 100% 0, calc(100% - 18px) 100%, 0 100%); }
 .card .kicker, #recap .kicker { font-style: italic; clip-path: polygon(8px 0, 100% 0, calc(100% - 8px) 100%, 0 100%); padding-left: 14px; padding-right: 14px; }
 /* Producer's Meeting cards: the sheet's art up top, the producer's line, then what it does. */
 #recap .pitch { padding: 0 0 12px; overflow: hidden; }
@@ -525,9 +503,6 @@ html:has(#budget:not([hidden])) #gainpop { top: calc(108px + env(safe-area-inset
 #gears i.next { animation: gearnext 0.4s steps(2) infinite; } /* 2.5 blinks/s, under the 3/s photosensitivity limit */
 @keyframes gearnext { 50% { background: rgba(255, 241, 214, 0.55); } }
 #gears .nm { margin-left: 6px; min-width: 7ch; }
-#geartag { position: absolute; right: 18px; bottom: calc(100% + 6px); padding: 4px 16px; background: var(--wyf-cream); color: var(--wyf-red); font: italic 900 13px/1 ui-sans-serif, system-ui, sans-serif; letter-spacing: 0.14em; clip-path: polygon(8px 0, 100% 0, calc(100% - 8px) 100%, 0 100%); opacity: 0; transform: translateY(8px); transition: opacity 0.15s, transform 0.2s cubic-bezier(.2,.8,.2,1); pointer-events: none; }
-#geartag.on { opacity: 1; transform: none; }
-#geartag.rampage { background: var(--wyf-red); color: var(--wyf-cream); }
 
 /* --- Recap REPLAY (the sheet's blue badge): HUD off, letterbox bars, badge top left ------------- */
 #replay { position: absolute; left: 0; top: calc(18px + env(safe-area-inset-top)); display: flex; align-items: center; gap: 10px; pointer-events: none; z-index: 5; }
@@ -545,7 +520,7 @@ html.replay #replay { top: calc(7vh + 12px); }
 html.replay #chyron:has(.text.empty) { visibility: hidden; }
 
 /* --- Spectacle combo counter (left, under the score it feeds; clear of the desk and viewer-video windows on the right) --------------------------- */
-#chain { position: absolute; left: 12px; top: calc(146px + env(safe-area-inset-top)); display: grid; grid-template-columns: auto auto; grid-template-areas: 'mult pts' 'mult stunt' 'mult cnt' 'clock clock' 'result result'; justify-items: start; align-items: center; column-gap: 10px; color: var(--wyf-cream); font: italic 900 12px/1.1 ui-sans-serif, system-ui, sans-serif; letter-spacing: 0.08em; opacity: 0; transform: translateX(-14px); transition: opacity 0.15s, transform 0.2s cubic-bezier(.2,.8,.2,1); pointer-events: none; text-shadow: 0 1px 3px rgba(0, 0, 0, 0.6); }
+#chain { position: absolute; left: 12px; top: calc(146px + env(safe-area-inset-top)); display: grid; grid-template-columns: auto auto; grid-template-areas: 'mult pts' 'mult stunt' 'mult cnt' 'clock clock'; justify-items: start; align-items: center; column-gap: 10px; color: var(--wyf-cream); font: italic 900 12px/1.1 ui-sans-serif, system-ui, sans-serif; letter-spacing: 0.08em; opacity: 0; transform: translateX(-14px); transition: opacity 0.15s, transform 0.2s cubic-bezier(.2,.8,.2,1); pointer-events: none; text-shadow: 0 1px 3px rgba(0, 0, 0, 0.6); }
 #chain.on, #chain.banked, #chain.dropped { opacity: 1; transform: none; }
 #chain .mult { grid-area: mult; background: var(--wyf-red); color: var(--wyf-cream); font-size: 34px; padding: 6px 16px 4px 18px; clip-path: polygon(10px 0, 100% 0, calc(100% - 10px) 100%, 0 100%); text-shadow: none; }
 #chain[data-mult='1'] .mult { background: rgba(30, 24, 33, 0.85); }
@@ -554,9 +529,6 @@ html.replay #chyron:has(.text.empty) { visibility: hidden; }
 #chain .cnt { grid-area: cnt; font-size: 10px; letter-spacing: 0.12em; opacity: 0.75; font-style: normal; font-weight: 700; }
 #chain .clock { grid-area: clock; justify-self: stretch; height: 4px; margin-top: 5px; background: rgba(236, 224, 200, 0.18); }
 #chain .clock i { display: block; height: 100%; background: var(--wyf-cream); transform-origin: left; }
-#chain .result { grid-area: result; margin-top: 4px; font-size: 18px; }
-#chain.banked .result { color: #f2cc8f; }
-#chain.dropped .result { color: #ff6b6b; }
 #chain.banked .clock, #chain.dropped .clock { visibility: hidden; }
 #chain.up .mult { animation: chainpop 0.28s cubic-bezier(.2,.9,.3,1.4); }
 @keyframes chainpop { 0% { transform: scale(1.35); } 100% { transform: none; } }
@@ -616,21 +588,20 @@ html[data-palette='network'] {
   --c-text: #ffffff; --c-on-paper: #0b1a3d; --c-mute: #b9c6e8; --c-accent: #ffffff; --c-six: #0b2a6f;
   --c-replay: #3d6fe0; --c-gear: #d6001c;
 }
-#hud, #tip, #chain, #gears, #asks, #recap, #replay, #abil, #abilpop, #budget, #gainpop, .card { font-family: var(--f-head); }
-#live, #ratings, #budget, #chain, #gainpop, #bug, #rivals, #asks, #desk, #gears, #abil, #tip, #replay, #signoff { zoom: var(--hs, 1); }
+#hud, #chain, #gears, #asks, #recap, #replay, #abil, #abilpop, #budget, #gainpop, .card { font-family: var(--f-head); }
+#live, #ratings, #budget, #chain, #bug, #asks, #desk, #gears, #abil, #replay, #signoff { zoom: var(--hs, 1); }
 
 /* --- LIVE row: slanted plates (the dot rides inside the red one) --- */
 #live { left: 20px; top: calc(20px + env(safe-area-inset-top)); height: 48px; gap: 4px; align-items: stretch; }
 #live .dot { position: absolute; left: 14px; top: 19px; z-index: 1; width: 10px; height: 10px; border-radius: 50%; background: var(--c-text); box-shadow: none; margin: 0; }
-#live b, #live #clock, #live #segno, #live #coverage { display: flex; align-items: center; box-shadow: none; margin: 0; color: var(--c-text); }
+#live b, #live #clock, #live #segno { display: flex; align-items: center; box-shadow: none; margin: 0; color: var(--c-text); }
 #live b { background: var(--c-red); padding: 0 24px 0 32px; font: italic 900 30px/1 var(--f-head); letter-spacing: 0.03em; clip-path: polygon(0 0, 100% 0, calc(100% - 14px) 100%, 0 100%); }
 #live #clock, #live #segno { background: var(--c-panel); padding: 0 22px; font: 900 34px/1 var(--f-num); letter-spacing: 0.02em; clip-path: polygon(14px 0, 100% 0, calc(100% - 14px) 100%, 0 100%); }
 #live #segno { font-size: 24px; }
 #live #clock.count { background: var(--c-paper); color: var(--c-red); }
-#live #coverage { background: var(--c-panel); padding: 0 22px; font: italic 800 14px/1 var(--f-head); letter-spacing: 0.2em; opacity: 1; clip-path: polygon(14px 0, 100% 0, calc(100% - 14px) 100%, 0 100%); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 320px; }
 
 /* --- Viewers and score: oversized numerals on slanted plates --- */
-#ratings { left: 20px; top: calc(80px + env(safe-area-inset-top)); display: grid; grid-template-columns: auto auto auto; grid-template-areas: 'num lbl trend' 'bar bar bar'; align-items: baseline; column-gap: 10px; background: var(--c-panel); padding: 4px 26px 8px 16px; clip-path: polygon(0 0, 100% 0, calc(100% - 14px) 100%, 0 100%); }
+#ratings { left: 20px; top: calc(80px + env(safe-area-inset-top)); display: grid; grid-template-columns: auto auto auto; grid-template-areas: 'num lbl trend' 'num pop pop' 'bar bar bar'; align-items: center; column-gap: 10px; background: var(--c-panel); padding: 4px 26px 8px 16px; clip-path: polygon(0 0, 100% 0, calc(100% - 14px) 100%, 0 100%); }
 #ratings .eye { display: none; }
 #ratings b { grid-area: num; font: 900 64px/1 var(--f-num); color: var(--c-text); min-width: 0; }
 #ratings .lbl { grid-area: lbl; font: italic 800 14px/1 var(--f-head); letter-spacing: 0.2em; color: var(--c-text); opacity: 1; }
@@ -640,21 +611,22 @@ html[data-palette='network'] {
 #budget { left: 20px; top: calc(170px + env(safe-area-inset-top)); display: flex; align-items: baseline; gap: 10px; background: var(--c-panel); padding: 4px 22px 4px 16px; color: var(--c-text); clip-path: polygon(0 0, 100% 0, calc(100% - 10px) 100%, 0 100%); }
 #budget span { font: italic 800 13px/1 var(--f-head); letter-spacing: 0.2em; color: var(--c-text); opacity: 1; text-transform: uppercase; }
 #budget b { font: 900 34px/1 var(--f-num); color: var(--c-accent); }
-#budget i { font: 900 24px/1 var(--f-num); font-style: normal; color: var(--c-text); }
-#gainpop, html:has(#budget:not([hidden])) #gainpop { left: 20px; top: calc(214px + env(safe-area-inset-top)); background: var(--c-red); color: var(--c-text); font: italic 900 13px/1.2 var(--f-head); letter-spacing: 0.08em; padding: 4px 16px 4px 10px; clip-path: polygon(0 0, 100% 0, calc(100% - 8px) 100%, 0 100%); }
 
-/* --- Combo: the huge multiplier --- */
-#chain { left: 20px; top: calc(244px + env(safe-area-inset-top)); grid-template-columns: auto auto; grid-template-areas: 'mult pts' 'mult stunt' 'mult cnt' 'clock clock' 'result result'; justify-items: start; column-gap: 12px; color: var(--c-text); text-shadow: 0 2px 6px rgba(0, 0, 0, 0.6); }
-#chain .mult { background: var(--c-red); color: var(--c-text); font: 900 96px/0.95 var(--f-num); padding: 4px 32px 0 20px; clip-path: polygon(0 0, 100% 0, calc(100% - 22px) 100%, 0 100%); text-shadow: none; }
+/* Viewer gains ride inside the ratings plate, under WATCHING: no extra plate in the left column.
+   The label column keeps its width so the plate never grows when a gain lands. */
+#ratings .lbl { align-self: end; min-width: 150px; }
+#gainpop { position: static; grid-area: pop; align-self: start; margin-top: 3px; background: none; clip-path: none; padding: 0; color: var(--c-accent); font: italic 900 13px/1.1 var(--f-head); letter-spacing: 0.08em; white-space: nowrap; }
+#ratings b { grid-row: 1 / span 2; }
+
+/* --- Combo: the multiplier; the result (+points / BANKED, DROPPED) replaces its own lines --- */
+#chain { left: 20px; top: calc(224px + env(safe-area-inset-top)); grid-template-columns: auto auto; grid-template-areas: 'mult pts' 'mult stunt' 'mult cnt' 'clock clock'; justify-items: start; column-gap: 12px; color: var(--c-text); text-shadow: 0 2px 6px rgba(0, 0, 0, 0.6); }
+#chain .mult { background: var(--c-red); color: var(--c-text); font: 900 72px/0.95 var(--f-num); padding: 4px 28px 0 18px; clip-path: polygon(0 0, 100% 0, calc(100% - 22px) 100%, 0 100%); text-shadow: none; }
 #chain[data-mult='1'] .mult { background: var(--c-panel); }
-#chain .pts { font: 900 40px/1 var(--f-num); }
+#chain .pts { font: 900 34px/1 var(--f-num); }
 #chain .stunt { font: italic 900 15px/1.2 var(--f-head); letter-spacing: 0.12em; color: var(--c-accent); }
 #chain .cnt { font: 700 13px/1.2 var(--f-head); opacity: 0.85; }
-#chain .clock { width: 300px; height: 5px; margin-top: 6px; background: rgba(255, 255, 255, 0.2); justify-self: start; }
+#chain .clock { width: 100%; height: 5px; margin-top: 6px; background: rgba(255, 255, 255, 0.2); justify-self: start; }
 #chain .clock i { background: var(--c-text); }
-#chain .result { font: 900 26px/1.2 var(--f-num); }
-#chain.banked .result { color: var(--c-accent); }
-#chain.dropped .result { color: #ff6b6b; }
 
 /* --- Station bug: WYF / NEWS on ink, the 6 on its own block (red in WYF 6 colours, blue on Network) --- */
 #bug { right: calc(64px / var(--hs, 1)); top: calc(20px + env(safe-area-inset-top)); height: 76px; display: flex; flex-direction: row; align-items: stretch; opacity: 1; filter: drop-shadow(0 3px 8px rgba(0, 0, 0, 0.45)); background: none; padding: 0; width: auto; }
@@ -665,7 +637,6 @@ html[data-palette='network'] {
 #heat { order: 1; background: none; margin: 0; padding: 0; line-height: 1; }
 #heat em { font-size: 12px; color: rgba(255, 255, 255, 0.25); text-shadow: none; }
 #heat em.on { color: var(--c-accent); text-shadow: none; }
-#rivals { right: calc(210px / var(--hs, 1)); }
 #desk { top: calc(108px + env(safe-area-inset-top)); right: 20px; }
 
 /* --- Producer's asks --- */
@@ -694,8 +665,6 @@ html.replay #hud #chyron { bottom: calc(7vh + 6px); }
 #ticker { left: 20px; right: 42px; max-width: none; margin: 0; bottom: calc(4px + env(safe-area-inset-bottom)); height: var(--d-tick); background: var(--c-panel); }
 html.touch #ticker { right: 128px; }
 #ticker span { font: 600 calc(var(--d-tick) * 0.54)/var(--d-tick) var(--f-head); color: var(--c-text); letter-spacing: 0.02em; }
-#geartag { right: calc(var(--d-chy) * 0.5); bottom: calc(100% + 8px); background: var(--c-red); color: var(--c-text); font: italic 900 calc(20px * var(--hs, 1))/1 var(--f-head); letter-spacing: 0.1em; padding: calc(6px * var(--hs, 1)) calc(24px * var(--hs, 1)) calc(5px * var(--hs, 1)) calc(20px * var(--hs, 1)); clip-path: polygon(10px 0, 100% 0, calc(100% - 10px) 100%, 0 100%); }
-#geartag.rampage { background: var(--c-red); color: var(--c-text); }
 
 /* --- Gear strip and the ability chip ride above the lower third --- */
 #gears { left: 20px; bottom: calc((var(--d-lt) + 10px + env(safe-area-inset-bottom)) / var(--hs, 1)); background: var(--c-panel); padding: 6px 20px 6px 14px; gap: 5px; color: var(--c-text); font: italic 900 18px/1 var(--f-head); clip-path: polygon(0 0, 100% 0, calc(100% - 10px) 100%, 0 100%); }
@@ -705,17 +674,12 @@ html.touch #ticker { right: 128px; }
 #gears i::after, #gears[data-tier='1'] i::after, #gears[data-tier='2'] i::after { background: var(--c-gear); }
 #gears i.filling::after { background: rgba(255, 255, 255, 0.55) !important; }
 #gears .nm { margin-left: 8px; }
+#gears .x { margin-left: 10px; font: 900 22px/1 var(--f-num); color: var(--c-accent); }
+#chain.banked .stunt { color: var(--c-accent); }
+#chain.dropped .stunt { color: #ff6b6b; }
+#chain.dropped .pts { opacity: 0.45; text-decoration: line-through; }
 #abil { bottom: calc((var(--d-lt) + var(--d-tick) + 60px + env(safe-area-inset-bottom)) / var(--hs, 1)); background: var(--c-panel); border-left-color: var(--c-red); }
 
-/* --- BREAKING sweep (the top row), producer callout, replay badge --- */
-#breaking { top: calc(20px * var(--hs, 1) + env(safe-area-inset-top)); height: calc(48px * var(--hs, 1)); left: 0; right: 0; z-index: 6; background: var(--c-red); color: var(--c-text); font: italic 900 calc(22px * var(--hs, 1))/1 var(--f-head); letter-spacing: 0.3em; box-shadow: none; clip-path: none; }
-#tip { left: 50%; transform: translate(-50%, -6px); top: calc(84px + env(safe-area-inset-top)); max-width: calc((100vw / var(--hs, 1)) - 760px); background: var(--c-paper); color: var(--c-on-paper); font: 700 16px/1.3 var(--f-head); box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35); }
-#tip.show { transform: translate(-50%, 0); }
-#tip .who { background: var(--c-red); color: var(--c-text); font: italic 900 12px/1 var(--f-head); letter-spacing: 0.2em; padding: 8px 16px 8px 12px; clip-path: polygon(0 0, 100% 0, calc(100% - 8px) 100%, 0 100%); }
-@media (max-aspect-ratio: 1/1) {
-  #tip { left: 20px; transform: translate(0, -6px); top: calc(400px + env(safe-area-inset-top)); max-width: calc(100vw / var(--hs, 1) - 40px); }
-  #tip.show { transform: none; }
-}
 #replay b { background: var(--c-replay); color: var(--c-text); font: italic 900 22px/1 var(--f-head); letter-spacing: 0.08em; }
 #replay span { background: var(--c-ink); color: var(--c-text); font: italic 800 12px/1 var(--f-head); }
 
@@ -747,3 +711,8 @@ html.touch #ticker { right: 128px; }
 #recap ul.asks li.done i { color: var(--c-alt); }
 #recap ul.asks li b { color: var(--c-red); }
 #live #segno[hidden] { display: none; }
+
+/* Producer's notes on the recap: the onboarding lines this broadcast earned (they never cover the road). */
+#recap .notes { display: flex; align-items: stretch; margin: 10px 0 6px; background: var(--c-ink); color: var(--c-text); }
+#recap .notes .who { flex: none; display: flex; align-items: center; background: var(--c-red); color: var(--c-text); font: italic 900 11px/1 var(--f-head); letter-spacing: 0.2em; text-transform: uppercase; padding: 0 14px 0 10px; clip-path: polygon(0 0, 100% 0, calc(100% - 8px) 100%, 0 100%); }
+#recap .notes ul { list-style: none; margin: 0; padding: 8px 12px; display: grid; gap: 4px; font: 700 13px/1.3 var(--f-head); }

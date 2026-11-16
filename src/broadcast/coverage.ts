@@ -8,16 +8,15 @@ import BANK from './viewers.json';
  *  - cold open: a grainy traffic cam, then the chopper finds him and LIVE slams in (§4);
  *  - AT LARGE: a second chopper ("SKY 2"), viewer video unlocks, the viewer ticker starts;
  *  - RAMPAGE: split screen with the anchor desk;
- *  - CITY IN CHAOS: simulcast, every (invented) station's bug on screen.
+ *  - CITY IN CHAOS: the frame pulses red.
+ * The ladder reads through the chyron kicker and these on-screen changes, not a label (HUD cleanup, 2026-11-16).
  * Never covers the giant: everything lives on the frame's edges (§21 hierarchy).
  */
 export class Coverage {
   private root: HTMLElement;
-  private label: HTMLElement;
   private desk: HTMLElement;
   private ticker: HTMLElement;
   private tickerText: HTMLElement;
-  private rivals: HTMLElement;
   private cold: HTMLElement;
   private tier = -1;
   private coldUntil = 0;
@@ -28,13 +27,10 @@ export class Coverage {
   constructor() {
     const $ = (id: string) => document.getElementById(id)!;
     this.root = $('hud');
-    this.label = $('coverage');
     this.desk = $('desk');
     this.ticker = $('ticker');
     this.tickerText = this.ticker.querySelector('span')!;
-    this.rivals = $('rivals');
     this.cold = $('coldopen');
-    this.rivals.innerHTML = BANK.rivals.map((r) => `<span>${r}</span>`).join('');
     this.tickerText.addEventListener('animationiteration', () => this.nextTicker());
   }
 
@@ -73,7 +69,6 @@ export class Coverage {
       const up = ratingsTier > this.tier;
       this.tier = ratingsTier;
       this.root.className = `cov${ratingsTier}`;
-      this.label.textContent = ['CHOPPER 6', 'CHOPPER 6 · SKY 2', 'CHOPPER 6 · SKY 2 · DESK', 'SIMULCAST · ALL STATIONS'][ratingsTier];
       if (ratingsTier >= 1 && this.ticker.hidden) {
         this.ticker.hidden = false;
         this.nextTicker();

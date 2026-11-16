@@ -1,5 +1,5 @@
-// Onboarding + economy evidence: a producer tip in play, the live budget counter, the recap's
-// "added to budget", and the meeting's explanation and "need X more".
+// Onboarding + economy evidence: the recap's producer notes and "added to budget", and the
+// meeting's explanation and "need X more". (Producer notes never show over the road.)
 // Usage: npm run build && node tools/shots-onboarding.mjs  (writes docs/evidence/onboarding/*.png)
 import { createRequire } from 'node:module';
 import { spawn } from 'node:child_process';
@@ -15,11 +15,9 @@ const page = await browser.newPage({ viewport: { width: 1280, height: 720 }, dev
 await page.goto('http://localhost:4180/?seed=11&step=1&autostart=1&mode=run&cuts=0&debug=0&time=night');
 await page.waitForFunction(() => window.__GAME?.started, null, { timeout: 30000 });
 await page.waitForFunction(() => !window.__GAME.coverage().cold, null, { timeout: 15000 });
-// Hold Jog in a lane with no input: "Keep him at top speed..." shows, then the budget note.
+// Hold Jog in a lane with no input: earns the gear and budget notes for the recap.
 await page.evaluate(() => window.__GAME.step(60 * 4.5, { lane: 0, brake: true, shoulder: false, ability: false }));
 await page.evaluate(() => window.__GAME.step(30));
-await page.waitForTimeout(700);
-await page.screenshot({ path: `${OUT}/tip-gear.png` });
 // The bot plays the rest of segment 1 → recap → meeting.
 await page.evaluate(() => {
   window.__GAME.setBot(true);

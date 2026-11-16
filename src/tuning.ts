@@ -390,7 +390,7 @@ export const TUNING = {
    * (wider FOV, off under Reduced Motion), traffic ahead brakes early, and a tag rides the chyron.
    * Stride and Rampage kick dust back off every step (particles per footfall by tier).
    */
-  gear: { buildUp: 1.0, buildRingScale: 0.9, fovPunch: 0.14, fovPunchTime: 0.5, shockRadius: 10, trafficAlarm: 1.6, trafficAlarmBrakeAt: 85, tagTime: 2.4, dustKick: [0, 3, 8] },
+  gear: { buildUp: 1.0, buildRingScale: 0.9, fovPunch: 0.14, fovPunchTime: 0.5, shockRadius: 10, trafficAlarm: 1.6, trafficAlarmBrakeAt: 85, dustKick: [0, 3, 8] },
 
   /**
    * Recap REPLAY (presentation): the night's top moment, re-simulated from the recorded inputs and
@@ -832,8 +832,8 @@ export const TUNING = {
 
   /** Onboarding producer notes (src/tips.ts): on screen this long, at least this far apart (s); thresholds. */
   tips: {
-    showTime: 4.5,
-    minGap: 3,
+    /** Producer's notes on the recap: at most this many per broadcast, so the card stays a glance. */
+    perRecap: 2,
     /** "He shifts up a gear" if he's still at Jog this far in (s). */
     gearAfter: 4,
     /** Warn about a bulldozer this far ahead (m). */
