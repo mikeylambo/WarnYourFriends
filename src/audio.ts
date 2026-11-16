@@ -1,5 +1,5 @@
 /// <reference types="vite/client" />
-import type { MassClass } from './tuning';
+import { TUNING, type MassClass } from './tuning';
 
 /**
  * Authored sound effects (ElevenLabs, 2026-11-15): `src/assets/sfx/<kind>-<take>.mp3`, trimmed,
@@ -29,6 +29,9 @@ export class Audio {
   private sirens: GainNode[] = [];
   private sirenPans: StereoPannerNode[] = [];
   private bed: { next: number; step: number; timer: number } | null = null;
+  /** Rampage layer on the music bus (driving kick, 16th hats, brass stabs): in at Rampage, out when it's lost. */
+  private rampLayer: GainNode | null = null;
+  private gear = 0;
   /**
    * Spatial mix (Mike, 2026-11-15): the listener is the giant; left/right is the camera's screen-right,
    * so a honk left of him on screen comes from the left in any camera angle; farther is quieter.
@@ -210,6 +213,11 @@ export class Audio {
     const t = this.ctx!.currentTime;
     const base = [72, 60, 50][tier];
     const vol = [0.55, 0.75, 1.0][tier];
+    // Rampage: a sub thump under every step, whatever plays on top (he's at his heaviest).
+    if (tier === TUNING.tiers.length - 1) {
+      const R = TUNING.rampageAudio;
+      this.tone(t, R.subTime, R.subFrom, R.subTo, R.subVol);
+    }
     // Heavier and lower each gear (§10: pitch drops on each tier).
     if (this.play('foot', [0.5, 0.7, 0.95][tier], [1.0, 0.9, 0.8][tier])) return;
     this.tone(t, 0.22 + tier * 0.05, base, base * 0.45, vol);
@@ -292,6 +300,40 @@ export class Audio {
     if (!this.ready) return;
     const t = this.ctx!.currentTime;
     this.tone(t, 0.09, 420 + k * 520, 520 + k * 700, 0.05 + k * 0.05, 'triangle');
+  }
+
+  /**
+   * The music follows the gear: at Rampage a layer drops in; losing Rampage cuts it with a power-down
+   * sweep. `quiet` (a new broadcast, the end) cuts it without the sweep.
+   */
+  setGear(tier: number, quiet = false) {
+    const top = tier === TUNING.tiers.length - 1;
+    const was = this.gear === TUNING.tiers.length - 1;
+    this.gear = tier;
+    if (!this.ready || !this.rampLayer) return;
+    const R = TUNING.rampageAudio;
+    const t = this.ctx!.currentTime;
+    const g = this.rampLayer.gain;
+    g.cancelScheduledValues(t);
+    g.setValueAtTime(g.value, t);
+    g.linearRampToValueAtTime(top ? R.layer : 0, t + (top ? R.fadeIn : R.fadeOut));
+    if (was && !top && !quiet) {
+      // Power-down: a falling saw through a closing filter, like the band running out of tape.
+      const o = this.ctx!.createOscillator();
+      o.type = 'sawtooth';
+      o.frequency.setValueAtTime(220, t);
+      o.frequency.exponentialRampToValueAtTime(40, t + 0.45);
+      const lp = this.ctx!.createBiquadFilter();
+      lp.type = 'lowpass';
+      lp.frequency.setValueAtTime(2400, t);
+      lp.frequency.exponentialRampToValueAtTime(200, t + 0.45);
+      const v = this.ctx!.createGain();
+      v.gain.setValueAtTime(0.09, t);
+      v.gain.exponentialRampToValueAtTime(0.0001, t + 0.5);
+      o.connect(lp).connect(v).connect(this.buses.music);
+      o.start(t);
+      o.stop(t + 0.55);
+    }
   }
 
   tierUp(tier: number) {
@@ -505,6 +547,37 @@ export class Audio {
     const bus = this.buses.music;
     bus.gain.value = 0.55;
     this.bed = { next: c.currentTime + 0.1, step: 0, timer: 0 };
+    const layer = (this.rampLayer = c.createGain());
+    layer.gain.value = this.gear === TUNING.tiers.length - 1 ? TUNING.rampageAudio.layer : 0;
+    layer.connect(bus);
+    const hat = (t: number, vol: number) => {
+      const src = c.createBufferSource();
+      src.buffer = this.noiseBuf;
+      const hp = c.createBiquadFilter();
+      hp.type = 'highpass';
+      hp.frequency.value = 7000;
+      const g = c.createGain();
+      g.gain.setValueAtTime(vol, t);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + 0.045);
+      src.connect(hp).connect(g).connect(layer);
+      src.start(t, Math.random() * 0.5, 0.06);
+    };
+    const into = (t: number, f0: number, f1: number, dur: number, vol: number, type: OscillatorType, cutoff: number) => {
+      const o = c.createOscillator();
+      o.type = type;
+      o.frequency.setValueAtTime(f0, t);
+      if (f1 !== f0) o.frequency.exponentialRampToValueAtTime(f1, t + dur);
+      const lp = c.createBiquadFilter();
+      lp.type = 'lowpass';
+      lp.frequency.value = cutoff;
+      const g = c.createGain();
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(vol, t + 0.008);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+      o.connect(lp).connect(g).connect(layer);
+      o.start(t);
+      o.stop(t + dur + 0.05);
+    };
     const voice = (t: number, f: number, dur: number, vol: number, type: OscillatorType, cutoff: number) => {
       const o = c.createOscillator();
       o.type = type;
@@ -536,6 +609,13 @@ export class Audio {
         voice(t, 2400, 0.03, step % 2 === 0 ? 0.018 : 0.009, 'square', 6000);
         // Low drum at the top of each phrase and before the turnaround.
         if (step % 32 === 0 || step % 32 === 30) voice(t, 58, 0.5, 0.22, 'sine', 300);
+        // Rampage layer (scheduled only while it's up or fading): kick on the beat, 16th hats, brass stabs on 1 and the and-of-2.
+        if (this.gear === TUNING.tiers.length - 1 || layer.gain.value > 0.001) {
+          if (step % 2 === 0) into(t, 140, 42, 0.18, 0.5, 'sine', 900);
+          hat(t, step % 2 === 0 ? 0.05 : 0.03);
+          hat(t + eighth / 2, 0.022);
+          if (step % 8 === 0 || step % 8 === 3) for (const k of [4, 4 * thirds[bar], 6]) into(t, root * k, root * k, eighth * 0.85, 0.05, 'sawtooth', 1900);
+        }
         b.step++;
         b.next += eighth;
       }

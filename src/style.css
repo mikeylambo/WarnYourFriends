@@ -490,6 +490,10 @@ html.cover #titlebug { display: none; }
 #gears i::after { content: ''; position: absolute; inset: 0; transform-origin: left; transform: scaleX(var(--fill)); background: var(--wyf-cream); }
 #gears[data-tier='1'] i::after { background: #f2cc8f; }
 #gears[data-tier='2'] i::after { background: #ff6b4a; }
+/* Lost Rampage (Mike, 2026-11-16): the strip flashes red twice. */
+#gears.lost { animation: gearlost 0.6s steps(2) 1; }
+@keyframes gearlost { 0%, 50% { background: rgba(230, 40, 40, 0.92); } 25%, 75%, 100% { background: rgba(30, 24, 33, 0.78); } }
+@media (prefers-reduced-motion: reduce) { #gears.lost { animation: none; } }
 #gears i.filling::after { background: rgba(236, 224, 200, 0.55) !important; }
 #gears i.next { animation: gearnext 0.4s steps(2) infinite; } /* 2.5 blinks/s, under the 3/s photosensitivity limit */
 @keyframes gearnext { 50% { background: rgba(255, 241, 214, 0.55); } }

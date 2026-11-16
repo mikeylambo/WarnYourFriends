@@ -607,7 +607,8 @@ export const TUNING = {
     max: 100,
     /** §12 gains. Sustained Rampage is per second. */
     /** Police crash (a cruiser he led into something Heavy): the best TV of the chase, above lost track. Collateral: police plough through something Medium. */
-    gain: { medium: 2, heavy: 5, nearMiss: 3, lostTrack: 6, rampage: 1, policeCrash: 8, collateral: 2 },
+    /** Rampage 0 (Mike, 2026-11-16, deviation from §12's +1/s): the trickle was invisible and half of all gains; the audience now moves only for what he does. */
+    gain: { medium: 2, heavy: 5, nearMiss: 3, lostTrack: 6, rampage: 0, policeCrash: 8, collateral: 2 },
     /** HUD: viewers shown per Ratings point ("370K WATCHING" at the starting 20). */
     viewersPerPoint: 18_500,
     /** §12 decay: after 3s with no gain; segment 1 rate (2.0/2.75/3.5/4.25/5.0 by segment). */
@@ -660,6 +661,8 @@ export const TUNING = {
     /** Cruiser ram (v0.3: blinker + 0.6s drift, then swerve into your lane). */
     cruiser: {
       closeSpeed: 7, tell: 0.6, drift: 0.6, swerve: 0.35, fallBack: 6, sideSpeed: 5,
+      /** A ram that connects costs a gear even at Rampage (Mike, 2026-11-16: Rampage is defended, not kept); a Shoulder Check into it still flattens it. */
+      ramBeatsRampage: true,
       /**
        * Kiting (Mike, 2026-11-16: "still not able to kite the following police"): with no room beside him a cruiser
        * tails him `gap` m back in his lane, steering at `sideSpeed` m/s for where he was `react` s ago; it gives up
@@ -774,6 +777,22 @@ export const TUNING = {
     blocked: ['fuck', 'shit', 'cunt', 'nigg', 'fag', 'rape', 'nazi', 'hitler', 'retard', 'whore', 'slut', 'bitch', 'cock', 'pussy', 'kike', 'chink', 'spic', 'tranny'],
   },
 
+  /**
+   * Rampage on air (Mike, 2026-11-16: "embellish it"). Placeholder synth until the Suno stems land; the API
+   * (Audio.setGear) stays. A music layer drops in at Rampage and cuts on losing it, with a power-down sweep.
+   */
+  rampageAudio: {
+    /** Layer level on the music bus, fade in (s), fade out on loss (s). */
+    layer: 0.9,
+    fadeIn: 0.25,
+    fadeOut: 0.12,
+    /** Sub thump under each footfall at Rampage: start/end Hz, length (s), level. */
+    subFrom: 52,
+    subTo: 28,
+    subTime: 0.32,
+    subVol: 0.5,
+  },
+
   /** Phase 3 abilities (lane-runner versions of §17's pool). 5f input buffer (§8). */
   abilities: {
     bufferFrames: 5,
@@ -833,6 +852,9 @@ export const TUNING = {
      * ~8–15s (read twice); a cable news banner holds far longer. Tier changes still interrupt with BREAKING.
      */
     headlineEvery: 12,
+    /** Headline priority for reaching Rampage, and for losing it: above routine news (35–75), under the player's abilities (84–88), sightings and exits (90+). */
+    rampagePrio: 83,
+    rampageLostPrio: 80,
     /** §21: no verb or place reused within the last 5 headlines. */
     antiRepeat: 5,
     /** Smashes inside one headline window are counted together ("3 Cars"). */

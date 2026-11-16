@@ -17,6 +17,9 @@ function run(seed: number, seconds: number, upgrades: UpgradeId[] = [], segment 
   for (let i = 0; i < seconds * 60 && sim.live; i++) {
     for (const p of sim.track.props) kinds.set(p.id, p.kind);
     const braking = i % 900 > 700 && i % 900 < 760;
+    // The newsroom is under test, not survival: the timed braking costs Rampage, and with no Rampage trickle
+    // (2026-11-16) that would end most broadcasts early. Keep the audience in so every broadcast runs long.
+    if (sim.show.ratings < 25) sim.show.ratings = 25;
     const events = sim.step({ ...bot.input(), brake: braking });
     for (const e of events) {
       log.add(e);

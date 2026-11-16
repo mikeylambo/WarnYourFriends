@@ -85,7 +85,7 @@ export class Show {
   step(dt: number, time: number, tier: number, outnumbered: boolean, out: SimEvent[]) {
     if (this.state !== 'live') return;
     const S = TUNING.show;
-    if (tier === TUNING.tiers.length - 1) {
+    if (tier === TUNING.tiers.length - 1 && S.gain.rampage > 0) {
       this.rampageAcc += dt;
       while (this.rampageAcc >= 1) {
         this.rampageAcc -= 1;

@@ -183,6 +183,24 @@
         "Giant Goes Full Rampage {place}"
       ]
     ],
+    "rampageLost": [
+      [
+        "Ends",
+        "Rampage Ends {place}"
+      ],
+      [
+        "Loses",
+        "Giant Loses Momentum {place}"
+      ],
+      [
+        "Drops",
+        "Giant Drops Out Of Rampage {place}"
+      ],
+      [
+        "Off",
+        "Giant Off Top Speed {place}"
+      ]
+    ],
     "slowed": "{subject} {verb} {place}",
     "smashOne": "{subject} {verb} {noun} {place}",
     "smashMany": "{subject} {verb} {count} {nouns} {place}",

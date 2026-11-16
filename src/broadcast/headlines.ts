@@ -200,6 +200,10 @@ export class Newsroom {
   }
 
   private prioOf(q: Item): number {
+    // Rampage is the show (Mike, 2026-11-16): reaching it, and losing it, beat routine news to the chyron.
+    const e0 = q.events[0];
+    if (q.kind === 'tierUp' && e0?.type === 'tierUp' && e0.tier === TUNING.tiers.length - 1) return TUNING.broadcast.rampagePrio;
+    if (q.kind === 'tierDown' && e0?.type === 'tierDown' && e0.tier === TUNING.tiers.length - 2) return TUNING.broadcast.rampageLostPrio;
     if (q.kind !== 'smash') return q.prio;
     const heavy = q.events.some((e) => e.type === 'smash' && e.cls === 'heavy');
     return (heavy ? 50 : 30) + q.events.length;
@@ -345,6 +349,14 @@ export class Newsroom {
         return h;
       }
       case 'tierDown': {
+        const e = q.events[0] as Extract<SimEvent, { type: 'tierDown' }>;
+        if (e.tier === TUNING.tiers.length - 2) {
+          const line = this.freshLine(L.rampageLost);
+          if (line) {
+            const place = this.freshPlace(ctx);
+            return mk(this.fill(line[1], { place }), line[0], place);
+          }
+        }
         const verb = this.freshVerb(V.slow);
         if (!verb) return null;
         const place = this.freshPlace(ctx);

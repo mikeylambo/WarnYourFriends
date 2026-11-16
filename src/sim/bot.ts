@@ -51,7 +51,7 @@ export class Bot {
     const threatened = (lane: number) => {
       const c = track.laneCenter(lane);
       for (const u of units) {
-        if (u.unit === 'cruiser' && (u.phase === 'tell' || u.phase === 'act') && u.target === lane && g.tier < 2) return true;
+        if (u.unit === 'cruiser' && (u.phase === 'tell' || u.phase === 'act') && u.target === lane) return true;
         if (u.unit === 'spike' && u.phase !== 'approach' && Math.abs(u.d - c) < 2 && u.s > g.s - 1 && u.s < s1 + 10) return true;
       }
       return false;

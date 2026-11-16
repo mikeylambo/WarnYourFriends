@@ -867,7 +867,10 @@ export class Sim {
       if (ds * ds + dd * dd >= r * r) continue;
 
       // A Police Net flanker breaks only to a Shoulder Check (then it's Heavy); otherwise nothing moves it.
-      const cls = (p as Unit).ram && this.giant.shoulderT > 0 ? 'heavy' : p.cls;
+      const u = p as Unit;
+      // A cruiser mid-ram is driving into him: it can't be shrugged off at Rampage (only a Shoulder Check flattens it).
+      const ramming = u.unit === 'cruiser' && u.phase === 'act' && TUNING.pursuit.cruiser.ramBeatsRampage && this.giant.shoulderT <= 0;
+      const cls = ramming ? 'immovable' : u.ram && this.giant.shoulderT > 0 ? 'heavy' : p.cls;
       if (CLASS_RANK[cls] <= rank) {
         // Smash, forward or across: the same class rule either way (v0.3 smash-across).
         p.alive = false;

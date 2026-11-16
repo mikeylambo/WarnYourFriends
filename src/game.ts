@@ -321,6 +321,7 @@ function newRun(seed: number, segment = 0, upgrades: UpgradeId[] = []) {
   rig.giantScale = gScale;
   playLog.reset();
   inputLog.length = 0;
+  audio.setGear(0, true);
   moment = null;
   recapShot = null;
   dropClip();
@@ -579,6 +580,7 @@ function nextSegment() {
 
 /** The 11 O'Clock Recap (§20: results as the evening news). */
 function showRecap() {
+  audio.setGear(0, true); // a replay may have raised it
   const sh = sim.show;
   const cleared = sh.state === 'cleared';
   const reason = cleared ? 'cleared' : (sh.reason ?? 'ratings');
@@ -707,6 +709,7 @@ function showHeadline(h: Headline) {
 
 /** The broadcast is over (signed off or busted): graphics wind down, the recap timer starts. */
 function endBroadcast(how: 'signOff' | 'busted') {
+  audio.setGear(0, true);
   endedFor = 0;
   coverage.end();
   audio.ending(how === 'signOff');
@@ -1030,6 +1033,7 @@ function present(e: SimEvent) {
       highway.alarm();
       gearShockPending = true;
       audio.tierUp(e.tier);
+      if (!attract) audio.setGear(e.tier);
       giant.onTierUp();
       tierbar.classList.remove('flick');
       void tierbar.offsetWidth;
@@ -1038,6 +1042,13 @@ function present(e: SimEvent) {
     }
     case 'tierDown':
       audio.tierDown();
+      if (!attract) audio.setGear(e.tier);
+      // Lost Rampage: the gear strip flashes red (the music layer cuts with it).
+      if (e.tier === TUNING.tiers.length - 2) {
+        gearsEl.classList.remove('lost');
+        void gearsEl.offsetWidth;
+        gearsEl.classList.add('lost');
+      }
       break;
     case 'shoulder': {
       giant.onShoulder();

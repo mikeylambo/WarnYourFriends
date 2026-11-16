@@ -188,3 +188,41 @@ describe('police crashes', () => {
     expect(maxPin).toBe(0);
   });
 });
+
+describe('rams take Rampage (Mike, 2026-11-16)', () => {
+  /** A cruiser alongside him, already swerving into his lane. */
+  function ramming(sim: Sim): Unit {
+    const g = sim.giant;
+    g.tier = 2;
+    g.speed = TUNING.tiers[2].topSpeed;
+    g.tierTimer = -1e9;
+    run(sim, 1); // settle at speed, clear of the start
+    const lane = g.lane > 0 ? g.lane - 1 : g.lane + 1;
+    const u = internals(sim).make('cruiser', 'cruiser', g.s, sim.track.laneCenter(lane), lane);
+    u.speed = g.speed;
+    u.target = g.lane;
+    u.fromD = u.d;
+    u.toD = sim.track.laneCenter(g.lane);
+    u.phase = 'act';
+    u.phaseT = 0;
+    return u;
+  }
+
+  it('a ram that connects costs Rampage, and the cruiser is not flattened', () => {
+    const sim = emptySim();
+    const u = ramming(sim);
+    const ev = run(sim, 0.5);
+    expect(ev.some((e) => e.type === 'tierDown' && e.tier === 1)).toBe(true);
+    expect(ev.some((e) => e.type === 'smash' && e.propId === u.id)).toBe(false);
+    expect(sim.giant.speed).toBeGreaterThanOrEqual(TUNING.giant.speedFloor);
+  });
+
+  it('a Shoulder Check into the ram flattens it and keeps Rampage', () => {
+    const sim = emptySim();
+    const u = ramming(sim);
+    const dir = Math.sign(u.d - sim.giant.d);
+    const ev = run(sim, 1 / HZ, { ...NO_INPUT, shoulder: true, lane: dir }).concat(run(sim, 0.5));
+    expect(ev.some((e) => e.type === 'smash' && e.propId === u.id)).toBe(true);
+    expect(ev.some((e) => e.type === 'tierDown')).toBe(false);
+  });
+});
