@@ -580,8 +580,21 @@ export class Audio {
   }
 
   /** §11 tells: engine rev (cruiser ram), tyre screech (roadblock), metallic rattle (spikes), brakes (rolling). */
-  tell(kind: 'cruiser' | 'roadblock' | 'spike' | 'rolling' | 'chopper', pos?: { x: number; z: number }) {
+  tell(kind: 'cruiser' | 'roadblock' | 'spike' | 'rolling' | 'chopper' | 'net' | 'carrier', pos?: { x: number; z: number }) {
     if (!this.ready) return;
+    // Police Net: tyres and a siren chirp as they close; Car Carrier: a long horn and the load rattling loose.
+    if (kind === 'net') {
+      this.at(pos, () => this.tellAt('roadblock'));
+      this.whoop();
+      return;
+    }
+    if (kind === 'carrier') {
+      this.at(pos, () => {
+        this.honkAt(0.9);
+        this.tellAt('spike');
+      });
+      return;
+    }
     this.at(pos, () => this.tellAt(kind));
   }
   private tellAt(kind: 'cruiser' | 'roadblock' | 'spike' | 'rolling' | 'chopper') {

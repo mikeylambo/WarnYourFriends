@@ -196,6 +196,18 @@ html.touch #chyron { right: 128px; }
   box-shadow: 0 0 18px rgba(80, 255, 150, 0.45);
 }
 #signoff[hidden] { display: none; }
+/* Police Net (2026-11-16): the box-in meter, front and centre while it fills. */
+#boxed { position: absolute; left: 50%; top: calc(150px + env(safe-area-inset-top)); transform: translateX(-50%); display: grid; justify-items: center; gap: 5px; pointer-events: none; z-index: 7; zoom: var(--hs, 1); }
+#boxed[hidden] { display: none; }
+#boxed b { background: var(--c-red, #d7263d); color: var(--c-text, #fff); font: italic 900 22px/1 var(--f-head, sans-serif); letter-spacing: 0.12em; padding: 7px 26px 6px 18px; clip-path: polygon(0 0, 100% 0, calc(100% - 12px) 100%, 0 100%); }
+#boxed.last b { background: var(--c-paper, #fff); color: var(--c-red, #d7263d); }
+#boxed i { display: block; width: 260px; height: 8px; background: rgba(0, 0, 0, 0.55); outline: 2px solid rgba(255, 255, 255, 0.25); }
+#boxed u { display: block; height: 100%; width: 0; background: var(--c-red, #d7263d); text-decoration: none; }
+#boxed .how { font: 700 13px/1.2 var(--f-head, sans-serif); color: var(--c-text, #fff); text-shadow: 0 1px 4px rgba(0, 0, 0, 0.8); }
+#boxed .how kbd { border: 1px solid currentColor; padding: 0 4px; margin: 0 3px; font: inherit; }
+#boxed.pulse b { animation: boxedpulse 0.5s steps(2) infinite; }
+@keyframes boxedpulse { 50% { filter: brightness(1.5); } }
+@media (prefers-reduced-motion: reduce) { #boxed.pulse b { animation: none; } }
 #signoff .arrow { display: inline-block; font-size: 16px; }
 #signoff #exitdist { font-variant-numeric: tabular-nums; opacity: 0.9; }
 #live #clock.count { background: #1e6b3a; }

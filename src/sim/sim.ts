@@ -210,7 +210,15 @@ export class Sim {
     this.stepExit();
     const outnumbered = this.pursuit.chasing >= TUNING.show.outnumberedAt;
     for (const a of this.asks.step(dt, this.giant.tier === TUNING.tiers.length - 1, this.events)) this.show.banked += a.reward;
+    const slipsBefore = this.show.netSlips;
     this.show.stepPin(dt, this.boxedIn(), this.giant.speed, this.events);
+    if (this.show.netSlips > slipsBefore) {
+      // Slipped the net: a gear down, a stumble, and the net breaks up.
+      const g = this.giant;
+      if (g.tier > 0) this.setTier(g.tier - 1, 'impact');
+      g.stumble = TUNING.tierDrop.stumbleTime;
+      this.pursuit.disperseNet();
+    }
     this.show.step(dt, this.time + dt, this.giant.tier, outnumbered, this.events);
     for (const id of this.escort.step(dt, this.time, this.giant)) {
       const c = this.escort.cruisers[id];
@@ -316,9 +324,10 @@ export class Sim {
   boxedIn(): boolean {
     const g = this.giant;
     const S = TUNING.show;
-    const units = this.pursuit.solidBetween(g.s - 6, g.s + S.pinUnitAhead + 3);
+    // Units driving off (a net that's broken up) don't box anyone in.
+    const units = this.pursuit.solidBetween(g.s - 6, g.s + S.pinUnitAhead + 3).filter((u) => u.phase !== 'leave');
     const inLane = (lane: number, u: Prop) => Math.abs(u.d - this.track.laneCenter(lane)) < u.hw + 1.0;
-    const ahead = units.some((u) => u.s - u.hl - g.s <= S.pinUnitAhead && u.s > g.s && inLane(g.lane, u));
+    const ahead = units.some((u) => u.unit !== 'carrier' && u.s - u.hl - g.s <= S.pinUnitAhead && u.s > g.s && inLane(g.lane, u));
     if (!ahead) return false;
     const rank = this.smashRank();
     const blocked = (lane: number) => {
@@ -387,10 +396,18 @@ export class Sim {
   }
 
   /** v0.3 §4: the exit ramp opens at 130s; be in the rightmost lane at the gore to sign off. */
+  private exitPlanned = false;
   private stepExit() {
     const X = TUNING.segment;
     const g = this.giant;
     const now = this.time + this.dt;
+    // Plan the ramp's stretch of road before it's generated (the road exists `aheadDistance` ahead), from
+    // where he'll be when it opens: keep it ramp-friendly so the exit always lands in reach.
+    if (!this.exitPlanned && now >= X.exitOpensAt - X.planAhead) {
+      this.exitPlanned = true;
+      const at = Math.max(this.track.end, g.s + g.speed * X.planAhead + X.exitDistance[0] - 30);
+      this.track.reserveExit(at, at + X.planLength);
+    }
     if (!this.exit && !this.fork && now >= X.exitOpensAt && now < X.length + X.grace) this.openExit();
     if (this.exit && g.s >= this.exit.gore) {
       if (this.onRampLane(this.exit.gore)) {
@@ -452,7 +469,8 @@ export class Sim {
         if (e.across) st.smashesAcross++;
         if (e.cls === 'medium' || e.cls === 'heavy') this.award(e.cls);
         // Spectacle: a police car he flattened, else the class; smash-across pays a bonus.
-        const unit = e.propId >= 1_000_000;
+        // Police units are ids ≥ 1,000,000; the car carrier is traffic, so it scores as a Heavy smash.
+        const unit = e.propId >= 1_000_000 && this.pursuit.units.find((x) => x.id === e.propId)?.unit !== 'carrier';
         const cause = unit ? 'unit' : e.cls === 'heavy' ? 'heavy' : e.cls === 'medium' ? 'medium' : null;
         if (cause) this.stunt(cause, e.across ? TUNING.spectacle.points[cause] * TUNING.spectacle.acrossBonus : undefined);
         break;
@@ -839,7 +857,9 @@ export class Sim {
       const dd = g.d - cd;
       if (ds * ds + dd * dd >= r * r) continue;
 
-      if (CLASS_RANK[p.cls] <= rank) {
+      // A Police Net flanker breaks only to a Shoulder Check (then it's Heavy); otherwise nothing moves it.
+      const cls = (p as Unit).ram && this.giant.shoulderT > 0 ? 'heavy' : p.cls;
+      if (CLASS_RANK[cls] <= rank) {
         // Smash, forward or across: the same class rule either way (v0.3 smash-across).
         p.alive = false;
         g.speed = Math.max(TUNING.giant.speedFloor, g.speed * (1 - TUNING.collision.smashSpeedLoss[p.cls]));
@@ -855,7 +875,11 @@ export class Sim {
       // Only a head-on hit pushes him back along the road. A side-on one (a lane change into it) knocks him
       // sideways only: pushing him back too let repeated attempts stall him (Law 1: he never stops).
       const headOn = Math.abs(g.d - p.d) < p.hw + r * 0.5;
-      if (!moving && headOn && g.s < p.s) g.s = Math.min(g.s, p.s - p.hl - Math.sqrt(Math.max(0, r * r - dd * dd)) - 0.01);
+      if (!moving && headOn && g.s < p.s) {
+        g.s = Math.min(g.s, p.s - p.hl - Math.sqrt(Math.max(0, r * r - dd * dd)) - 0.01);
+        // Held behind a police vehicle (a Net's truck braking into him): he's going its speed now, never below the floor.
+        if (unit) g.speed = Math.max(TUNING.giant.speedFloor, Math.min(g.speed, (p as Unit).speed));
+      }
       if (unit) (p as Unit).hit = true;
       p.judged = true; // touched it: never a dodge
       if (g.stumble > 0 || g.move === 'knock') continue; // already reeling: no double penalty
@@ -884,8 +908,18 @@ export class Sim {
     candidates.push(g.prevLane);
     const here = g.lane;
     for (let k = 1; k <= TUNING.lanes.max; k++) candidates.push(here - k, here + k);
+    // Never knocked across a lane with a police car alongside him (it would carry him through it).
+    const crossesUnit = (lane: number) => {
+      for (let l = Math.min(lane, here) + 1; l < Math.max(lane, here); l++) {
+        const c = this.track.laneCenter(l);
+        // Only a Police Net's crew walls him in; he shoves past ordinary moving police (a lane is never sealed by traffic).
+        if (this.pursuit.solidBetween(g.s - 8, g.s + 8).some((u) => u.unit === 'net' && u.phase !== 'leave' && Math.abs(u.d - c) < u.hw + 1 && Math.abs(u.s - g.s) < u.hl + 4)) return true;
+      }
+      return false;
+    };
     for (const lane of candidates) {
       if (lane === here && g.move !== 'change') continue;
+      if (crossesUnit(lane)) continue;
       if (this.laneClear(lane, s0, s1, false)) return lane;
     }
     // Nowhere clear: never back into the lane he's in (that bounces him in place off the same thing, Law 1).
@@ -900,6 +934,8 @@ export class Sim {
         best = lane;
       }
     }
+    // Boxed on both sides (a Police Net): he stays in his lane behind whatever stopped him. That's the box.
+    if (best >= 0 && room <= 0) return here;
     return best >= 0 ? best : this.track.laneUsable(g.prevLane, g.s) ? g.prevLane : here;
   }
 
@@ -910,9 +946,11 @@ export class Sim {
     const r = this.radius();
     const rank = this.smashRank();
     let room = 60;
-    for (const p of this.track.propsBetween(g.s - 2, g.s + 60)) {
-      if (CLASS_RANK[p.cls] > rank && Math.abs(p.d - c) < p.hw + r) room = Math.min(room, p.s - p.hl - g.s);
-    }
+    // Only what's beside him or ahead counts: something ending behind his shoulders isn't in the way.
+    const inWay = (x: Prop) => CLASS_RANK[x.cls] > rank && Math.abs(x.d - c) < x.hw + r && x.s + x.hl > g.s - r;
+    for (const p of this.track.propsBetween(g.s - 6, g.s + 60)) if (inWay(p)) room = Math.min(room, p.s - p.hl - g.s);
+    // Police alongside or ahead in that lane (a Net's flanker alongside means no way out on that side).
+    for (const u of this.pursuit.solidBetween(g.s - 6, g.s + 60)) if (u.unit !== 'cruiser' && u.unit !== 'rolling' && u.phase !== 'leave' && inWay(u)) room = Math.min(room, u.s - u.hl - g.s);
     return room;
   }
 }

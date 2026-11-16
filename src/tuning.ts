@@ -176,7 +176,7 @@ export const TUNING = {
     // and stride are unchanged.
     { name: 'Jog', topSpeed: 6, accel: 8, tierUpAfter: 2.0, smashes: 'light', laneChangeTime: 0.22, cadence: 2.6, specStrideLength: 2.5, leanDeg: 20, hipHeight: 1.68, bodyDrop: 0.12, footLift: 0.45, cameraDistanceScale: 0.9, armSwing: 0.9, armBase: -0.1, flightLift: 0.03, elbowBend: 1.2, capeAngle: 20, capeFlutterHz: 1.3, capeFlutterAmp: 0.05 },
     { name: 'Stride', topSpeed: 10, accel: 6, tierUpAfter: 3.0, smashes: 'medium', laneChangeTime: 0.3, cadence: 2.8, specStrideLength: 4.0, leanDeg: 30, hipHeight: 1.64, bodyDrop: 0.18, footLift: 0.75, cameraDistanceScale: 1.0, armSwing: 1.25, armBase: -0.05, flightLift: 0.07, elbowBend: 1.4, capeAngle: 52, capeFlutterHz: 3.2, capeFlutterAmp: 0.12 },
-    { name: 'Rampage', topSpeed: 15, accel: 4, tierUpAfter: Infinity, smashes: 'heavy', laneChangeTime: 0.4, cadence: 3.1, specStrideLength: 6.0, leanDeg: 40, hipHeight: 1.6, bodyDrop: 0.24, footLift: 1.05, cameraDistanceScale: 1.17, armSwing: 1.6, armBase: 0, flightLift: 0.11, elbowBend: 1.6, capeAngle: 80, capeFlutterHz: 6.5, capeFlutterAmp: 0.2 },
+    { name: 'Rampage', topSpeed: 15, accel: 4, tierUpAfter: Infinity, smashes: 'heavy', laneChangeTime: 0.4, cadence: 3.1, specStrideLength: 6.0, leanDeg: 40, hipHeight: 1.6, bodyDrop: 0.24, footLift: 1.05, cameraDistanceScale: 1.2, armSwing: 1.6, armBase: 0, flightLift: 0.11, elbowBend: 1.6, capeAngle: 80, capeFlutterHz: 6.5, capeFlutterAmp: 0.2 },
   ] as TierTuning[],
 
   tierDrop: {
@@ -576,6 +576,9 @@ export const TUNING = {
     exitOpensAt: 130,
     /** §4: the sign-off spawns 150–250m away. */
     exitDistance: [150, 250] as [number, number],
+    /** The ramp's stretch of road is planned this long before it opens (s), and kept ramp-friendly for this far (m). */
+    planAhead: 30,
+    planLength: 450,
     /** If no eligible segment sits inside that window, search up to this far. */
     exitSearchMax: 330,
     /** The ramp splits from the right edge this far into its segment (the gore point). */
@@ -614,9 +617,11 @@ export const TUNING = {
     heatAt: [30, 50, 70, 90],
     heatEvery: 45,
     /** v0.3 §11 box-in (Pin): fills when both adjacent lanes are blocked and a unit is within 8m ahead below 4 m/s. */
-    pinFill: 25,
+    /** Police Net: about 2.5s boxed and slow to fill (was 25/s, 4s, when nothing could box him). */
+    pinFill: 40,
     pinDrain: 30,
-    pinBelow: 4,
+    /** Police Net: pressed behind the truck he bounces between 2 and ~5 m/s, so "slow" is anything under Jog speed. */
+    pinBelow: 6,
     pinDrainAbove: 8,
     pinUnitAhead: 8,
     /** §21 headline tiers by Ratings: SPOTTED / AT LARGE / RAMPAGE / CITY IN CHAOS. */
@@ -633,11 +638,11 @@ export const TUNING = {
     byHeat: [
       { cadence: 8, cap: 2, kinds: ['cruiser'] },
       { cadence: 6, cap: 3, kinds: ['cruiser', 'spike', 'rolling', 'chopper'] },
-      { cadence: 5, cap: 4, kinds: ['cruiser', 'spike', 'rolling', 'roadblock', 'chopper'] },
-      { cadence: 4, cap: 5, kinds: ['cruiser', 'spike', 'rolling', 'roadblock', 'chopper'] },
-      { cadence: 4, cap: 5, kinds: ['cruiser', 'spike', 'rolling', 'roadblock', 'chopper'] },
-    ] as { cadence: number; cap: number; kinds: ('cruiser' | 'spike' | 'rolling' | 'roadblock' | 'chopper')[] }[],
-    weights: { cruiser: 3, spike: 2, rolling: 1.5, roadblock: 1.5, chopper: 1 },
+      { cadence: 5, cap: 4, kinds: ['cruiser', 'spike', 'rolling', 'roadblock', 'chopper', 'net'] },
+      { cadence: 4, cap: 5, kinds: ['cruiser', 'spike', 'rolling', 'roadblock', 'chopper', 'net'] },
+      { cadence: 4, cap: 5, kinds: ['cruiser', 'spike', 'rolling', 'roadblock', 'chopper', 'net'] },
+    ] as { cadence: number; cap: number; kinds: ('cruiser' | 'spike' | 'rolling' | 'roadblock' | 'chopper' | 'net')[] }[],
+    weights: { cruiser: 3, spike: 2, rolling: 1.5, roadblock: 1.5, chopper: 1, net: 6 },
     /** LOCKED (§1): never spawn within 40m. Behind spawns also sit behind every camera. */
     spawnBehind: 100,
     spawnAheadMin: 110,
@@ -667,6 +672,29 @@ export const TUNING = {
      * crash is in the chopper's frame (§1).
      */
     crash: { react: 6, plowKeep: 0.8, visibleBehind: 3 },
+    /**
+     * Police Net (Mike, 2026-11-16: "a real box-in", one goal and two threats). From Heat 3, at most
+     * `perSegment[heat - 1]` a segment, `minGap` s apart. An armoured truck (nothing smashes it) takes his
+     * lane ahead while two flankers (only a Shoulder Check breaks them) come up alongside; the truck then
+     * brakes into him. Boxed and slow, the Pin meter fills: the first time it fills in a segment he slips
+     * the net (a gear and `slipRatings` lost), the second time he's busted. Ways out: Shoulder Check a
+     * flanker (Stride+), brake and drop back behind them, take the gap before they close, Leap, the Stare.
+     * The truck cruises like a rolling roadblock until its tell (on screen, like every tell), then brakes.
+     */
+    net: { perSegment: [0, 0, 1, 2, 2] as number[], minGap: 30, cruiseFactor: 0.55, tellAhead: 1.9, tellMin: 25, tellMax: 28, tell: 1.5, decel: 7, crawl: 3.5, flankClose: 9, flankAccel: 8, flankDecel: 5, flankHold: 14, flankSide: 3, actMax: 10, escapeAfter: 1.5, slipRatings: 15 },
+    /**
+     * Rolling Blockade (the rolling roadblock, upgraded): from `armoredFrom` Heat, one car in the line is the
+     * armoured truck; and with 3+ lanes the gap moves: every `shiftEvery` s a car next to it slides over
+     * (`shiftTime` s, blinker first), so the open lane is a moving target. The compact is still the weak link.
+     */
+    blockade: { armoredFrom: 3, shiftEvery: 2.2, shiftTime: 0.8 },
+    /**
+     * Car Carrier Spill (traffic, not police): a carrier in a lane ahead, cruising at `cruiseFactor` of his
+     * speed until it's in the frame (its tell), then holds station near the top of the frame and drops `drops`
+     * stalled cars, one every `dropEvery` s, into its lane or the next; never a drop he couldn't see coming
+     * (`dropLead` s), never one that closes the last open lane. Heavy: Rampage (or a Stride Shoulder Check) smashes the carrier itself.
+     */
+    carrier: { firstAt: 30, every: [40, 60] as [number, number], cruiseFactor: 0.62, tellAhead: 1.9, tellMin: 25, tellMax: 28, firstDrop: 0.8, drops: 6, dropEvery: 0.9, dropLead: 1.2, leaveSpeed: 8 },
     /** Near-miss (§12): a pursuer passes within 1.5m without contact. */
     nearMiss: 1.5,
     /** A unit this far behind the giant has lost track (§12) and leaves. */
@@ -793,7 +821,7 @@ export const TUNING = {
     /** Real point lights reused on the nearest lamps (the rest are glow decals). Each light costs every lit pixel. */
     lampLights: 2,
     /** Chopper spotlight: ground pool radius (m), lag following the giant (s), wander (m). */
-    spotRadius: 7,
+    spotRadius: 7.5,
     spotLag: 0.25,
     spotWander: 1.2,
     /** Chopper shadow crosses the road every this many seconds (random in range). */

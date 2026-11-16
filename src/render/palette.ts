@@ -66,6 +66,8 @@ export const KIND_COLORS: Record<PropKind, number[]> = {
   compact: [0x1c2a4a],
   tollgate: [0xe8e2d4],
   foodtruck: [0xe4412b, 0x3b8ea5, 0xf5d33b, 0x7cbf3a],
+  armored: [0x232a38],
+  carrier: [0xe8e4dc],
 };
 
 export const MATERIAL_DEBRIS: Record<Material, number[]> = {

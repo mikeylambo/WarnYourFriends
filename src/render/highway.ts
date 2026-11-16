@@ -150,6 +150,40 @@ export function partsFor(p: Prop): Part[] {
         [-L * 0.1, 3.1, 0, L * 0.42, 0.5, 0.12, 0xf5d33b],
         ...wheels(L, W, 0.8, [0.33, -0.3]),
       ];
+    case 'armored': {
+      // Armoured police truck: slab-sided body, slit windows, a ram plate up front, three axles. Nothing smashes it.
+      return [
+        [0, 0.55, 0, L * 0.98, 0.4, W * 0.94, TRIM],
+        [-L * 0.08, 1.75, 0, L * 0.8, 2.1, W, 'kind'],
+        [L * 0.38, 1.4, 0, L * 0.22, 1.4, W * 0.98, 'kind'],
+        [L * 0.47, 1.85, 0, 0.12, 0.35, W * 0.8, GLASS, undefined, -0.3],
+        [-L * 0.08, 2.35, W * 0.505, L * 0.5, 0.18, 0.04, GLASS],
+        [-L * 0.08, 2.35, -W * 0.505, L * 0.5, 0.18, 0.04, GLASS],
+        [-L * 0.08, 1.35, 0, L * 0.805, 0.2, W * 1.01, 0xf1f1ee],
+        [L * 0.5 + 0.15, 0.85, 0, 0.25, 1.0, W * 1.05, 0x8c939b],
+        ...wheels(L, W, 0.95, [0.33, -0.12, -0.36]),
+      ];
+    }
+    case 'carrier': {
+      // Car carrier: cab, two-deck open trailer, a load of cars on both decks (decoration: the drops are real props).
+      const deck = (y: number): Part[] => [[-L * 0.14, y, 0, L * 0.7, 0.12, W, 0x6d737a]];
+      const cars: Part[] = [];
+      const load = [0xcf4b3e, 0x3b8ea5, 0xd9a43b, 0x6b8f5a, 0x4a5d8c, 0xe9d7a8];
+      for (let i = 0; i < 3; i++) {
+        cars.push([-L * 0.4 + i * L * 0.2, 1.5, 0, L * 0.16, 0.6, W * 0.82, load[i]], [-L * 0.4 + i * L * 0.2, 2.9, 0, L * 0.16, 0.6, W * 0.82, load[i + 3]]);
+      }
+      return [
+        [L * 0.38, 1.35, 0, L * 0.2, 1.9, W * 0.96, 'kind'],
+        [L * 0.47, 1.75, 0, 0.12, 0.7, W * 0.84, GLASS, undefined, -0.3],
+        [0, 0.55, 0, L * 0.98, 0.3, W * 0.9, TRIM],
+        ...deck(1.1),
+        ...deck(2.5),
+        [-L * 0.14, 1.8, W * 0.48, L * 0.7, 1.4, 0.1, 0x8c939b],
+        [-L * 0.14, 1.8, -W * 0.48, L * 0.7, 1.4, 0.1, 0x8c939b],
+        ...cars,
+        ...wheels(L, W, 0.9, [0.4, 0.25, -0.2, -0.32, -0.44]),
+      ];
+    }
     case 'cruiser':
     case 'compact':
       // Black-and-white police car (white doors and roof read from the chopper), push bar up front.
@@ -1234,9 +1268,26 @@ export class HighwayView {
     c.mesh.scale.set(s, 1, s);
   }
 
+  /** Car Carrier: a dropped car falls off the deck (0.4s, a small bounce) once its view exists. */
+  private drops = new Map<number, number>();
+  dropIn(propId: number) {
+    this.drops.set(propId, 0);
+  }
+
   update(dt: number, focusX: number, focusZ: number, giantS = 0, giantD = 0) {
     this.ground.position.x = focusX;
     this.ground.position.z = focusZ;
+    for (const [id, t0] of this.drops) {
+      const g = this.propViews.get(id);
+      if (!g) continue;
+      const t = Math.min(1, t0 + dt / 0.4);
+      // From the upper deck to the road, with a little bounce at the end.
+      g.position.y = t < 0.8 ? 3.0 * (1 - (t / 0.8) ** 2) : 0.25 * Math.sin(((t - 0.8) / 0.2) * Math.PI);
+      if (t >= 1) {
+        g.position.y = 0;
+        this.drops.delete(id);
+      } else this.drops.set(id, t);
+    }
     if (dt > 0) this.updateTraffic(dt, giantS, giantD);
     if (dt > 0) this.updateWrecks(dt, focusX, focusZ);
     for (let i = this.slides.length - 1; i >= 0; i--) {

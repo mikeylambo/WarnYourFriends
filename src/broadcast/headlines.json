@@ -76,6 +76,14 @@
     "foodtruck": [
       "Food Truck",
       "Food Trucks"
+    ],
+    "armored": [
+      "Armored Truck",
+      "Armored Trucks"
+    ],
+    "carrier": [
+      "Car Carrier",
+      "Car Carriers"
     ]
   },
   "verbs": {
@@ -619,6 +627,58 @@
           "Giant Commutes Through {name}"
         ]
       ]
-    }
+    },
+    "tellNet": [
+      [
+        "Close In",
+        "Police Close In On Giant {place}"
+      ],
+      [
+        "Box",
+        "Officers Try To Box In Giant"
+      ],
+      [
+        "Bring In",
+        "Police Bring In Armored Truck"
+      ]
+    ],
+    "tellCarrier": [
+      [
+        "Sheds",
+        "Car Carrier Sheds Its Load Ahead Of Giant"
+      ],
+      [
+        "Loses",
+        "Car Carrier Loses Cargo {place}"
+      ],
+      [
+        "Drops",
+        "Car Carrier Drops Sedans In Giant's Path"
+      ]
+    ],
+    "netSlip": [
+      [
+        "Slips",
+        "Giant Slips Police Net"
+      ],
+      [
+        "Wriggles",
+        "Giant Wriggles Free Of Police Box"
+      ]
+    ],
+    "netEscape": [
+      [
+        "Breaks Out",
+        "Giant Breaks Out Of Police Net"
+      ],
+      [
+        "Escapes",
+        "Giant Escapes Police Box {place}"
+      ],
+      [
+        "Shrugs Off",
+        "Giant Shrugs Off Police Net"
+      ]
+    ]
   }
 }

@@ -163,9 +163,10 @@ try {
   {
     const { ctx } = await bootAndStart(browser, 'keyboard', { viewport: { width: 1280, height: 720 } }, async (p) => {
       // Keyboard only: Enter through the title, the main menu (Full Broadcast) and How to Play (Go live).
+      // How to Play ignores input for its first 250ms (no accidental double-press), so give each screen a beat.
       for (let i = 0; i < 3; i++) {
         await p.keyboard.press('Enter');
-        await p.waitForTimeout(200);
+        await p.waitForTimeout(450);
       }
     });
     await ctx.close();

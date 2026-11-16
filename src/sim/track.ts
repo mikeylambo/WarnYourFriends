@@ -69,6 +69,9 @@ export const PROP_DEFS: Record<PropKind, PropDef> = {
   // Landmarks: a toll gate arm (Medium: Stride smashes it) and a food truck (Heavy: Rampage).
   tollgate: { cls: 'medium', mat: 'wood', hl: 0.15, hw: 1.7, h: 1.2, variants: 1 },
   foodtruck: { cls: 'heavy', mat: 'fruit', hl: 3.0, hw: 1.2, h: 2.9, variants: 4 },
+  // Police Net (2026-11-16): the armoured truck nothing smashes (Leap clears it), and the car carrier (Heavy).
+  armored: { cls: 'immovable', mat: 'metal', hl: 2.9, hw: 1.25, h: 2.9, variants: 1 },
+  carrier: { cls: 'heavy', mat: 'metal', hl: 6.5, hw: 1.3, h: 3.6, variants: 1 },
   // Phase 2 police units (never placed as lane props; pursuit spawns them).
   cruiser: { cls: 'heavy', mat: 'metal', hl: 2.4, hw: 0.98, h: 1.7, variants: 1 },
   compact: { cls: 'medium', mat: 'metal', hl: 1.8, hw: 0.85, h: 1.4, variants: 1 },
@@ -96,6 +99,19 @@ export class Track {
   private forceLanes: number | null = null;
   private nextRowS: number;
   private nextLandmark: number = TUNING.landmarks.firstAt;
+  /**
+   * Where the sign-off ramp will need to go (set by the sim well before it opens): inside it the road stays
+   * ramp-friendly (no new tunnel or bridge, a current one wraps up, no landmark), so the exit is never
+   * pushed out of reach. 11% of exits were, with a bridge or tunnel run filling the window.
+   */
+  private exitReserve: [number, number] | null = null;
+  reserveExit(s0: number, s1: number) {
+    this.exitReserve = [s0, s1];
+  }
+  private reserved(s: number): boolean {
+    const r = this.exitReserve;
+    return !!r && s >= r[0] && s <= r[1];
+  }
   private propId = 0;
   private readonly rng: Rng;
 
@@ -146,8 +162,11 @@ export class Track {
     let lanes1 = lanes0;
     const Z = TUNING.zones;
     // Zones: when one runs out, pick the next; merge one lane per segment until its lane count is reached.
+    // Coming up on the reserved exit stretch inside a tunnel or on a bridge: wrap it up now (merges take a few segments).
+    const nearReserve = this.reserved(s0 + 3 * T.segmentLength) || this.reserved(s0);
+    if (nearReserve && (this.zone === 'tunnel' || this.zone === 'bridge') && this.zoneLeft > 0 && !this.nextZone) this.zoneLeft = 0;
     if (index >= T.runwaySegments && this.zoneLeft <= 0 && !this.nextZone) {
-      const options = (Object.keys(Z.lanes) as ZoneKind[]).filter((z) => z !== this.zone);
+      const options = (Object.keys(Z.lanes) as ZoneKind[]).filter((z) => z !== this.zone && !(nearReserve && (z === 'tunnel' || z === 'bridge')));
       this.nextZone = this.pickZone(options);
       this.zoneTarget = this.nextZone === 'highway' ? (rng.chance(0.7) ? 4 : 3) : Z.lanes[this.nextZone];
     }
@@ -182,7 +201,7 @@ export class Track {
     // Landmarks: a straight, full-width segment well inside its zone (never on a merge or a zone's last segment).
     let landmark: LandmarkKind | undefined;
     let landmarkName: string | undefined;
-    if (index >= this.nextLandmark && kind !== 'merge' && !this.nextZone && this.zoneLeft >= 2) {
+    if (index >= this.nextLandmark && kind !== 'merge' && !this.nextZone && this.zoneLeft >= 2 && !this.reserved(s0) && !this.reserved(s0 + T.segmentLength)) {
       landmark = this.pickLandmark(zone);
       if (landmark) {
         kind = 'straight';
@@ -455,6 +474,19 @@ export class Track {
         break;
       }
     }
+  }
+
+  /**
+   * Car carrier: a stalled car dropped into a lane at `s`, kept in order along the road (propsBetween
+   * relies on it). Returns the new prop.
+   */
+  drop(kind: PropKind, s: number, d: number): Prop {
+    const def = PROP_DEFS[kind];
+    const p: Prop = { id: this.propId++, kind, cls: def.cls, mat: def.mat, s, d, hl: def.hl, hw: def.hw, h: def.h, variant: this.rng.int(0, def.variants - 1), alive: true, segment: this.segmentAt(s).index };
+    let i = this.props.length;
+    while (i > 0 && this.props[i - 1].s > s) i--;
+    this.props.splice(i, 0, p);
+    return p;
   }
 
   /** Live props overlapping [s0, s1] along the road. */

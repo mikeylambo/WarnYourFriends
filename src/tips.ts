@@ -4,7 +4,7 @@
  * sim, never writes it. Seen notes are remembered per browser; turning Producer Tips back on
  * in Settings replays them.
  */
-export type TipId = 'gear' | 'stride' | 'rampage' | 'bounce' | 'dodge' | 'dozer' | 'losing' | 'exit' | 'budget';
+export type TipId = 'gear' | 'stride' | 'rampage' | 'bounce' | 'dodge' | 'dozer' | 'losing' | 'exit' | 'budget' | 'net' | 'carrier' | 'armored';
 
 export const TIP_TEXT: Record<TipId, string> = {
   gear: 'Keep him at top speed. He shifts up a gear.',
@@ -16,6 +16,9 @@ export const TIP_TEXT: Record<TipId, string> = {
   losing: "We're losing them. Smash something.",
   exit: "Exit's open. Take it to sign off.",
   budget: 'Stunts and chains pay the budget. Spend it between segments.',
+  net: 'Police net. Shoulder Check a car beside you, or brake and drop back.',
+  carrier: 'Car carrier losing its load. Weave through, or flatten it at Rampage.',
+  armored: "Armored truck. Nothing smashes that. Find the gap.",
 };
 
 const KEY = 'gal.tips.seen.v1';

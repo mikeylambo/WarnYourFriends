@@ -110,8 +110,19 @@ export class Show {
     const S = TUNING.show;
     if (boxed && speed < S.pinBelow) this.pin = Math.min(100, this.pin + S.pinFill * dt);
     else if (speed > S.pinDrainAbove) this.pin = Math.max(0, this.pin - S.pinDrain * this.pinDrainMult * dt);
-    if (this.pin >= 100) this.bust('pin', out);
+    if (this.pin >= 100) {
+      // Police Net: the first catch in a segment he slips (a gear and Ratings, the caller applies them); the next busts him.
+      if (this.netSlips < 1) {
+        this.netSlips++;
+        this.pin = 0;
+        const before = this.ratings;
+        this.ratings = Math.max(1, this.ratings - TUNING.pursuit.net.slipRatings);
+        out.push({ type: 'netSlip', ratings: this.ratings - before });
+      } else this.bust('pin', out);
+    }
   }
+  /** Police Net catches slipped this segment. */
+  netSlips = 0;
 
   /** Phase 3 Pose for the Camera: spend Heat, take a Ratings spike (the one way Heat falls). */
   pose(time: number, out: SimEvent[]): number {

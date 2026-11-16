@@ -252,6 +252,35 @@ describe('lanes', () => {
     }
   });
 
+  it('Police Net: a passive player gets caught (a slip), and boxed or not he keeps moving (Law 1)', () => {
+    let nets = 0;
+    let slips = 0;
+    for (let seed = 1; seed <= 60 && nets < 10; seed++) {
+      const sim = new Sim({ seed, segment: 3, growth: true });
+      const bot = new Bot(sim);
+      let handed = false;
+      let last = sim.giant.s;
+      let since = 0;
+      for (let i = 0; i < 60 * 160 && sim.live; i++) {
+        if (!handed && sim.pursuit.units.some((u) => u.alive && u.unit === 'net' && u.kind === 'armored' && u.phase === 'tell')) {
+          handed = true;
+          last = sim.giant.s;
+        }
+        const ev = sim.step(handed ? NO_INPUT : bot.input());
+        if (handed && ++since % 180 === 0) {
+          // Judged over 3s like the soak (a bounce's push-back costs a little): boxed or not, he keeps moving.
+          expect(sim.giant.s - last).toBeGreaterThanOrEqual(TUNING.giant.speedFloor * 3 * 0.75);
+          last = sim.giant.s;
+        }
+        if (handed && ev.some((e) => e.type === 'netSlip')) slips++;
+        if (handed && !sim.pursuit.units.some((u) => u.alive && u.unit === 'net' && u.phase !== 'leave')) break;
+      }
+      if (handed) nets++;
+    }
+    expect(nets).toBeGreaterThanOrEqual(5);
+    expect(slips).toBeGreaterThanOrEqual(1);
+  });
+
   it('never drops below the 2 m/s floor, even braking forever (Law 1, LOCKED)', () => {
     const sim = emptySim();
     run(sim, 2, { ...NO_INPUT, brake: true });

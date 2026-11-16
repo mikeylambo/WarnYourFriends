@@ -120,8 +120,10 @@ export class UnitViews {
     root.add(body);
     const L = u.hl * 2;
     const W = u.hw * 2;
-    const roof = u.kind === 'compact' ? 1.45 : 1.62;
-    for (const [arr, mat, z] of [[v.red, GLOW.sirenRedHalo, -0.38], [v.blue, GLOW.sirenBlueHalo, 0.38]] as const) {
+    // Light bar on the roof (the armoured truck's sits higher); the car carrier is traffic: no lights.
+    const roof = u.kind === 'compact' ? 1.45 : u.kind === 'armored' ? 2.8 : 1.62;
+    const police = u.unit !== 'carrier';
+    for (const [arr, mat, z] of police ? ([[v.red, GLOW.sirenRedHalo, -0.38], [v.blue, GLOW.sirenBlueHalo, 0.38]] as const) : []) {
       const bar = new THREE.Mesh(BOX, new THREE.MeshBasicMaterial({ color: mat === GLOW.sirenRedHalo ? 0xff2030 : 0x2a5cff }));
       bar.scale.set(0.3, 0.14, 0.66);
       bar.position.set(-0.2, roof + 0.1, z);

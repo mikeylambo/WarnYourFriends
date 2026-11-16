@@ -72,7 +72,7 @@ describe('headlines (§21)', () => {
         if (h.place?.endsWith('bound')) expect(h.place).toBe(`${compass(at.heading)}bound`);
         if (h.place === 'On Highway' || h.place === 'On The Interstate') expect(at.zone ?? 'highway').toBe('highway');
         // BREAKING: a Ratings tier, the exit, the ending, or the new road after a fork (the station cut away).
-        if (h.breaking) expect(['ratings', 'exitOpen', 'busted', 'signOff', 'zone']).toContain(h.sources[0].type);
+        if (h.breaking) expect(['ratings', 'exitOpen', 'busted', 'signOff', 'zone', 'netSlip']).toContain(h.sources[0].type);
         if (h.breaking && h.sources[0].type === 'zone') expect(log.has(h.sources[0]) && [...log].some((e) => e.type === 'fork' && e.taken)).toBe(true);
       });
       // §21: a Ratings tier rise breaks in on the same tick.

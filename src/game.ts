@@ -99,6 +99,11 @@ const ratingsBar = $('ratingsbar');
 const trendEl = $('trend');
 const heatStars = [...document.querySelectorAll('#heat em')] as HTMLElement[];
 const signoffEl = $('signoff');
+/** Police Net: the BOXED IN meter (the Pin meter, shown while it fills), with the ways out for this device. */
+const boxedEl = $('boxed');
+const boxedFill = boxedEl.querySelector('u') as HTMLElement;
+const boxedHow = boxedEl.querySelector('.how') as HTMLElement;
+let boxedFam = '';
 const exitDistEl = $('exitdist');
 const signoffArrow = signoffEl.querySelector('.arrow') as HTMLElement;
 const segEl = $('segno');
@@ -532,10 +537,10 @@ function openBriefing(goLive: boolean): Promise<void> {
     <div class="kicker">HOW TO PLAY</div>
     <ol class="steps">
       <li><b>Run.</b> He never stops. ${k('lanes')} change lanes, ${k('brake')} brake.</li>
-      <li><b>Gear up.</b> Hold top speed to shift: Jog, Stride, Rampage. Each gear smashes bigger things; too big bounces you down a gear.</li>
+      <li><b>Gear up.</b> Hold top speed to shift: Jog, Stride, Rampage. Each gear smashes bigger things. Bulldozers and armored trucks never break: go round.</li>
       <li><b>Keep them watching.</b> Smashes, close calls and chains raise the ratings. At zero they cut to commercial.</li>
-      <li><b>Lose the police.</b> Watch for blinkers, spikes and roadblocks. ${k('shoulder')} shoulder-checks through. Don't get boxed in.</li>
-      <li><b>Take the exit.</b> At ${clock} a ramp opens on the right. Be in the far-right lane when you reach it.</li>
+      <li><b>Don't get boxed in.</b> Police close in with an armored truck. ${k('shoulder')} shoulder-checks a car beside you (Stride and up), or brake and drop back. Caught once, you slip; twice, you're busted.</li>
+      <li><b>Take the exit.</b> At ${clock} a ramp opens on the right. Be in the far-right lane when you reach it; miss it and coverage ends.</li>
     </ol>
     <div class="row"><button class="go" id="brief-go">${goLive ? 'Go live' : 'Back'}</button></div>
   </div>`;
@@ -804,8 +809,27 @@ function present(e: SimEvent) {
       // From the unit if it's on the road already, else from its lane ahead of him.
       const u = sim.pursuit.units.find((x) => x.id === e.id);
       audio.tell(e.kind, u ? where(u.s, u.d) : where(g.s + 40, sim.track.laneCenter(e.lane)));
+      if (e.kind === 'net') tips.want('net');
+      else if (e.kind === 'carrier') tips.want('carrier');
+      else if (e.kind === 'rolling' && sim.pursuit.units.some((x) => x.alive && x.kind === 'armored' && x.unit === 'rolling')) tips.want('armored');
       break;
     }
+    case 'netSlip': {
+      // Caught once: a jolt, the BREAKING sting, and the producer's warning that next time is the last.
+      audio.breaking();
+      rig.jolt(TUNING.impact.heavy.shake, TUNING.camera.joltTime);
+      flash(TUNING.impact.heavy.flashFrames);
+      haptic(160, 0.9);
+      tips.say("Slipped the net. Next time they've got him.");
+      break;
+    }
+    case 'netEscape':
+      audio.whoosh();
+      break;
+    case 'carrierDrop':
+      highway.dropIn(e.propId);
+      audio.smash('medium', where(e.s, e.d));
+      break;
     case 'spiked':
       audio.bounce();
       giant.onBounce();
@@ -1741,7 +1765,24 @@ function updateSignOff() {
   exitDistEl.textContent = `${Math.max(0, Math.round(ex.gore - sim.giant.s))}m`;
 }
 
+function updateBoxed() {
+  const pin = sim.show.pin;
+  const show = sim.live && !attract && (pin > 0.5 || (sim.pursuit.netActive && sim.boxedIn()));
+  boxedEl.hidden = !show;
+  if (!show) return;
+  boxedFill.style.width = `${Math.min(100, pin).toFixed(0)}%`;
+  boxedEl.classList.toggle('pulse', pin > 50);
+  // After one slip, the next catch busts him: say so.
+  boxedEl.classList.toggle('last', sim.show.netSlips > 0);
+  boxedEl.querySelector('b')!.textContent = sim.show.netSlips > 0 ? 'BOXED IN · LAST CHANCE' : 'BOXED IN';
+  if (boxedFam !== String(glyphFamily)) {
+    boxedFam = String(glyphFamily);
+    boxedHow.innerHTML = glyphFamily === 'touch' ? 'Tap ● Shoulder · hold ▼ Brake' : `<kbd>${esc(glyph('shoulder'))}</kbd>Shoulder · <kbd>${esc(glyph('brake'))}</kbd>Brake`;
+  }
+}
+
 function updateHud(dt: number) {
+  updateBoxed();
   const g = sim.giant;
   // LIVE clock; once the exit is open it counts down to the end of the grace period.
   const X = TUNING.segment;

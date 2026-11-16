@@ -49,11 +49,11 @@ export interface Headline {
   at?: NewsContext;
 }
 
-type Kind = 'zone' | 'spotted' | 'ratingsTier' | 'tierUp' | 'tierDown' | 'smash' | 'bounce' | 'wall' | 'merge' | 'escort' | 'ramHit' | 'ramMiss' | 'lostTrack' | 'spiked' | 'heat' | 'tell' | 'exitOpen' | 'end' | 'leap' | 'stare' | 'hijack' | 'pose' | 'spotlight' | 'chopperLost' | 'policeCrash' | 'policeSmash' | 'forkZone' | 'landmark';
+type Kind = 'zone' | 'spotted' | 'ratingsTier' | 'tierUp' | 'tierDown' | 'smash' | 'bounce' | 'wall' | 'merge' | 'escort' | 'ramHit' | 'ramMiss' | 'lostTrack' | 'spiked' | 'heat' | 'tell' | 'exitOpen' | 'end' | 'leap' | 'stare' | 'hijack' | 'pose' | 'spotlight' | 'chopperLost' | 'policeCrash' | 'policeSmash' | 'forkZone' | 'landmark' | 'netSlip' | 'netEscape';
 /** `at`: where he was when it happened (places come from here, not from publish time). */
 type Item = { kind: Kind; t: number; prio: number; events: SimEvent[]; at?: NewsContext };
 
-const PRIO: Partial<Record<Kind, number>> = { landmark: 60, zone: 66, spotted: 95, ratingsTier: 100, end: 200, exitOpen: 90, tell: 75, ramHit: 65, ramMiss: 58, lostTrack: 57, spiked: 62, heat: 52, escort: 60, merge: 55, leap: 64, stare: 61, hijack: 68, pose: 72, forkZone: 98, spotlight: 63, chopperLost: 59, policeCrash: 70, policeSmash: 35, tierUp: 50, bounce: 45, tierDown: 40, wall: 10 };
+const PRIO: Partial<Record<Kind, number>> = { netSlip: 96, netEscape: 74, landmark: 60, zone: 66, spotted: 95, ratingsTier: 100, end: 200, exitOpen: 90, tell: 75, ramHit: 65, ramMiss: 58, lostTrack: 57, spiked: 62, heat: 52, escort: 60, merge: 55, leap: 64, stare: 61, hijack: 68, pose: 72, forkZone: 98, spotlight: 63, chopperLost: 59, policeCrash: 70, policeSmash: 35, tierUp: 50, bounce: 45, tierDown: 40, wall: 10 };
 /** The player's own ability moments: kept queued longer so they get their headline. */
 const ABILITY_NEWS: Kind[] = ['leap', 'stare', 'hijack', 'pose'];
 /** These break in immediately, ignoring the 4s cadence (§21: tier changes; and the end of the broadcast). */
@@ -117,6 +117,8 @@ export class Newsroom {
       case 'spotlight': add('spotlight'); break;
       case 'policeCrash': add('policeCrash'); break;
       case 'policeSmash': add('policeSmash'); break;
+      case 'netSlip': add('netSlip'); break;
+      case 'netEscape': add('netEscape'); break;
       case 'spiked': add('spiked'); break;
       case 'heat':
         if (this.heatSeen && e.heat > this.heatSeen) add('heat');
@@ -291,8 +293,14 @@ export class Newsroom {
         const place = line[1].includes('{place}') ? this.freshPlace(ctx) : null;
         return mk(this.fill(line[1], { noun: BANK.nouns[kind][0], place }), line[0], place);
       }
+      case 'netSlip': {
+        // Caught once: it breaks in (the chyron says exactly what happened).
+        const line = this.freshLine(L.netSlip);
+        return line ? mk(line[1], line[0], null, true) : null;
+      }
       case 'spotlight':
       case 'chopperLost':
+      case 'netEscape':
       case 'ramHit':
       case 'ramMiss':
       case 'lostTrack':
@@ -305,7 +313,7 @@ export class Newsroom {
       }
       case 'tell': {
         const e = q.events[0] as Extract<SimEvent, { type: 'tell' }>;
-        const pool = e.kind === 'roadblock' ? L.tellRoadblock : e.kind === 'rolling' ? L.tellRolling : e.kind === 'chopper' ? L.tellChopper : L.tellSpike;
+        const pool = e.kind === 'roadblock' ? L.tellRoadblock : e.kind === 'rolling' ? L.tellRolling : e.kind === 'chopper' ? L.tellChopper : e.kind === 'net' ? L.tellNet : e.kind === 'carrier' ? L.tellCarrier : L.tellSpike;
         const line = this.freshLine(pool);
         if (!line) return null;
         const place = line[1].includes('{place}') ? this.freshPlace(ctx) : null;

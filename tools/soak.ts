@@ -57,6 +57,9 @@ const asksAgg: Record<string, { offered: number; done: number }> = {};
 /** Forks: opened, taken, stayed. */
 const forks = { opened: 0, taken: 0, stayed: 0 };
 const landmarks: Record<string, number> = {};
+// Police Net, Rolling Blockade, Car Carrier (2026-11-16).
+const nets = { spawned: 0, tells: 0, escaped: 0, slipped: 0, busted: 0, maxPerSegment: 0 };
+const carriers = { spawned: 0, drops: 0, minLead: Infinity, bad: 0, smashed: 0 };
 let landmarkSmashes = 0;
 const stepSamples: number[] = [];
 let maxStepMs = 0;
@@ -95,6 +98,7 @@ for (let seed = 1; seed <= seeds; seed++) {
   const dt = sim.dt;
 
   const seenUnits = new Set<number>();
+  let segNets = 0;
   let lastForkAt = -Infinity;
   let lastHeat = 1;
   for (let i = 0; i < ticks; i++) {
@@ -140,6 +144,23 @@ for (let seed = 1; seed <= seeds; seed++) {
       } else if (e.type === 'fork') forks.stayed++;
       if (e.type === 'forkOpen') forks.opened++;
       if (e.type === 'landmark') landmarks[e.kind] = (landmarks[e.kind] ?? 0) + 1;
+      if (e.type === 'unitSpawn' && e.kind === 'net') { nets.spawned++; segNets++; nets.maxPerSegment = Math.max(nets.maxPerSegment, segNets); }
+      if (e.type === 'tell' && e.kind === 'net') nets.tells++;
+      if (e.type === 'netEscape') nets.escaped++;
+      if (e.type === 'netSlip') nets.slipped++;
+      if (e.type === 'busted' && e.reason === 'pin') nets.busted++;
+      if (e.type === 'unitSpawn' && e.kind === 'carrier') carriers.spawned++;
+      if (e.type === 'carrierDrop') {
+        carriers.drops++;
+        const lead = (e.s - g.s) / Math.max(g.speed, 0.1);
+        carriers.minLead = Math.min(carriers.minLead, lead);
+        // Never a drop he couldn't see coming, never one that closes every lane there.
+        if (lead < TUNING.pursuit.carrier.dropLead - 0.05) { carriers.bad++; fail(`seed ${seed}: carrier drop ${lead.toFixed(2)}s ahead`); }
+        const W = TUNING.lanes.width;
+        const blocked = new Set(sim.track.propsBetween(e.s - 5, e.s + 5).map((p) => Math.floor(p.d / W)));
+        if (blocked.size >= sim.track.lanesAt(e.s)) { carriers.bad++; fail(`seed ${seed}: carrier drop closed every lane at t=${sim.time.toFixed(1)}`); }
+      }
+      if (e.type === 'smash' && sim.pursuit.units.find((u) => u.id === e.propId)?.unit === 'carrier') carriers.smashed++;
       if (e.type === 'smash' && sim.track.segmentAt(sim.giant.s).landmark) landmarkSmashes++;
       const trig = cutTriggerFor(e);
       if (trig) {
@@ -396,6 +417,8 @@ console.log(
 );
 console.log(`  run (Phase 3): segments ${p3.segments.join('/')}; ability uses ${JSON.stringify(p3.uses)}, no-target presses ${p3.duds}; leap landings ${p3.leapLands} (smashed ${p3.leapSmash}); stare pulled over ${p3.stareMoved}; hijack bails ${p3.hijackBails}; pose Ratings +${p3.poseGain.toFixed(0)}`);
 console.log(`  forks: opened ${forks.opened}, taken ${forks.taken}, stayed ${forks.stayed}`);
+console.log(`  police net: ${nets.spawned} spawned, ${nets.tells} closed in, ${nets.escaped} escaped, ${nets.slipped} slipped (1st catch), ${nets.busted} busted (2nd); max ${nets.maxPerSegment} a segment`);
+console.log(`  car carrier: ${carriers.spawned} spawned, ${carriers.drops} drops (closest ${carriers.minLead.toFixed(2)}s ahead), ${carriers.smashed} carriers smashed`);
 console.log(`  landmarks passed: ${Object.entries(landmarks).sort().map(([k, v]) => `${k} ${v}`).join(', ')}; smashes inside them ${landmarkSmashes}`);
 console.log(`  producer's asks (offered → done): ${Object.entries(asksAgg).sort().map(([k, v]) => `${k} ${v.done}/${v.offered}`).join(', ')}`);
 console.log(`  escort: ${esc.joins} joins, nearest join ${esc.minJoinBehind.toFixed(1)}m back, ${esc.joinsOnCamera} on camera; closest gap ever ${esc.minGap.toFixed(2)}m (floor ${TUNING.escort.minGap}m)`);
@@ -413,6 +436,9 @@ if (cuts.minAwayHold < TUNING.camera.awayHold[0] - 1e-6) fail(`returned home aft
 if (cuts.maxAwayHold > TUNING.camera.awayHold[1] + 2) fail(`stayed away ${cuts.maxAwayHold.toFixed(2)}s`);
 if (swoop.n < seeds / 4) fail(`too few swoops to test (${swoop.n})`);
 for (const k of ['cruiser', 'spike', 'rolling', 'roadblock', 'chopper']) if (!p2.tells[k]) fail(`no ${k} tell in ${seeds} seeds`);
+if (nets.maxPerSegment > Math.max(...TUNING.pursuit.net.perSegment)) fail(`police net: ${nets.maxPerSegment} in one segment`);
+if (!nets.tells || !nets.escaped) fail(`police net never played out (${JSON.stringify(nets)})`);
+if (!carriers.drops) fail('car carrier never dropped a car');
 if (Object.keys(landmarks).length < 4) fail(`landmarks: only ${Object.keys(landmarks).join(', ')} passed in ${seeds} seeds`);
 if (!forks.taken || !forks.stayed) fail(`forks: taken ${forks.taken}, stayed ${forks.stayed} in ${seeds} seeds`);
 if (!p2.choppersShaken) fail(`no police chopper was ever shaken in ${seeds} seeds`);

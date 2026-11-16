@@ -6,6 +6,19 @@ import { TUNING } from '../tuning';
 import type { SimEvent } from './types';
 
 describe('show (§12 Ratings, Heat, Pin)', () => {
+  it('Police Net: the first full box-in slips (Ratings lost, not busted), the second busts', () => {
+    const sh = new Show();
+    const ev: SimEvent[] = [];
+    sh.ratings = 60;
+    for (let i = 0; i < 60 * 4; i++) sh.stepPin(1 / 60, true, 2, ev);
+    expect(ev.some((e) => e.type === 'netSlip')).toBe(true);
+    expect(sh.state).toBe('live');
+    expect(sh.ratings).toBe(60 - TUNING.pursuit.net.slipRatings);
+    for (let i = 0; i < 60 * 4; i++) sh.stepPin(1 / 60, true, 2, ev);
+    expect(sh.state).toBe('busted');
+    expect(sh.reason).toBe('pin');
+  });
+
   it('starts at 20; first-of-type pays ×1.5, repeats within 10s pay ×0.5 then ×0.25', () => {
     const sh = new Show();
     const ev: SimEvent[] = [];
@@ -71,6 +84,25 @@ describe('segment (LOCKED 150s + 15s grace)', () => {
     expect(sim.live).toBe(false);
     expect(sim.time).toBeLessThanOrEqual(TUNING.segment.length + TUNING.segment.grace + 1e-6);
     expect(sim.show.state).toBe('busted');
+  });
+
+  it('the exit opens on time and within reach (the road ahead is planned ramp-friendly)', () => {
+    let late = 0;
+    let unreachable = 0;
+    for (let seed = 1; seed <= 40; seed++) {
+      const sim = new Sim({ seed, growth: true });
+      const bot = new Bot(sim);
+      while (sim.live && sim.time < 140) {
+        for (const e of sim.step(bot.input())) {
+          if (e.type !== 'exitOpen') continue;
+          if (sim.time > TUNING.segment.exitOpensAt + 1) late++;
+          const left = TUNING.segment.length + TUNING.segment.grace - sim.time;
+          if (sim.giant.speed > 8 && e.s - sim.giant.s > sim.giant.speed * left - 20) unreachable++;
+        }
+      }
+    }
+    expect(late).toBe(0);
+    expect(unreachable).toBe(0);
   });
 
   it('the bot takes the exit ramp and signs off', () => {

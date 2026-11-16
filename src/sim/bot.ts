@@ -58,6 +58,31 @@ export class Bot {
     };
     // A police chopper has him: two lane changes in a row shake it.
     const spotted = units.some((u) => u.unit === 'chopper' && u.phase === 'act');
+    // Police Net: a flanker alongside with the truck braking ahead. Shoulder Check out through a flanker
+    // (Stride+), else brake and drop back behind them; a Leap or the Stare if equipped.
+    const net = units.filter((u) => u.unit === 'net' && (u.phase === 'tell' || u.phase === 'act'));
+    if (net.length) {
+      const flank = net.filter((u) => u.ram && Math.abs(u.s - g.s) < 6);
+      const truck = net.find((u) => u.kind === 'armored');
+      const closing = truck && truck.s > g.s && truck.s - g.s < 22 && Math.abs(truck.d - g.d) < 2;
+      if (closing && flank.length) {
+        if (sim.ability === 'leap' || sim.ability === 'stare') {
+          if (g.abilityCd <= 0) return { lane: 0, brake: false, shoulder: false, ability: true };
+        }
+        if (g.tier >= 1 && g.shoulderCd <= 0 && this.shoulderCooldown <= 0) {
+          this.shoulderCooldown = 1;
+          this.decideCooldown = 0.2;
+          return { lane: Math.sign(flank[0].d - g.d), brake: false, shoulder: true };
+        }
+        // Behind the flankers now? Then step out of the box.
+        if (flank.every((f) => f.s - f.hl > g.s + 1)) {
+          const out = flank.length === 1 ? Math.sign(flank[0].d - g.d) : 1;
+          this.decideCooldown = 0.15;
+          return { lane: out, brake: false, shoulder: false };
+        }
+        return { lane: 0, brake: true, shoulder: false };
+      }
+    }
     const ex = sim.exit;
     // Forks: take about half of them (deterministic per seed and fork), so the soak exercises both roads.
     const fk = sim.fork;

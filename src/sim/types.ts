@@ -2,7 +2,7 @@ import type { AbilityId, MassClass } from '../tuning';
 
 export type Material = 'wood' | 'glass' | 'metal' | 'fruit' | 'concrete' | 'paper';
 
-export type PropKind = 'sawhorse' | 'cart' | 'fence' | 'scooter' | 'car' | 'van' | 'barricade' | 'dozer' | 'cruiser' | 'compact' | 'tollgate' | 'foodtruck';
+export type PropKind = 'sawhorse' | 'cart' | 'fence' | 'scooter' | 'car' | 'van' | 'barricade' | 'dozer' | 'cruiser' | 'compact' | 'tollgate' | 'foodtruck' | 'armored' | 'carrier';
 
 /** Content pass (Mike, 2026-11-15): landmark set pieces, one per segment (v0.3 §16: landmarks become segments). */
 export type LandmarkKind = 'toll' | 'foodtrucks' | 'works' | 'jam';
@@ -155,9 +155,15 @@ export type SimEvent =
   | { type: 'policeCrash'; id: number; propId: number; propKind: PropKind; propCls: MassClass; propSmashed: boolean; s: number; d: number; speed: number }
   /** Phase 2 road variety: the giant enters a new stretch of road. */
   | { type: 'zone'; zone: 'highway' | 'avenue' | 'bridge' | 'tunnel'; name: string }
-  | { type: 'landmark'; kind: LandmarkKind; name: string; s: number };
+  | { type: 'landmark'; kind: LandmarkKind; name: string; s: number }
+  /** Police Net (2026-11-16): the first catch in a segment costs a gear and Ratings; the second busts him. */
+  | { type: 'netSlip'; ratings: number }
+  /** He broke out of a Police Net (it disperses). */
+  | { type: 'netEscape'; id: number }
+  /** A car carrier drops a car into a lane (presentation animates it off the deck). */
+  | { type: 'carrierDrop'; carrierId: number; propId: number; s: number; d: number }
 
-export type UnitKind = 'cruiser' | 'rolling' | 'roadblock' | 'spike' | 'chopper';
+export type UnitKind = 'cruiser' | 'rolling' | 'roadblock' | 'spike' | 'chopper' | 'net' | 'carrier';
 /** §12 gain sources. */
 export type GainType = 'medium' | 'heavy' | 'nearMiss' | 'lostTrack' | 'rampage' | 'pose' | 'policeCrash' | 'collateral';
 /** Spectacle stunts (score, not Ratings). */
@@ -187,4 +193,9 @@ export interface Unit extends Prop {
   /** Chopper: lane changes counted toward shaking it, and time since the last one. */
   shakes: number;
   shakeT: number;
+  /** Police Net flanker: nothing breaks it but a Shoulder Check (it counts as Heavy only during one). */
+  ram?: boolean;
+  /** Car carrier: cars left to drop, and time to the next one. */
+  drops?: number;
+  dropT?: number;
 }
