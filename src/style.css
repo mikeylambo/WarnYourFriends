@@ -617,12 +617,12 @@ html.attract #ratings { display: none; }
 #chain .clock i { background: var(--c-text); }
 
 /* --- Station bug: WYF / NEWS on ink, the 6 on its own block (red in WYF 6 colours, blue on Network) --- */
-#bug { right: calc(64px / var(--hs, 1)); top: calc(20px + env(safe-area-inset-top)); height: 76px; display: flex; flex-direction: row; align-items: stretch; opacity: 1; filter: drop-shadow(0 3px 8px rgba(0, 0, 0, 0.45)); background: none; padding: 0; width: auto; }
-#bug .call { order: 0; display: flex; flex-direction: column; justify-content: center; gap: 3px; background: var(--c-ink); color: var(--c-text); padding: 8px 12px 8px 26px; font: italic 900 36px/1 var(--f-head); letter-spacing: 0.01em; clip-path: polygon(16px 0, 100% 0, 100% 100%, 0 100%); }
+#bug { right: calc(64px / var(--hs, 1)); top: calc(20px + env(safe-area-inset-top)); height: auto; min-height: 76px; display: flex; flex-direction: row; align-items: stretch; opacity: 1; filter: drop-shadow(0 3px 8px rgba(0, 0, 0, 0.45)); background: none; padding: 0; width: auto; }
+#bug .call { order: 0; display: flex; flex-direction: column; justify-content: center; gap: 3px; background: var(--c-ink); color: var(--c-text); padding: 8px 14px 10px 26px; font: italic 900 36px/1 var(--f-head); letter-spacing: 0.01em; clip-path: polygon(16px 0, 100% 0, 100% 100%, 0 100%); }
 #bug .call i { order: 0; display: flex; align-items: center; gap: 6px; color: var(--c-text); font: italic 800 12px/1 var(--f-head); letter-spacing: 0.25em; padding: 0; }
 #bug .call i::before { display: block; content: ''; width: 18px; height: 3px; background: var(--c-red); }
 #bug .ch { order: 1; display: flex; align-items: center; justify-content: center; width: 70px; background: var(--c-six); color: var(--c-text); font: italic 900 64px/1 var(--f-head); padding: 0; clip-path: polygon(0 0, 100% 0, calc(100% - 14px) 100%, 0 100%); }
-#heat { order: 1; background: none; margin: 0; padding: 0; line-height: 1; }
+#heat { order: 1; background: none; margin: 2px 0 0; padding: 0; line-height: 1; display: flex; gap: 2px; }
 #heat em { font-size: 12px; color: rgba(255, 255, 255, 0.25); text-shadow: none; }
 #heat em.on { color: var(--c-accent); text-shadow: none; }
 #desk { top: calc(108px + env(safe-area-inset-top)); right: 20px; }
@@ -741,7 +741,11 @@ html.touch #ticker { right: 128px; }
 #recap .rc-shot img, #recap .rc-shot video { display: block; width: 100%; aspect-ratio: 16 / 9; object-fit: cover; animation: rcshot 6s ease-out both; }
 @keyframes rcshot { from { transform: scale(1.08); } to { transform: none; } }
 #recap .rc-shot video { animation: none; }
-@media (prefers-reduced-motion: reduce) { #recap .rc-shot img, #recap .rc-shot video { animation: none; } }
+#recap .rc-shot.clip img { position: absolute; inset: 0; height: 100%; opacity: 0; transition: opacity 0.35s; animation: none; }
+#recap .rc-shot.clip.still img { opacity: 1; }
+@media (prefers-reduced-motion: reduce) { #recap .rc-shot img, #recap .rc-shot video { animation: none; }
+#recap .rc-shot.clip img { position: absolute; inset: 0; height: 100%; opacity: 0; transition: opacity 0.35s; animation: none; }
+#recap .rc-shot.clip.still img { opacity: 1; } }
 #recap .rc-shot .tag { position: absolute; left: 0; top: 12px; background: var(--c-replay); color: var(--c-text); font: italic 900 12px/1 var(--f-head); letter-spacing: 0.16em; padding: 7px 20px 6px 12px; clip-path: polygon(0 0, 100% 0, calc(100% - 10px) 100%, 0 100%); }
 #recap .rc-shot .rc-story { position: relative; margin: 0; filter: none; }
 #recap .rc-shot .rc-story .t { font-size: 15px; padding: 9px 14px 8px 12px; clip-path: none; }
@@ -810,4 +814,14 @@ html.touch #ticker { right: 128px; }
   #recap .rc-shot .rc-story .t { font-size: 12px; }
   #recap .rc-tiles small { font-size: 10px; letter-spacing: 0.12em; }
   #recap .playdata { position: static; display: block; margin: 8px auto 0; }
+}
+
+/* Live meters (Mike, 2026-11-16): the audience bar and the Rampage gear pips pulse with the LIVE dot's rhythm. */
+@keyframes meterpulse { 50% { opacity: 0.45; } }
+#ratings .bar i { animation: meterpulse 1.2s ease-in-out infinite; }
+#ratings.gain .bar i { animation: gainflash 0.35s ease-out, meterpulse 1.2s ease-in-out 0.35s infinite; }
+#gears[data-tier='2'] i::after { animation: meterpulse 1.2s ease-in-out infinite; }
+html.attract #ratings .bar i { animation: none; }
+@media (prefers-reduced-motion: reduce) {
+  #ratings .bar i, #ratings.gain .bar i, #gears[data-tier='2'] i::after { animation: none; }
 }

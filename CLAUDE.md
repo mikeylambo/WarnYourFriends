@@ -47,6 +47,7 @@ tools/filmstrip.mjs     slow-motion strip of an impact (smash-heavy, bounce, bou
 tools/shots-onboarding.mjs  live budget, recap and meeting
 tools/shots-recap.mjs   The 11 O'Clock Recap: through the real replay (its picture) and stepped, desktop and phones (ONLY=, SEED=)
 tools/shots-caught.mjs  Caught: Brake held with police behind, the CAUGHT meter, then busted
+tools/shots-signoff.mjs Sign-off outro: on the ramp, the swivel to Head-On, the cut to the replay
 tools/shots-police.mjs  Police evidence: chopper spotlight sweep and lock, a police crash
 tools/shots-gear.mjs    Gear tells: build-up, gear-up moment, Rampage dust
 tools/shots-replay.mjs  Recap REPLAY in real time: lead-in, slow motion at the moment, recap after

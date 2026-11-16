@@ -410,7 +410,8 @@ export class HighwayView {
     const nextExit = this.sim.track.segments.find((x) => (x.exit || x.fork) && x.index === seg.index + 1);
     if (nextExit) this.signGantry(seg, seg.s0 + 6, group, nextExit.fork?.name);
 
-    // Dashed lane lines (3m dash, 6m gap), only where both lanes exist.
+    // Dashed lane lines (3m dash, 6m gap), only where both lanes exist: an opening lane gets its line once it's
+    // nearly full width (a line hugging the tapering edge read as a mistake; Mike, 2026-11-16).
     const dashGeo = new THREE.PlaneGeometry(1, 1);
     dashGeo.rotateX(-Math.PI / 2);
     const dashes: [number, number, number][] = [];
@@ -419,7 +420,7 @@ export class HighwayView {
       if (((s % 9) + 9) % 9 >= 3) continue;
       const w = this.sim.track.widthAt(s);
       for (let b = 1; b < TUNING.lanes.max; b++) {
-        if (b * W > w - 1.5) break;
+        if (b * W > w - W * TUNING.track.laneLineAt) break;
         dashes.push([s, b * W, this.sim.track.headingAt(s)]);
       }
     }

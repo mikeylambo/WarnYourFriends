@@ -272,6 +272,8 @@ export const TUNING = {
 
   /** v0.3 procedural highway. */
   track: {
+    /** A lane line is painted only where the lane beyond it is at least this share of a full lane (an opening lane gets its line late, not as a sliver). */
+    laneLineAt: 0.9,
     /** v0.3: built from 40m segments. */
     segmentLength: 40,
     /** v0.3: curves turn at most 8° per segment, eased (no curvature kinks). */
@@ -401,6 +403,8 @@ export const TUNING = {
     shotAfter: 0.2, shotWidth: 960,
     /** The recap's looping clip: recorded off the canvas during the replay at this frame rate and bitrate; under `clipMin` s (skipped early) the still stays. */
     clipFps: 30, clipBitrate: 2_500_000, clipMin: 1.5,
+    /** Between plays of the clip, the still (the moment as it lands) holds this long (s). Mike: "alternate photos and clips". */
+    clipStillHold: 3,
     score: { policeCrash: 10, unitSmash: 7, leapLand: 4, hijackBail: 5, heavyAcross: 6, heavy: 4, nearMiss: 4, ramMiss: 4, pose: 3 },
   },
 
@@ -435,7 +439,7 @@ export const TUNING = {
       { id: 'units', text: 'Flatten {n} police cars', n: 6, reward: 30000 },
       { id: 'crash', text: 'Get a police car to crash', n: 1, reward: 30000 },
       { id: 'roadblock', text: 'Smash through a roadblock', n: 1, reward: 25000 },
-      { id: 'chain', text: 'Chain {n} stunts', n: 12, reward: 35000 },
+      { id: 'chain', text: 'Combo {n} stunts', n: 12, reward: 35000 },
       { id: 'across', text: '{n} smashes across lanes', n: 8, reward: 25000 },
       { id: 'heavy', text: 'Flatten {n} cars or vans', n: 15, reward: 20000 },
       { id: 'bridge', text: 'Smash {n} things on the bridge', n: 4, reward: 25000, zone: 'bridge' },
@@ -494,6 +498,8 @@ export const TUNING = {
      * bounded by `time` (soak-checked).
      */
     swoop: { time: 1.4, apexPitchDeg: 70 },
+    /** Sign-off outro: the chopper swivels into Head-On as he takes the ramp (the swoop's 1.4s), holds, then the recap cuts in (s). */
+    signOffHold: 2.4,
     /** LOCKED (v0.3): direction of travel points up the screen within this many degrees. */
     screenUpMaxDeg: 35,
     /** Yaw is clamped this far inside the law, for lag on curves and wobble. */
@@ -648,7 +654,15 @@ export const TUNING = {
     spawnBehind: 100,
     spawnAheadMin: 110,
     /** Cruiser ram (v0.3: blinker + 0.6s drift, then swerve into your lane). */
-    cruiser: { closeSpeed: 7, tell: 0.6, drift: 0.6, swerve: 0.35, fallBack: 6, sideSpeed: 5 },
+    cruiser: {
+      closeSpeed: 7, tell: 0.6, drift: 0.6, swerve: 0.35, fallBack: 6, sideSpeed: 5,
+      /**
+       * Kiting (Mike, 2026-11-16: "still not able to kite the following police"): with no room beside him a cruiser
+       * tails him `gap` m back in his lane, steering at `sideSpeed` m/s for where he was `react` s ago; it gives up
+       * after `giveUp` s. It doesn't watch the road, so a late sidestep round a Heavy or a bulldozer crashes it.
+       */
+      tail: { gap: 2, react: 0.3, sideSpeed: 4, giveUp: 14 },
+    },
     /** Rolling roadblock (v0.3: brake lights 1.5s, 2–3 cruisers abreast slowing). */
     /** Tells start inside the visible road (the frame shows ≥2s ahead; capped at 28m for the faster Hijack ride), or nobody sees them. */
     rolling: { cruiseFactor: 0.55, tellAhead: 1.9, tellMin: 25, tellMax: 28, tell: 1.5, decel: 6, crawl: 3, actMax: 12 },
@@ -672,7 +686,7 @@ export const TUNING = {
      * a Heavy prop goes flying with it. Only within `visibleBehind` m behind him and ahead of that, so every
      * crash is in the chopper's frame (§1).
      */
-    crash: { react: 6, plowKeep: 0.8, visibleBehind: 3 },
+    crash: { react: 6, plowKeep: 0.8, visibleBehind: 5 },
     /**
      * Police Net (Mike, 2026-11-16: "a real box-in", one goal and two threats). From Heat 3, at most
      * `perSegment[heat - 1]` a segment, `minGap` s apart. An armoured truck (nothing smashes it) takes his

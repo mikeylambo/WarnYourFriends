@@ -187,8 +187,15 @@ let director: Director;
 let cruisers: CruiserView;
 let units: UnitViews;
 /** Phase 2: the broadcast has ended (busted or signed off); the recap follows. */
-let endedAt = -1;
+/** Seconds of (unpaused, time-scaled) play since the broadcast ended; -1 while it's on. */
+let endedFor = -1;
 let recapShown = false;
+/**
+ * Sign-off outro (Mike, 2026-11-16: he ran "through the grass, not on the road"): after the exit the sim runs him
+ * straight on, so he's drawn along the ramp's centreline instead (presentation only), while the chopper swivels into
+ * Head-On; then the recap cuts in.
+ */
+let outro: { seg: ReturnType<Sim['track']['segmentAt']> } | null = null;
 /** Phase 2 Pin meter: a red ring on the ground around the giant, only above 0 (§21). */
 const pinRing = (() => {
   const g = new THREE.RingGeometry(2.0, 2.45, 64, 1);
@@ -286,8 +293,9 @@ function newRun(seed: number, segment = 0, upgrades: UpgradeId[] = []) {
   if (rideMesh) scene.remove(rideMesh);
   rideMesh = null;
   poseAnim = 0;
-  endedAt = -1;
+  endedFor = -1;
   recapShown = false;
+  outro = null;
   document.documentElement.classList.remove('ended');
   hideRecap();
   coverage.reset();
@@ -504,7 +512,7 @@ function openBriefing(goLive: boolean): Promise<void> {
     <ol class="steps">
       <li><b>Run.</b> He never stops. ${k('lanes')} change lanes, ${k('brake')} brake.</li>
       <li><b>Gear up.</b> Hold top speed to shift: Jog, Stride, Rampage. Each gear smashes bigger things. Bulldozers and armored trucks never break: go round.</li>
-      <li><b>Keep them watching.</b> Smashes, close calls and chains fill the audience bar. Empty, they cut to commercial.</li>
+      <li><b>Keep them watching.</b> Smashes, close calls and combos fill the audience bar. Empty, they cut to commercial.</li>
       <li><b>Don't get boxed in.</b> Police close in with an armored truck. ${k('shoulder')} shoulder-checks a car beside you (Stride and up), or brake and drop back. Caught once, you slip; twice, you're busted.</li>
       <li><b>Take the exit.</b> At ${clock} a ramp opens on the right. Be in the far-right lane when you reach it; miss it and coverage ends.</li>
     </ol>
@@ -580,7 +588,7 @@ function showRecap() {
       ? [['Run score', n(run.earned), 'score'], ['Segments cleared', `${run.results.filter((x) => x.cleared).length}<small>/${N}</small>`, '']]
       : [['Score', n(sh.banked), 'score'], ['Peak audience', viewers(sh.peak), '']];
   const tiles: [string, string][] = [
-    ['Longest chain', String(runStats.bestChain)],
+    ['Longest combo', String(runStats.bestChain)],
     ['Flattened', String(sim.stats.smashes)],
     ['Police cars', String(runStats.units + runStats.crashes)],
   ];
@@ -594,7 +602,7 @@ function showRecap() {
   // Tonight's top moment: the replay as a looping clip once its recording is ready (the still until then, or for good
   // where the browser can't record a canvas); the last shot when there was no replay.
   const shot = recapShot
-    ? `<figure class="rc-shot">${recapClip ? `<video src="${recapClip}" autoplay muted loop playsinline></video>` : `<img src="${recapShot}" alt="" />`}<span class="tag">${recapShotFromReplay ? 'REPLAY' : 'LAST SHOT'}</span></figure>`
+    ? `<figure class="rc-shot"><img src="${recapShot}" alt="" /><span class="tag">${recapShotFromReplay ? 'REPLAY' : 'LAST SHOT'}</span></figure>`
     : '';
   const buttons = run?.phase === 'meeting'
     ? `<button class="go" id="meet">Producer's Meeting</button>`
@@ -628,6 +636,7 @@ function showRecap() {
     if (b && !run) b.textContent = `Best ${n(r.best.bestBanked)} · Signed off ${r.best.signOffs} of ${r.best.broadcasts}`;
   });
   recapEl.hidden = false;
+  mountClip();
   // Playtest export: log this broadcast once, then copy everything logged so far.
   if (!lastEntry || lastEntry.seed !== simOpts.seed || lastEntry.segment !== simOpts.segment || lastEntry.seconds !== Math.round(sim.time * 10) / 10) {
     lastEntry = playLog.entry(sim, simOpts.seed, run ? 'run' : 'single', simOpts.segment, simOpts.upgrades);
@@ -674,6 +683,15 @@ function showHeadline(h: Headline) {
   span.className = 'in';
   chyText.replaceChildren(span);
   if (h.breaking) audio.breaking();
+}
+
+/** The broadcast is over (signed off or busted): graphics wind down, the recap timer starts. */
+function endBroadcast(how: 'signOff' | 'busted') {
+  endedFor = 0;
+  coverage.end();
+  audio.ending(how === 'signOff');
+  if (how === 'busted') document.documentElement.classList.add('ended');
+  bot = null;
 }
 
 /** The stunt just before this chain event was a smash-across (for the counter's label). */
@@ -837,13 +855,20 @@ function present(e: SimEvent) {
         showCamTag();
       }
       break;
+    case 'signOff': {
+      const ex = sim.exit;
+      const seg = ex ? sim.track.segments.find((x) => x.index === ex.segment) : undefined;
+      if (seg) outro = { seg };
+      if (!attract && !flags.stepMode) {
+        const H = TUNING.camera.angles.findIndex((a) => a.name === 'Head-On');
+        director.force(H, director.side, true);
+        rig.swoopTo(H, director.side, targetAt(sim.giant.s, sim.giant.d));
+      }
+      endBroadcast(e.type);
+      break;
+    }
     case 'busted':
-    case 'signOff':
-      endedAt = performance.now();
-      coverage.end();
-      audio.ending(e.type === 'signOff');
-      if (e.type === 'busted') document.documentElement.classList.add('ended');
-      bot = null;
+      endBroadcast(e.type);
       break;
     case 'ability':
       if (!e.ok) {
@@ -1087,14 +1112,8 @@ function startClip() {
       rec.stream.getTracks().forEach((k) => k.stop());
       if (clipRec !== rec || !parts.length || performance.now() - t0 < TUNING.replay.clipMin * 1000) return;
       recapClip = URL.createObjectURL(new Blob(parts, { type }));
-      // The recap is usually up already (it opens as the replay ends): swap its still for the clip.
-      const img = recapEl.hidden ? null : recapEl.querySelector('.rc-shot img');
-      if (img) {
-        const v = document.createElement('video');
-        Object.assign(v, { src: recapClip, autoplay: true, muted: true, loop: true, playsInline: true });
-        img.replaceWith(v);
-        void v.play().catch(() => {});
-      }
+      // The recap is usually up already (it opens as the replay ends).
+      if (!recapEl.hidden) mountClip();
     };
     rec.start();
     clipRec = rec;
@@ -1102,6 +1121,28 @@ function startClip() {
     clipRec = null;
   }
 }
+/** The recap card alternates: the clip plays through, then the still holds a moment, then the clip again. */
+function mountClip() {
+  const fig = recapEl.querySelector('.rc-shot');
+  if (!fig || !recapClip || fig.querySelector('video')) return;
+  const v = document.createElement('video');
+  Object.assign(v, { src: recapClip, muted: true, playsInline: true });
+  fig.prepend(v);
+  fig.classList.add('clip');
+  let hold = 0;
+  const play = () => {
+    fig.classList.remove('still');
+    v.currentTime = 0;
+    void v.play().catch(() => {});
+  };
+  v.addEventListener('ended', () => {
+    fig.classList.add('still');
+    clearTimeout(hold);
+    hold = window.setTimeout(() => { if (v.isConnected) play(); }, TUNING.replay.clipStillHold * 1000);
+  });
+  play();
+}
+
 function stopClip() {
   if (clipRec && clipRec.state !== 'inactive') clipRec.stop();
 }
@@ -1504,9 +1545,19 @@ function frame(now: number) {
   const g = sim.giant;
   const alpha = flags.stepMode ? 1 : Math.min(1, acc / SIM_DT);
   const s = prev.s + (g.s - prev.s) * alpha;
-  const d = prev.d + (g.d - prev.d) * alpha;
+  let d = prev.d + (g.d - prev.d) * alpha;
+  let rampSlope = 0;
+  if (outro && !replay) {
+    // On the ramp once it peels away from his lane: its centreline, and its curve in his heading.
+    const rd = sim.track.widthAt(s) + sim.track.exitOffset(outro.seg, s);
+    if (rd > d) {
+      d = rd;
+      rampSlope = sim.track.exitOffset(outro.seg, s + 1) - sim.track.exitOffset(outro.seg, s);
+    }
+  }
   const stepPos = prev.stepPos + (g.stepPos - prev.stepPos) * alpha;
   const t = targetAt(s, d);
+  t.travel += Math.atan(rampSlope); // on the ramp: he (and the chopper) follow its curve
   const lateralVel = (g.d - prev.d) / SIM_DT;
   const heading = t.travel + Math.atan2(lateralVel, Math.max(4, g.speed)) * 0.5;
 
@@ -1585,7 +1636,8 @@ function frame(now: number) {
     pinRing.position.set(t.x, 0.1, t.z);
     pinRing.geometry.setDrawRange(0, Math.ceil((sim.show.pin / 100) * 64) * 6);
   }
-  if (endedAt >= 0 && !recapShown && performance.now() - endedAt > (sim.show.state === 'cleared' ? 2600 : 2200)) {
+  if (endedFor >= 0 && !paused) endedFor += realDt * flags.timescale;
+  if (endedFor >= 0 && !recapShown && endedFor > (sim.show.state === 'cleared' ? TUNING.camera.signOffHold : 2.2)) {
     recapShown = true;
     if (attract) enterAttract(); // behind the menus: just roll another broadcast
     else {
@@ -1982,7 +2034,7 @@ window.__GAME = {
     const t = targetAt(sim.giant.s, sim.giant.d);
     return audio.placeOf(t.x + (r.x / n) * across + Math.cos(t.travel) * along, t.z + (r.z / n) * across + Math.sin(t.travel) * along);
   },
-  recap: () => (recapEl.hidden ? null : { title: recapEl.querySelector('.why')?.textContent, outcome: recapEl.querySelector('.outcome')?.textContent, clip: !!recapEl.querySelector('.rc-shot video') }),
+  recap: () => (recapEl.hidden ? null : { title: recapEl.querySelector('.why')?.textContent, outcome: recapEl.querySelector('.outcome')?.textContent, clip: !!recapEl.querySelector('.rc-shot video') && !(recapEl.querySelector('.rc-shot video') as HTMLVideoElement).paused }),
   /** Recap REPLAY: playing now (sim time, end, rate), and the moment it picked. */
   replay: () => ({ playing: !!replay, t: replay?.sim.time ?? null, end: replay?.end ?? null, rate: replayRate, moment }),
   show: () => ({ ...sim.show, tier: sim.show.tier, exit: sim.exit, live: sim.live, units: sim.pursuit.units.map((u) => ({ id: u.id, unit: u.unit, phase: u.phase, gap: u.s - sim.giant.s, lane: u.lane })) }),
