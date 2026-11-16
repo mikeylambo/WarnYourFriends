@@ -279,7 +279,7 @@ describe('lanes', () => {
     }
     expect(nets).toBeGreaterThanOrEqual(5);
     expect(slips).toBeGreaterThanOrEqual(1);
-  });
+  }, 20_000); // many seeds of full sim: ~4s alone, over 5s under a parallel run
 
   it('never drops below the 2 m/s floor, even braking forever (Law 1, LOCKED)', () => {
     const sim = emptySim();

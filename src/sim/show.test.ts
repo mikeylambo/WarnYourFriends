@@ -103,7 +103,7 @@ describe('segment (LOCKED 150s + 15s grace)', () => {
     }
     expect(late).toBe(0);
     expect(unreachable).toBe(0);
-  });
+  }, 20_000); // many seeds of full sim: ~3s alone, over 5s under a parallel run
 
   it('the bot takes the exit ramp and signs off', () => {
     const sim = new Sim({ seed: 2 });
