@@ -89,10 +89,9 @@ const camTag = $('camtag');
 const clockEl = $('clock');
 const chyKicker = document.querySelector('#chyron .kicker') as HTMLElement;
 const chyText = document.querySelector('#chyron .text') as HTMLElement;
-const viewersEl = $('viewers');
+const scoreEl = $('score');
 const ratingsEl = $('ratings');
 const ratingsBar = $('ratingsbar');
-const trendEl = $('trend');
 const heatStars = [...document.querySelectorAll('#heat em')] as HTMLElement[];
 const signoffEl = $('signoff');
 /** Police Net: the BOXED IN meter (the Pin meter, shown while it fills), with the ways out for this device. */
@@ -110,7 +109,6 @@ const abilKey = abilEl.querySelector('.key') as HTMLElement;
 const abilCd = abilEl.querySelector('.cd i') as HTMLElement;
 const abilBtn = $<HTMLButtonElement>('btn-ability');
 const controlsEl = $('controls');
-const budgetEl = $('budget');
 
 // --- Renderer ---------------------------------------------------------------
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
@@ -416,25 +414,12 @@ function abilityPop(text: string, dud = false) {
   abilPopT = TUNING.abilities.popTime;
 }
 
-/** Impact pass: Ratings gains pop under the meter as they land, so every hit and dodge pays visibly. */
-const VIEWERS_PER_POINT = TUNING.show.viewersPerPoint;
-const gainPopEl = $('gainpop');
-let gainPopT = 0;
-let gainPopSum = 0;
-let gainPopLabel = '';
-const GAIN_LABEL: Partial<Record<string, string>> = { nearMiss: 'Close call', lostTrack: 'Shook one', medium: '', heavy: '' };
-function gainPop(delta: number, cause: string) {
+/** One primary number (2026-11-16): Ratings gains no longer pop as "+K"; the audience bar flashes instead. */
+function gainFlash() {
   if (attract) return;
-  const I = TUNING.impact;
-  const merging = gainPopT > I.popTime - I.popMerge;
-  gainPopSum = merging ? gainPopSum + delta : delta;
-  const label = GAIN_LABEL[cause] ?? '';
-  if (!merging || label) gainPopLabel = label;
-  gainPopEl.textContent = `${gainPopLabel ? gainPopLabel + ' ' : ''}+${Math.round((gainPopSum * VIEWERS_PER_POINT) / 1000)}K`;
-  gainPopEl.classList.remove('show');
-  void gainPopEl.offsetWidth;
-  gainPopEl.classList.add('show');
-  gainPopT = I.popTime;
+  ratingsEl.classList.remove('gain');
+  void ratingsEl.offsetWidth;
+  ratingsEl.classList.add('gain');
 }
 
 /** The Stare: a pale glare sweeps up his lane and the lanes either side, then fades. */
@@ -481,7 +466,6 @@ function updateAbilityFx(dt: number) {
     }
   }
   if (abilPopT > 0 && (abilPopT -= dt) <= 0) abilPop.classList.remove('show');
-  if (gainPopT > 0 && (gainPopT -= dt) <= 0) gainPopEl.classList.remove('show');
 }
 
 /** A new recap/meeting card ignores accept for a moment: one press must not open it and choose on it. */
@@ -520,7 +504,7 @@ function openBriefing(goLive: boolean): Promise<void> {
     <ol class="steps">
       <li><b>Run.</b> He never stops. ${k('lanes')} change lanes, ${k('brake')} brake.</li>
       <li><b>Gear up.</b> Hold top speed to shift: Jog, Stride, Rampage. Each gear smashes bigger things. Bulldozers and armored trucks never break: go round.</li>
-      <li><b>Keep them watching.</b> Smashes, close calls and chains raise the ratings. At zero they cut to commercial.</li>
+      <li><b>Keep them watching.</b> Smashes, close calls and chains fill the audience bar. Empty, they cut to commercial.</li>
       <li><b>Don't get boxed in.</b> Police close in with an armored truck. ${k('shoulder')} shoulder-checks a car beside you (Stride and up), or brake and drop back. Caught once, you slip; twice, you're busted.</li>
       <li><b>Take the exit.</b> At ${clock} a ramp opens on the right. Be in the far-right lane when you reach it; miss it and coverage ends.</li>
     </ol>
@@ -585,6 +569,7 @@ function showRecap() {
   const anchorLine = lines[Math.floor(Math.random() * lines.length)];
   const last = news.history[news.history.length - 1];
   const best = runStats.best;
+  const VIEWERS_PER_POINT = TUNING.show.viewersPerPoint;
   const viewers = (r: number) => (r * VIEWERS_PER_POINT >= 1e6 ? `${((r * VIEWERS_PER_POINT) / 1e6).toFixed(2)}M` : `${Math.round((r * VIEWERS_PER_POINT) / 1000)}K`);
   const t = Math.floor(sim.time);
   const N = TUNING.run.segments;
@@ -808,7 +793,7 @@ function present(e: SimEvent) {
       break;
     }
     case 'ratings':
-      if (e.cause !== 'rampage' && e.cause !== 'pose' && e.delta > 0) gainPop(e.delta, e.cause);
+      if (e.cause !== 'rampage' && e.cause !== 'pose' && e.delta > 0) gainFlash();
       break;
     case 'ram':
       if (!e.hit) runStats.dodged++;
@@ -1732,7 +1717,6 @@ function silhouette() {
   return measureSilhouette(renderer, scene, rig.camera, giant.bodyObjects, rig.angle.name === TUNING.camera.angles[TUNING.camera.homeAngle].name ? 48 : 40);
 }
 
-let lastRatings = 0;
 const poseCam = new THREE.PerspectiveCamera(40, 16 / 9, 0.5, 500);
 
 /** Persist the bests (shell storage, per game id). */
@@ -1808,29 +1792,19 @@ function updateHud(dt: number) {
   const secs = counting ? Math.max(0, Math.ceil(X.length + X.grace - sim.time)) : Math.floor(sim.time);
   clockEl.textContent = `${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')}`;
   clockEl.classList.toggle('count', counting);
-  // Ratings as a viewer count (§21), with its tier colour, decay arrow and danger pulse.
+  // One primary number: the score (the whole run's in Full Broadcast; spending never lowers it). Ratings is the
+  // audience bar under it, with its tier colour and danger pulse; the viewer count lives on the recap.
   const sh = sim.show;
-  const viewers = Math.round(sh.ratings * VIEWERS_PER_POINT);
-  viewersEl.textContent = viewers >= 1e6 ? `${(viewers / 1e6).toFixed(2)}M` : `${Math.round(viewers / 1000)}K`;
+  scoreEl.textContent = Math.floor((run ? run.earned : 0) + (!run || run.phase === 'live' ? sh.banked : 0)).toLocaleString();
   ratingsBar.style.width = `${sh.ratings.toFixed(1)}%`;
   for (let k = 1; k <= 3; k++) ratingsEl.classList.toggle(`t${k}`, sh.tier === k);
   ratingsEl.classList.toggle('danger', sh.ratings < 8 && sim.live);
-  // Score (Single Segment) or Budget (Full Broadcast: banked so far plus this segment). The gear's multiplier rides the gear strip.
-  budgetEl.hidden = attract;
-  if (!attract) {
-    budgetEl.querySelector('span')!.textContent = run ? 'Budget' : 'Score';
-    // While live, this segment's banked score isn't in the purse yet; once it ends, it is.
-    budgetEl.querySelector('b')!.textContent = Math.floor((run ? run.purse : 0) + (!run || run.phase === 'live' ? sh.banked : 0)).toLocaleString();
-  }
   // Combo counter: the clock drains over the chain window; the result lingers after it ends.
   const ch = sh.chain;
   if (ch.count > 0) chainClock.style.transform = `scaleX(${Math.max(0, 1 - (sim.time - ch.last) / TUNING.spectacle.window).toFixed(3)})`;
   chainResultT = Math.max(0, chainResultT - dt);
   if (ch.count === 0 && chainResultT <= 0 && chainEl.classList.contains('on')) chainEl.className = '';
   chainEl.hidden = attract;
-  const falling = sim.live && sh.ratings < lastRatings - 1e-6;
-  trendEl.textContent = falling ? '▼' : '';
-  lastRatings = sh.ratings;
   // Lower third, top band: the road he's on and which way (facts from the sim; only written on change).
   const seg = sim.track.segmentAt(g.s);
   const place = `${seg.zoneName} · ${compass(sim.track.headingAt(g.s))}bound`.toUpperCase();

@@ -306,9 +306,10 @@ try {
     const problems = watch(page);
     await page.goto(`${URL}?seed=2&bot=1&step=1`);
     await page.waitForFunction(() => window.__GAME && window.__GAME.started, null, { timeout: 15000 });
-    const mid = await page.evaluate(() => {
+    const mid = await page.evaluate(async () => {
       window.__GAME.step(60 * 90);
-      return { show: window.__GAME.show(), viewers: document.getElementById('viewers').textContent };
+      await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))); // the HUD draws on a frame
+      return { show: window.__GAME.show(), score: document.getElementById('score').textContent };
     });
     const end = await page.evaluate(() => {
       window.__GAME.step(60 * 80);
@@ -320,7 +321,7 @@ try {
     await page.screenshot({ path: 'test-results/e2e-recap.png' });
     if (end.live || end.state === 'live') fail(`segment still live after 170s (${end.state})`);
     else ok(`segment ended: ${end.state}${end.reason ? ' (' + end.reason + ')' : ''}, peak Ratings ${end.peak.toFixed(0)}, banked ${Math.round(end.banked)}`);
-    if (!/\d/.test(mid.viewers)) fail(`Ratings viewer count not shown (${mid.viewers})`);
+    if (mid.score.replace(/\D/g, '') !== String(Math.floor(mid.show.banked))) fail(`HUD score ${mid.score} != banked ${Math.floor(mid.show.banked)}`);
     if (!recap?.title) fail('no recap after the broadcast ended');
     else ok(`recap: "${recap.title}" · ${recap.outcome}`);
     // Playtest export: this broadcast is in the log with the sim's own score, and the button exports JSON.

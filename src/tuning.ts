@@ -244,9 +244,6 @@ export const TUNING = {
     bounce: { hitstop: 7, shake: 10, flashFrames: 0, haptic: 160, hapticStrength: 0.8 },
     /** A dodge: a small kick and a buzz, no freeze (it must not interrupt the line he's taking). */
     dodge: { hitstop: 0, shake: 3, flashFrames: 0, haptic: 40, hapticStrength: 0.25 },
-    /** Ratings pops under the meter: gains this close together add up into one pop (s); pop shows this long. */
-    popMerge: 0.6,
-    popTime: 1.3,
     wall: { hitstop: 0, shake: 2, flashFrames: 0, haptic: 50, hapticStrength: 0.3 },
     /**
      * Impact pass (Mike: hits "don't have much impact"): a smashed body is swatted off his line

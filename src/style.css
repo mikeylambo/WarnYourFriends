@@ -365,11 +365,7 @@ html.touch #abil { display: none; }
 html.attract #abilpop { display: none; }
 
 /* Impact pass: Ratings gains pop under the meter as they land. */
-#gainpop { position: absolute; top: calc(80px + env(safe-area-inset-top)); left: 10px; padding: 3px 8px; background: #f2cc8f; color: #140824; font: 800 13px/1.2 ui-sans-serif, system-ui, sans-serif; letter-spacing: 0.06em; text-transform: uppercase; pointer-events: none; opacity: 0; transform: translateY(-4px) scale(0.9); transform-origin: left center; transition: opacity 0.12s, transform 0.12s; }
-#gainpop.show { opacity: 1; transform: none; animation: gainpunch 0.18s ease-out; }
 @keyframes gainpunch { 0% { transform: scale(1.25); } 100% { transform: none; } }
-html.attract #gainpop { display: none; }
-@media (prefers-reduced-motion: reduce) { #gainpop.show { animation: none; } }
 
 /* Menus (html.title is on for every menu behind the title too): the chopper shot, no broadcast HUD,
    the panel on the left like the wordmark so the giant stays in view on the right. */
@@ -412,10 +408,6 @@ html.cover #titlebug { display: none; }
 #ui [data-screen-id="title"] .slu-panel { transition: opacity 0.5s; }
 
 /* Full Broadcast: the budget ticking up under the viewers meter. */
-#budget { position: absolute; top: calc(80px + env(safe-area-inset-top)); left: 10px; display: flex; gap: 6px; align-items: baseline; padding: 4px 9px; background: rgba(10, 8, 20, 0.7); color: #f2cc8f; font: 800 12px/1 ui-sans-serif, system-ui, sans-serif; letter-spacing: 0.08em; }
-#budget[hidden] { display: none; }
-#budget span { font-size: 10px; letter-spacing: 0.18em; text-transform: uppercase; opacity: 0.8; color: #fff; }
-#budget b { font-size: 14px; font-variant-numeric: tabular-nums; }
 /* The gain pop sits under the budget when it's showing. */
 #recap .meeting .how { font-size: 13px; opacity: 0.75; margin: 4px 0 10px; }
 #recap .pitch .need { display: block; font-size: 11px; font-weight: 700; color: #d7263d; margin-top: 2px; }
@@ -587,8 +579,8 @@ html[data-palette='network'] {
   --c-text: #ffffff; --c-on-paper: #0b1a3d; --c-mute: #b9c6e8; --c-accent: #ffffff; --c-six: #0b2a6f;
   --c-replay: #3d6fe0; --c-gear: #d6001c;
 }
-#hud, #chain, #gears, #asks, #recap, #replay, #abil, #abilpop, #budget, #gainpop, .card { font-family: var(--f-head); }
-#live, #ratings, #budget, #chain, #bug, #asks, #desk, #gears, #abil, #replay, #signoff { zoom: var(--hs, 1); }
+#hud, #chain, #gears, #asks, #recap, #replay, #abil, #abilpop, .card { font-family: var(--f-head); }
+#live, #ratings, #chain, #bug, #asks, #desk, #gears, #abil, #replay, #signoff { zoom: var(--hs, 1); }
 
 /* --- LIVE row: slanted plates (the dot rides inside the red one) --- */
 #live { left: 20px; top: calc(20px + env(safe-area-inset-top)); height: 48px; gap: 4px; align-items: stretch; }
@@ -599,29 +591,26 @@ html[data-palette='network'] {
 #live #segno { font-size: 24px; }
 #live #clock.count { background: var(--c-paper); color: var(--c-red); }
 
-/* --- Viewers and score: oversized numerals on slanted plates --- */
-#ratings { left: 20px; top: calc(80px + env(safe-area-inset-top)); display: grid; grid-template-columns: auto auto auto; grid-template-areas: 'num lbl trend' 'num pop pop' 'bar bar bar'; align-items: center; column-gap: 10px; background: var(--c-panel); padding: 4px 26px 8px 16px; clip-path: polygon(0 0, 100% 0, calc(100% - 14px) 100%, 0 100%); }
-#ratings .eye { display: none; }
-#ratings b { grid-area: num; font: 900 64px/1 var(--f-num); color: var(--c-text); min-width: 0; }
+/* --- One primary number (2026-11-16): the score in oversized numerals; Ratings is the audience bar under it --- */
+#ratings { left: 20px; top: calc(80px + env(safe-area-inset-top)); display: grid; grid-template-columns: auto auto; grid-template-areas: 'num lbl' 'bar aud'; align-items: baseline; column-gap: 12px; background: var(--c-panel); padding: 4px 26px 8px 16px; clip-path: polygon(0 0, 100% 0, calc(100% - 14px) 100%, 0 100%); }
+#ratings b { grid-area: num; font: 900 64px/1 var(--f-num); color: var(--c-accent); min-width: 0; font-variant-numeric: tabular-nums; }
 #ratings .lbl { grid-area: lbl; font: italic 800 14px/1 var(--f-head); letter-spacing: 0.2em; color: var(--c-text); opacity: 1; }
-#ratings .trend { grid-area: trend; }
-#ratings .bar { grid-area: bar; height: 6px; margin-top: 4px; background: rgba(255, 255, 255, 0.18); }
+#ratings .bar { grid-area: bar; align-self: center; height: 8px; margin-top: 6px; background: rgba(255, 255, 255, 0.18); }
 #ratings .bar i { background: var(--c-red) !important; box-shadow: none !important; }
-#budget { left: 20px; top: calc(170px + env(safe-area-inset-top)); display: flex; align-items: baseline; gap: 10px; background: var(--c-panel); padding: 4px 22px 4px 16px; color: var(--c-text); clip-path: polygon(0 0, 100% 0, calc(100% - 10px) 100%, 0 100%); }
-#budget span { font: italic 800 13px/1 var(--f-head); letter-spacing: 0.2em; color: var(--c-text); opacity: 1; text-transform: uppercase; }
-#budget b { font: 900 34px/1 var(--f-num); color: var(--c-accent); }
-
-/* Viewer gains ride inside the ratings plate, under WATCHING: no extra plate in the left column.
-   The label column keeps its width so the plate never grows when a gain lands. */
-#ratings .lbl { align-self: end; min-width: 150px; }
-#gainpop { position: static; grid-area: pop; align-self: start; margin-top: 3px; background: none; clip-path: none; padding: 0; color: var(--c-accent); font: italic 900 13px/1.1 var(--f-head); letter-spacing: 0.08em; white-space: nowrap; }
-#ratings b { grid-row: 1 / span 2; }
+#ratings .aud { grid-area: aud; align-self: center; margin-top: 6px; font: italic 800 11px/1 var(--f-head); letter-spacing: 0.2em; color: var(--c-text); opacity: 0.75; }
+#ratings.danger { animation: none; }
+#ratings.danger .bar { animation: danger 0.6s steps(2) infinite; }
+#ratings.danger .aud { color: #ff6b6b; opacity: 1; }
+#ratings.gain .bar i { animation: gainflash 0.35s ease-out; }
+@keyframes gainflash { 0% { filter: brightness(2.2); } 100% { filter: none; } }
+html.attract #ratings { display: none; }
+@media (prefers-reduced-motion: reduce) { #ratings.gain .bar i { animation: none; } }
 
 /* --- Combo: the multiplier; the result (+points / BANKED, DROPPED) replaces its own lines --- */
-#chain { left: 20px; top: calc(224px + env(safe-area-inset-top)); grid-template-columns: auto auto; grid-template-areas: 'mult pts' 'mult stunt' 'mult cnt' 'clock clock'; justify-items: start; column-gap: 12px; color: var(--c-text); text-shadow: 0 2px 6px rgba(0, 0, 0, 0.6); }
+#chain { left: 20px; top: calc(186px + env(safe-area-inset-top)); grid-template-columns: auto auto; grid-template-areas: 'mult pts' 'mult stunt' 'mult cnt' 'clock clock'; justify-items: start; column-gap: 12px; color: var(--c-text); text-shadow: 0 2px 6px rgba(0, 0, 0, 0.6); }
 #chain .mult { background: var(--c-red); color: var(--c-text); font: 900 72px/0.95 var(--f-num); padding: 4px 28px 0 18px; clip-path: polygon(0 0, 100% 0, calc(100% - 22px) 100%, 0 100%); text-shadow: none; }
 #chain[data-mult='1'] .mult { background: var(--c-panel); }
-#chain .pts { font: 900 34px/1 var(--f-num); }
+#chain .pts { font: 900 28px/1 var(--f-num); opacity: 0.9; }
 #chain .stunt { font: italic 900 15px/1.2 var(--f-head); letter-spacing: 0.12em; color: var(--c-accent); }
 #chain .cnt { font: 700 13px/1.2 var(--f-head); opacity: 0.85; }
 #chain .clock { width: 100%; height: 5px; margin-top: 6px; background: rgba(255, 255, 255, 0.2); justify-self: start; }
