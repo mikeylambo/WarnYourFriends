@@ -46,6 +46,19 @@ export class Coverage {
     document.documentElement.classList.add('coldopen');
     this.desk.hidden = true;
     this.ticker.hidden = true;
+    this.aired.clear();
+  }
+
+  /** Viewer texts that already ran on the ticker this broadcast. */
+  private aired = new Set<string>();
+
+  /** One for the recap: a viewer text that didn't air (for this audience size), so it's news to the player. */
+  recapComment(tier: number): { text: string; who: string } {
+    const pool = BANK.texts.filter(([, t]) => (t as number) <= Math.max(1, tier)).map(([s]) => s as string);
+    const fresh = pool.filter((s) => !this.aired.has(s));
+    const pick = (fresh.length ? fresh : pool)[Math.floor(Math.random() * (fresh.length || pool.length))];
+    const [text, who] = pick.split(' — ');
+    return { text, who: who ?? '' };
   }
 
   private nextTicker() {
@@ -53,6 +66,7 @@ export class Coverage {
     if (!this.tickerPool.length) this.tickerPool = pool.slice().sort(() => Math.random() - 0.5);
     const a = this.tickerPool.pop() ?? pool[0];
     const b = this.tickerPool.pop() ?? pool[1];
+    this.aired.add(a).add(b);
     this.tickerText.textContent = `VIEWERS WRITE IN  ·  ${a}   ·   ${b}`;
   }
 

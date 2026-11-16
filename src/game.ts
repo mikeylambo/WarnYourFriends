@@ -13,7 +13,6 @@ import { CruiserView } from './render/cruisers';
 import { UnitViews } from './render/units';
 import { ViewerVideo } from './render/pip';
 import { Coverage } from './broadcast/coverage';
-import VIEWERS from './broadcast/viewers.json';
 import { measureSilhouette } from './render/silhouette';
 import { Newsroom, compass, type Headline } from './broadcast/headlines';
 import type { PropKind } from './sim/types';
@@ -307,6 +306,7 @@ function newRun(seed: number, segment = 0, upgrades: UpgradeId[] = []) {
   inputLog.length = 0;
   moment = null;
   recapShot = null;
+  dropClip();
   highway = new HighwayView(sim);
   highway.onHonk = (v, at) => audio.honk(v, at);
   highway.onBrush = (at) => audio.scrape(at);
@@ -565,23 +565,17 @@ function showRecap() {
   const sh = sim.show;
   const cleared = sh.state === 'cleared';
   const reason = cleared ? 'cleared' : (sh.reason ?? 'ratings');
-  const lines = (VIEWERS.signoff as Record<string, string[]>)[reason];
-  const anchorLine = lines[Math.floor(Math.random() * lines.length)];
-  const last = news.history[news.history.length - 1];
-  const best = runStats.best;
   const VIEWERS_PER_POINT = TUNING.show.viewersPerPoint;
   const viewers = (r: number) => (r * VIEWERS_PER_POINT >= 1e6 ? `${((r * VIEWERS_PER_POINT) / 1e6).toFixed(2)}M` : `${Math.round((r * VIEWERS_PER_POINT) / 1000)}K`);
-  const t = Math.floor(sim.time);
   const N = TUNING.run.segments;
   const n = (x: number) => Math.round(x).toLocaleString();
-  const segLabel = run ? `Segment ${run.segment + 1} of ${N}` : 'Single segment';
   // The outcome stamp, and the plain-language why under it.
   const won = run?.phase === 'won';
   const stamp = won ? 'FULL BROADCAST' : cleared ? 'SIGNED OFF' : 'BUSTED';
-  const why = won ? 'Every segment, start to finish.' : cleared ? 'He took the exit. Coverage complete.' : reason === 'pin' ? 'Boxed in by the police.' : reason === 'ratings' ? 'The viewers changed the channel.' : 'He missed the exit.';
+  const why = won ? 'Every segment, start to finish.' : cleared ? 'He took the exit. Coverage complete.' : reason === 'pin' ? (sim.show.pinCause === 'caught' ? 'The police caught up.' : 'Boxed in by the police.') : reason === 'ratings' ? 'The viewers changed the channel.' : 'He missed the exit.';
   // Hero numbers: what this screen is about. A run segment reports the budget; a finished run, the run.
   const hero = run && run.phase === 'meeting'
-    ? [['Added to budget', `+${n(sh.banked)}`, 'score'], ['Budget', n(run.purse), '']]
+    ? Math.round(sh.banked) === run.purse ? [['Budget', n(run.purse), 'score']] : [['Added to budget', `+${n(sh.banked)}`, 'score'], ['Budget', n(run.purse), '']]
     : run
       ? [['Run score', n(run.earned), 'score'], ['Segments cleared', `${run.results.filter((x) => x.cleared).length}<small>/${N}</small>`, '']]
       : [['Score', n(sh.banked), 'score'], ['Peak audience', viewers(sh.peak), '']];
@@ -589,42 +583,39 @@ function showRecap() {
     ['Longest chain', String(runStats.bestChain)],
     ['Flattened', String(sim.stats.smashes)],
     ['Police cars', String(runStats.units + runStats.crashes)],
-    ['Heat', `<span class="stars">${[1, 2, 3, 4, 5].map((k) => `<i class="${k <= sh.heat ? 'on' : ''}">★</i>`).join('')}</span>`],
   ];
-  if (run) tiles.splice(1, 0, ['Peak audience', viewers(sh.peak)]), tiles.splice(4, 1);
-  // The anchor's sign-off: "Name: "line"" → the quote, attributed.
-  const m = /^([^:]+):\s*"(.*)"$/.exec(anchorLine);
-  const quote = m ? m[2] : anchorLine;
-  const who = m ? m[1] : 'WYF 6';
+  if (run) tiles.splice(1, 0, ['Peak audience', viewers(sh.peak)]);
   const asks = sim.asks.list;
+  const viewer = coverage.recapComment(sh.tier);
   if (!recapShot) {
     renderer.render(scene, rig.camera);
     grabShot();
   }
+  // Tonight's top moment: the replay as a looping clip once its recording is ready (the still until then, or for good
+  // where the browser can't record a canvas); the last shot when there was no replay.
   const shot = recapShot
-    ? `<figure class="rc-shot"><img src="${recapShot}" alt="" /><span class="tag">${recapShotFromReplay ? "TONIGHT'S TOP MOMENT" : 'THE LAST SHOT'}</span>${best ? `<figcaption class="rc-story"><span class="k">TOP STORY</span><span class="t">${esc(best.text)}</span></figcaption>` : ''}</figure>`
-    : best ? `<div class="rc-story"><span class="k">TOP STORY</span><span class="t">${esc(best.text)}</span></div>` : '';
+    ? `<figure class="rc-shot">${recapClip ? `<video src="${recapClip}" autoplay muted loop playsinline></video>` : `<img src="${recapShot}" alt="" />`}<span class="tag">${recapShotFromReplay ? 'REPLAY' : 'LAST SHOT'}</span></figure>`
+    : '';
   const buttons = run?.phase === 'meeting'
     ? `<button class="go" id="meet">Producer's Meeting</button>`
     : run
-      ? `<button class="go" id="again">Run it again</button><button class="go alt" id="tomenu">Menu</button>`
-      : `<button class="go" id="again">Run it again</button><button class="go alt" id="same">Same road</button><button class="go alt" id="tomenu">Menu</button>`;
+      ? `<button class="go" id="again">Run Again</button><button class="go alt" id="tomenu">Menu</button>`
+      : `<button class="go" id="again">Run Again</button><button class="go alt" id="same">Same road</button><button class="go alt" id="tomenu">Menu</button>`;
   recapEl.innerHTML = `<div class="rc ${cleared || won ? 'cleared' : 'busted'}">
-    <header class="rc-top"><div class="kicker">THE 11 O'CLOCK RECAP<span class="seg"> · WYF 6 · ${segLabel.toUpperCase()}</span></div></header>
+    ${run ? `<header class="rc-top"><div class="kicker">SEGMENT ${run.segment + 1} OF ${N}</div></header>` : ''}
     <section class="rc-lead">
       <div class="rc-stamp"><span class="outcome ${cleared || won ? 'cleared' : ''}">${stamp}</span><span class="why">${why}</span></div>
-      <h2>${esc(last?.text ?? (cleared ? 'Giant Takes The Exit' : 'Suspect In Custody'))}</h2>
       <div class="rc-hero">${hero.map(([k, v, c]) => `<div class="${c}"><small>${k}</small><b>${v}</b></div>`).join('')}</div>
       <div class="rc-tiles">${tiles.map(([k, v]) => `<div><b>${v}</b><small>${k}</small></div>`).join('')}</div>
     </section>
     <aside class="rc-side">
       ${shot}
       ${asks.length ? `<div class="rc-asks"><div class="hd">Producer's asks <span>${asks.filter((a) => a.done).length}/${asks.length}</span></div><ul>${asks.map((a) => `<li class="${a.done ? 'done' : ''}"><i>${a.done ? '✓' : ''}</i><span>${esc(a.text)}</span>${a.done ? `<b>+${n(a.reward)}</b>` : ''}</li>`).join('')}</ul></div>` : ''}
-      <blockquote class="anchor">“${esc(quote)}”<cite>${esc(who)}, WYF 6</cite></blockquote>
+      <blockquote class="anchor">“${esc(viewer.text)}”${viewer.who ? `<cite>${esc(viewer.who)}</cite>` : ''}</blockquote>
     </aside>
     <footer class="rc-foot">
       <div class="row">${buttons}</div>
-      <div class="rc-meta">On air ${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')} · Rampage ${Math.round(sim.stats.timeAtTier[2])}s<span class="bests"></span></div>
+      <div class="rc-meta"><span class="bests"></span></div>
       <div class="padhint"></div>
     </footer>
   </div>
@@ -634,7 +625,7 @@ function showRecap() {
     if (!r || recapEl.hidden) return;
     if (r.newBest) recapEl.querySelector('.rc-hero .score')?.classList.add('newbest');
     const b = recapEl.querySelector('.rc-meta .bests');
-    if (b && !run) b.textContent = ` · Best ${n(r.best.bestBanked)} · Signed off ${r.best.signOffs} of ${r.best.broadcasts}`;
+    if (b && !run) b.textContent = `Best ${n(r.best.bestBanked)} · Signed off ${r.best.signOffs} of ${r.best.broadcasts}`;
   });
   recapEl.hidden = false;
   // Playtest export: log this broadcast once, then copy everything logged so far.
@@ -1075,6 +1066,52 @@ function stepSim(inp: SimInput) {
 /** The recap's picture: a still of tonight's top moment (or the last shot when there was no replay). */
 let recapShot: string | null = null;
 let recapShotFromReplay = false;
+
+/** The recap's clip: the replay recorded off the canvas as it plays (where the browser can), looped on the recap. */
+let recapClip: string | null = null;
+let clipRec: MediaRecorder | null = null;
+function clipType(): string | null {
+  if (typeof MediaRecorder === 'undefined' || typeof canvas.captureStream !== 'function') return null;
+  return ['video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm', 'video/mp4'].find((t) => MediaRecorder.isTypeSupported(t)) ?? null;
+}
+function startClip() {
+  dropClip();
+  const type = clipType();
+  if (!type) return;
+  try {
+    const rec = new MediaRecorder(canvas.captureStream(TUNING.replay.clipFps), { mimeType: type, videoBitsPerSecond: TUNING.replay.clipBitrate });
+    const parts: Blob[] = [];
+    const t0 = performance.now();
+    rec.ondataavailable = (e) => { if (e.data.size) parts.push(e.data); };
+    rec.onstop = () => {
+      rec.stream.getTracks().forEach((k) => k.stop());
+      if (clipRec !== rec || !parts.length || performance.now() - t0 < TUNING.replay.clipMin * 1000) return;
+      recapClip = URL.createObjectURL(new Blob(parts, { type }));
+      // The recap is usually up already (it opens as the replay ends): swap its still for the clip.
+      const img = recapEl.hidden ? null : recapEl.querySelector('.rc-shot img');
+      if (img) {
+        const v = document.createElement('video');
+        Object.assign(v, { src: recapClip, autoplay: true, muted: true, loop: true, playsInline: true });
+        img.replaceWith(v);
+        void v.play().catch(() => {});
+      }
+    };
+    rec.start();
+    clipRec = rec;
+  } catch {
+    clipRec = null;
+  }
+}
+function stopClip() {
+  if (clipRec && clipRec.state !== 'inactive') clipRec.stop();
+}
+function dropClip() {
+  const rec = clipRec;
+  clipRec = null;
+  if (rec && rec.state !== 'inactive') rec.stop();
+  if (recapClip) URL.revokeObjectURL(recapClip);
+  recapClip = null;
+}
 function grabShot() {
   // Copied in the same task as the render, so the drawing buffer is still there.
   const W = Math.min(TUNING.replay.shotWidth, canvas.width);
@@ -1146,6 +1183,7 @@ function startReplay(done: () => void) {
   chyText.classList.toggle('empty', !m.headline);
   if (m.headline) showHeadline({ ...m.headline, breaking: false });
   acc = 0;
+  startClip();
   replay = { sim: rs, live, slowFrom: m.t - R.slowBefore, slowTo: m.t + R.slowAfter, end: m.t + R.after, armedAt: performance.now() + 400, done };
 }
 
@@ -1162,6 +1200,7 @@ function updateReplay() {
 
 function endReplay() {
   const r = replay!;
+  stopClip();
   replay = null;
   replayRate = 1;
   scene.remove(highway.group, cruisers.group, units.group);
@@ -1769,17 +1808,21 @@ function updateSignOff() {
 
 function updateBoxed() {
   const pin = sim.show.pin;
-  const show = sim.live && !attract && (pin > 0.5 || (sim.pursuit.netActive && sim.boxedIn()));
+  const caught = sim.caught();
+  const show = sim.live && !attract && (pin > 0.5 || caught || (sim.pursuit.netActive && sim.boxedIn()));
   boxedEl.hidden = !show;
   if (!show) return;
   boxedFill.style.width = `${Math.min(100, pin).toFixed(0)}%`;
   boxedEl.classList.toggle('pulse', pin > 50);
+  // Boxed in by a net, or caught crawling with police on his tail (the way out differs: run).
+  const kind = caught || (sim.show.pinCause === 'caught' && !sim.boxedIn()) ? 'caught' : 'net';
   // After one slip, the next catch busts him: say so.
   boxedEl.classList.toggle('last', sim.show.netSlips > 0);
-  boxedEl.querySelector('b')!.textContent = sim.show.netSlips > 0 ? 'BOXED IN · LAST CHANCE' : 'BOXED IN';
-  if (boxedFam !== String(glyphFamily)) {
-    boxedFam = String(glyphFamily);
-    boxedHow.innerHTML = glyphFamily === 'touch' ? 'Tap ● Shoulder · hold ▼ Brake' : `<kbd>${esc(glyph('shoulder'))}</kbd>Shoulder · <kbd>${esc(glyph('brake'))}</kbd>Brake`;
+  boxedEl.querySelector('b')!.textContent = (kind === 'caught' ? 'CAUGHT' : 'BOXED IN') + (sim.show.netSlips > 0 ? ' · LAST CHANCE' : '');
+  if (boxedFam !== `${glyphFamily}:${kind}`) {
+    boxedFam = `${glyphFamily}:${kind}`;
+    if (kind === 'caught') boxedHow.innerHTML = glyphFamily === 'touch' ? 'Let go of ▼ · Run' : `Let go of <kbd>${esc(glyph('brake'))}</kbd> · Run`;
+    else boxedHow.innerHTML = glyphFamily === 'touch' ? 'Tap ● Shoulder · hold ▼ Brake' : `<kbd>${esc(glyph('shoulder'))}</kbd>Shoulder · <kbd>${esc(glyph('brake'))}</kbd>Brake`;
   }
 }
 
@@ -1939,7 +1982,7 @@ window.__GAME = {
     const t = targetAt(sim.giant.s, sim.giant.d);
     return audio.placeOf(t.x + (r.x / n) * across + Math.cos(t.travel) * along, t.z + (r.z / n) * across + Math.sin(t.travel) * along);
   },
-  recap: () => (recapEl.hidden ? null : { title: recapEl.querySelector('h2')?.textContent, outcome: recapEl.querySelector('.outcome')?.textContent }),
+  recap: () => (recapEl.hidden ? null : { title: recapEl.querySelector('.why')?.textContent, outcome: recapEl.querySelector('.outcome')?.textContent, clip: !!recapEl.querySelector('.rc-shot video') }),
   /** Recap REPLAY: playing now (sim time, end, rate), and the moment it picked. */
   replay: () => ({ playing: !!replay, t: replay?.sim.time ?? null, end: replay?.end ?? null, rate: replayRate, moment }),
   show: () => ({ ...sim.show, tier: sim.show.tier, exit: sim.exit, live: sim.live, units: sim.pursuit.units.map((u) => ({ id: u.id, unit: u.unit, phase: u.phase, gap: u.s - sim.giant.s, lane: u.lane })) }),

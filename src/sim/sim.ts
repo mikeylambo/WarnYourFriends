@@ -211,13 +211,14 @@ export class Sim {
     const outnumbered = this.pursuit.chasing >= TUNING.show.outnumberedAt;
     for (const a of this.asks.step(dt, this.giant.tier === TUNING.tiers.length - 1, this.events)) this.show.banked += a.reward;
     const slipsBefore = this.show.netSlips;
-    this.show.stepPin(dt, this.boxedIn(), this.giant.speed, this.events);
+    this.show.stepPin(dt, this.boxedIn(), this.caught(), this.giant.speed, this.events);
     if (this.show.netSlips > slipsBefore) {
-      // Slipped the net: a gear down, a stumble, and the net breaks up.
+      // Slipped the net (or shook off the police on his tail): a gear down, a stumble, and they fall away.
       const g = this.giant;
       if (g.tier > 0) this.setTier(g.tier - 1, 'impact');
       g.stumble = TUNING.tierDrop.stumbleTime;
-      this.pursuit.disperseNet();
+      if (this.show.pinCause === 'net') this.pursuit.disperseNet();
+      else this.pursuit.shakeOff();
     }
     this.show.step(dt, this.time + dt, this.giant.tier, outnumbered, this.events);
     for (const id of this.escort.step(dt, this.time, this.giant)) {
@@ -318,6 +319,14 @@ export class Sim {
     g.tierTimer = 0;
     if (g.tier > 0) this.setTier(g.tier - 1, 'impact');
     this.emit({ type: 'spiked', id: u.id });
+  }
+
+  /** Caught: crawling (under `caught.below`) with a pursuing cruiser within reach of him. */
+  caught(): boolean {
+    const g = this.giant;
+    const C = TUNING.pursuit.caught;
+    if (g.speed >= C.below || g.air > 0) return false;
+    return this.pursuit.onHisTail().length > 0;
   }
 
   /** v0.3 box-in: both neighbouring lanes blocked and a unit within 8m ahead in yours. */

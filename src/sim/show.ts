@@ -1,5 +1,5 @@
 import { TUNING } from '../tuning';
-import type { BustReason, GainType, ShowState, SimEvent, StuntType } from './types';
+import type { BustReason, GainType, PinCause, ShowState, SimEvent, StuntType } from './types';
 
 /**
  * Phase 2 broadcast state (§12): Ratings (the score source and the life bar),
@@ -104,12 +104,23 @@ export class Show {
     if (this.ratings <= 0) this.bust('ratings', out);
   }
 
-  /** v0.3 box-in: fill while boxed and slow, drain when fast. */
-  stepPin(dt: number, boxed: boolean, speed: number, out: SimEvent[]) {
+  /** What filled the meter last (the HUD label, the slip's headline). */
+  pinCause: PinCause = 'net';
+
+  /**
+   * v0.3 box-in, and caught: fill while boxed and slow, or while police are on his tail as he crawls; drain
+   * when fast, or once he's free of both and back above a crawl.
+   */
+  stepPin(dt: number, boxed: boolean, caught: boolean, speed: number, out: SimEvent[]) {
     if (this.state !== 'live') return;
     const S = TUNING.show;
-    if (boxed && speed < S.pinBelow) this.pin = Math.min(100, this.pin + S.pinFill * dt);
-    else if (speed > S.pinDrainAbove) this.pin = Math.max(0, this.pin - S.pinDrain * this.pinDrainMult * dt);
+    if (boxed && speed < S.pinBelow) {
+      this.pin = Math.min(100, this.pin + S.pinFill * dt);
+      this.pinCause = 'net';
+    } else if (caught) {
+      this.pin = Math.min(100, this.pin + TUNING.pursuit.caught.fill * dt);
+      this.pinCause = 'caught';
+    } else if (speed > S.pinDrainAbove || (!boxed && speed >= TUNING.pursuit.caught.below)) this.pin = Math.max(0, this.pin - S.pinDrain * this.pinDrainMult * dt);
     if (this.pin >= 100) {
       // Police Net: the first catch in a segment he slips (a gear and Ratings, the caller applies them); the next busts him.
       if (this.netSlips < 1) {
@@ -117,7 +128,7 @@ export class Show {
         this.pin = 0;
         const before = this.ratings;
         this.ratings = Math.max(1, this.ratings - TUNING.pursuit.net.slipRatings);
-        out.push({ type: 'netSlip', ratings: this.ratings - before });
+        out.push({ type: 'netSlip', ratings: this.ratings - before, cause: this.pinCause });
       } else this.bust('pin', out);
     }
   }

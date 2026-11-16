@@ -21,6 +21,8 @@ for (const [mode, seed] of (process.env.ONLY ? [[process.env.ONLY, Number(proces
   await page.evaluate((rt) => window.__GAME.step(60 * (rt ? 150 : 170)), realtime);
   await page.waitForFunction(() => window.__GAME.recap(), null, { timeout: realtime ? 300000 : 30000, polling: 500 });
   await page.waitForTimeout(900);
+  if (realtime) await page.waitForFunction(() => window.__GAME.recap()?.clip, null, { timeout: 8000 }).catch(() => console.log("  (no clip: still shown)"));
+  if (realtime) { await page.waitForTimeout(1500); console.log("  clip:", await page.evaluate(() => { const v = document.querySelector("#recap .rc-shot video"); return v ? { playing: !v.paused, t: v.currentTime.toFixed(2), dur: v.duration } : null; })); }
   await page.screenshot({ path: `${OUT}/${mode}-${name}.png` });
   console.log(mode, name, JSON.stringify(await page.evaluate(() => window.__GAME.recap())));
   await page.close();

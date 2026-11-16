@@ -102,8 +102,8 @@ describe('headlines (§21)', () => {
         const text = h.place && /^(On|In) /.test(h.place) && !['On Highway', 'On The Interstate'].includes(h.place) ? h.text.replace(h.place, '') : h.text;
         if (!road.test(text) || h.kicker === 'BUSTED' || h.kicker === 'SIGN-OFF') continue;
         checked++;
-        // The event is at most 6s old: he must have been on a highway then.
-        const window = zones.filter((z) => z.t <= h.t && z.t >= h.t - 6.1);
+        // The event is at most `staleAfter` old: he must have been on a highway then.
+        const window = zones.filter((z) => z.t <= h.t && z.t >= h.t - TUNING.broadcast.staleAfter - 0.1);
         expect(window.some((z) => z.zone === 'highway'), `"${h.text}" at ${h.t.toFixed(1)}s, zones ${[...new Set(window.map((z) => z.zone))].join('/')}`).toBe(true);
       }
     }

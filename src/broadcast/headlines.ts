@@ -295,7 +295,7 @@ export class Newsroom {
       }
       case 'netSlip': {
         // Caught once: it breaks in (the chyron says exactly what happened).
-        const line = this.freshLine(L.netSlip);
+        const line = this.freshLine(q.events[0]?.type === 'netSlip' && q.events[0].cause === 'caught' ? L.caughtSlip : L.netSlip);
         return line ? mk(line[1], line[0], null, true) : null;
       }
       case 'spotlight':

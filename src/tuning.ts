@@ -399,6 +399,8 @@ export const TUNING = {
     lead: 2.2, slow: 0.35, slowBefore: 0.35, slowAfter: 1.0, after: 1.6, angle: 'Long Lens',
     /** The recap's picture: grabbed this long after the moment (debris in the air), at this width in px (a still, not a screenshot). */
     shotAfter: 0.2, shotWidth: 960,
+    /** The recap's looping clip: recorded off the canvas during the replay at this frame rate and bitrate; under `clipMin` s (skipped early) the still stays. */
+    clipFps: 30, clipBitrate: 2_500_000, clipMin: 1.5,
     score: { policeCrash: 10, unitSmash: 7, leapLand: 4, hijackBail: 5, heavyAcross: 6, heavy: 4, nearMiss: 4, ramMiss: 4, pose: 3 },
   },
 
@@ -694,6 +696,14 @@ export const TUNING = {
      * (`dropLead` s), never one that closes the last open lane. Heavy: Rampage (or a Stride Shoulder Check) smashes the carrier itself.
      */
     carrier: { firstAt: 30, every: [40, 60] as [number, number], cruiseFactor: 0.62, tellAhead: 1.9, tellMin: 25, tellMax: 28, firstDrop: 0.8, drops: 6, dropEvery: 0.9, dropLead: 1.2, leaveSpeed: 8 },
+    /**
+     * Caught (Mike, 2026-11-16: "the run doesn't end when police catch up"). Every segment, no Heat gate: while he
+     * crawls under `below` m/s (braking; Jog's top is 6), any cruiser within `from` m behind pulls up to `gap` m off
+     * his back (police further back close at `runDown` m/s over his speed, not the usual 7), and police within
+     * `reach` m of him fill the meter at `fill`/s (≈3.3s). The first fill in a segment
+     * he shakes them (they drop back for `backOff` s; a gear, a stumble and `net.slipRatings` lost), the second busts.
+     */
+    caught: { below: 4, from: 20, gap: 2.5, reach: 3.5, fill: 30, backOff: 2.5, runDown: 14 },
     /** Near-miss (§12): a pursuer passes within 1.5m without contact. */
     nearMiss: 1.5,
     /** A unit this far behind the giant has lost track (§12) and leaves. */
@@ -782,8 +792,8 @@ export const TUNING = {
 
   /** Phase 0c broadcast (§21). */
   broadcast: {
-    /** §21: a new headline at most every 4s; tier changes interrupt with BREAKING. */
-    headlineEvery: 4,
+    /** A new headline at most every 7s (§21 said 4; Mike, 2026-11-16: "cycle far too quickly"); tier changes interrupt with BREAKING. */
+    headlineEvery: 7,
     /** §21: no verb or place reused within the last 5 headlines. */
     antiRepeat: 5,
     /** Smashes inside one headline window are counted together ("3 Cars"). */
@@ -791,9 +801,9 @@ export const TUNING = {
     /** Opening headline after this long. */
     openAt: 1.2,
     /** Queued news older than this is dropped, not shown late (s). */
-    staleAfter: 6,
+    staleAfter: 9,
     /** ...except the player's own ability moments (Leap, Stare, Hijack, Pose): they wait longer for a slot. */
-    staleAfterAbility: 10,
+    staleAfterAbility: 12,
   },
 
   /** Phase 2 broadcast escalation (presentation). */

@@ -10,11 +10,11 @@ describe('show (§12 Ratings, Heat, Pin)', () => {
     const sh = new Show();
     const ev: SimEvent[] = [];
     sh.ratings = 60;
-    for (let i = 0; i < 60 * 4; i++) sh.stepPin(1 / 60, true, 2, ev);
+    for (let i = 0; i < 60 * 4; i++) sh.stepPin(1 / 60, true, false, 2, ev);
     expect(ev.some((e) => e.type === 'netSlip')).toBe(true);
     expect(sh.state).toBe('live');
     expect(sh.ratings).toBe(60 - TUNING.pursuit.net.slipRatings);
-    for (let i = 0; i < 60 * 4; i++) sh.stepPin(1 / 60, true, 2, ev);
+    for (let i = 0; i < 60 * 4; i++) sh.stepPin(1 / 60, true, false, 2, ev);
     expect(sh.state).toBe('busted');
     expect(sh.reason).toBe('pin');
   });
@@ -60,13 +60,13 @@ describe('show (§12 Ratings, Heat, Pin)', () => {
   it('Pin fills only when boxed and slow, drains when fast, busts at 100', () => {
     const sh = new Show();
     const ev: SimEvent[] = [];
-    sh.stepPin(1, true, 6, ev);
+    sh.stepPin(1, true, false, 6, ev);
     expect(sh.pin).toBe(0); // boxed but not slow
-    sh.stepPin(1, true, 3, ev);
+    sh.stepPin(1, true, false, 3, ev);
     expect(sh.pin).toBe(TUNING.show.pinFill);
-    sh.stepPin(0.5, false, 9, ev);
+    sh.stepPin(0.5, false, false, 9, ev);
     expect(sh.pin).toBe(TUNING.show.pinFill - TUNING.show.pinDrain * 0.5);
-    for (let i = 0; i < 10; i++) sh.stepPin(1, true, 2, ev);
+    for (let i = 0; i < 10; i++) sh.stepPin(1, true, false, 2, ev);
     expect(sh.state).toBe('busted');
     expect(sh.reason).toBe('pin');
   });

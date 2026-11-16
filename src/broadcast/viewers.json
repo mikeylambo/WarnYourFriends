@@ -20,11 +20,5 @@
     ["WARN YOUR FRIENDS — everyone", 3],
     ["this is the most I have ever cared about the interstate — Glen", 3]
   ],
-  "anchors": ["Gail Penrose", "Dale Ostrow"],
-  "signoff": {
-    "cleared": ["Gail Penrose: \"He took the exit. We do not know where it goes.\"", "Dale Ostrow: \"Lock your doors. Or don't. He seems busy.\""],
-    "pin": ["Gail Penrose: \"Officers report the suspect was 'surprisingly polite about it'.\"", "Dale Ostrow: \"Traffic is expected to resume sometime next year.\""],
-    "ratings": ["Dale Ostrow: \"And with that, viewers have changed the channel.\"", "Gail Penrose: \"We now return to a cooking show already in progress.\""],
-    "missed": ["Gail Penrose: \"Our chopper is out of fuel. The giant, apparently, is not.\"", "Dale Ostrow: \"If you see him, warn your friends.\""]
-  }
+  "anchors": ["Gail Penrose", "Dale Ostrow"]
 }

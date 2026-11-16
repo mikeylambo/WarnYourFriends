@@ -154,4 +154,36 @@ describe('police crashes', () => {
     expect(u.speed).toBeGreaterThan(0);
     expect(Math.abs(u.d - g.d)).toBeGreaterThan(TUNING.lanes.width * 0.5);
   });
+
+  it('caught: crawling with a cruiser on his tail fills the meter; the first catch shakes them, the second busts him', () => {
+    const sim = emptySim(3);
+    run(sim, 3);
+    const g = sim.giant;
+    const cop = internals(sim).make('cruiser', 'cruiser', g.s - 15, sim.track.laneCenter(Math.min(g.lane + 1, sim.track.lanesAt(g.s) - 1)), Math.min(g.lane + 1, sim.track.lanesAt(g.s) - 1));
+    cop.speed = g.speed;
+    const ev: SimEvent[] = [];
+    for (let i = 0; i < HZ * 20 && sim.show.state === 'live'; i++) {
+      sim.show.ratings = 100; // isolate the police from the audience
+      ev.push(...sim.step({ ...NO_INPUT, brake: true }));
+    }
+    const slip = ev.find((e) => e.type === 'netSlip');
+    expect(slip && slip.type === 'netSlip' && slip.cause).toBe('caught');
+    expect(sim.show.state).toBe('busted');
+    expect(sim.show.reason).toBe('pin');
+    expect(sim.giant.speed).toBeGreaterThanOrEqual(TUNING.giant.speedFloor - 1e-9); // Law 1 held throughout
+  });
+
+  it('caught: running at Jog with a cruiser alongside never fills the meter', () => {
+    const sim = emptySim(3);
+    run(sim, 3);
+    const g = sim.giant;
+    const lane = Math.min(g.lane + 1, sim.track.lanesAt(g.s) - 1);
+    internals(sim).make('cruiser', 'cruiser', g.s - 3, sim.track.laneCenter(lane), lane).speed = g.speed;
+    let maxPin = 0;
+    for (let i = 0; i < HZ * 6; i++) {
+      sim.step(NO_INPUT);
+      maxPin = Math.max(maxPin, sim.show.pin);
+    }
+    expect(maxPin).toBe(0);
+  });
 });

@@ -738,9 +738,10 @@ html.touch #ticker { right: 128px; }
 
 /* The picture: a still of tonight's top moment, the top story under it like the chyron. */
 #recap .rc-shot { position: relative; margin: 0; overflow: hidden; background: var(--c-ink); box-shadow: 0 14px 40px rgba(0, 0, 0, 0.5); }
-#recap .rc-shot img { display: block; width: 100%; aspect-ratio: 16 / 9; object-fit: cover; animation: rcshot 6s ease-out both; }
+#recap .rc-shot img, #recap .rc-shot video { display: block; width: 100%; aspect-ratio: 16 / 9; object-fit: cover; animation: rcshot 6s ease-out both; }
 @keyframes rcshot { from { transform: scale(1.08); } to { transform: none; } }
-@media (prefers-reduced-motion: reduce) { #recap .rc-shot img { animation: none; } }
+#recap .rc-shot video { animation: none; }
+@media (prefers-reduced-motion: reduce) { #recap .rc-shot img, #recap .rc-shot video { animation: none; } }
 #recap .rc-shot .tag { position: absolute; left: 0; top: 12px; background: var(--c-replay); color: var(--c-text); font: italic 900 12px/1 var(--f-head); letter-spacing: 0.16em; padding: 7px 20px 6px 12px; clip-path: polygon(0 0, 100% 0, calc(100% - 10px) 100%, 0 100%); }
 #recap .rc-shot .rc-story { position: relative; margin: 0; filter: none; }
 #recap .rc-shot .rc-story .t { font-size: 15px; padding: 9px 14px 8px 12px; clip-path: none; }
