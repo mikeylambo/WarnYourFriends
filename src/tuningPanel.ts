@@ -85,6 +85,11 @@ export function applyStoredTuning() {
   }
 }
 
+/** Any knob moved off its default (scores then stay off the leaderboard). */
+export function tuningChanged(): boolean {
+  return Object.keys(changed()).length > 0;
+}
+
 function changed(): Record<string, number> {
   const out: Record<string, number> = {};
   for (const k of KNOBS) if (k.obj()[k.key] !== defaults.get(k)) out[id(k)] = k.obj()[k.key];

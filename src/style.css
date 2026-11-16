@@ -759,6 +759,22 @@ html.touch #ticker { right: 128px; }
 #recap .rc-asks li.done i { background: var(--c-good); border-color: var(--c-good); color: var(--c-ink); font-weight: 900; }
 #recap .rc-asks li span { flex: 1; min-width: 0; }
 #recap .rc-asks li b { font: 900 20px/1 var(--f-num); color: var(--c-accent); white-space: nowrap; }
+/* Leaderboard (on the recap once the broadcast or run is over): same rows as the asks. */
+#recap .rc-board ol { list-style: none; margin: 0; padding: 0; display: grid; gap: 3px; }
+#recap .rc-board li { display: flex; align-items: center; gap: 10px; background: var(--c-panel); padding: 7px 12px; font: 700 14px/1.2 var(--f-head); color: var(--c-text); }
+#recap .rc-board li i { flex: none; min-width: 22px; font: 900 16px/1 var(--f-num); font-style: normal; color: var(--c-mute); }
+#recap .rc-board li span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#recap .rc-board li b { font: 900 18px/1 var(--f-num); color: var(--c-text); white-space: nowrap; }
+#recap .rc-board li.you { background: var(--c-paper); color: var(--c-on-paper); }
+#recap .rc-board li.you i, #recap .rc-board li.you b { color: var(--c-on-paper); }
+#recap .rc-board li.gap { margin-top: 6px; }
+#recap .rc-board .post { display: flex; gap: 8px; margin-top: 8px; }
+#recap .rc-board .post input { flex: 1; min-width: 0; padding: 10px 12px; border: 2px solid rgba(255, 255, 255, 0.18); background: rgba(0, 0, 0, 0.35); color: var(--c-text); font: 700 15px/1 var(--f-head); }
+#recap .rc-board .post input:focus { outline: none; border-color: var(--c-paper); }
+#recap .rc-board .post .go { flex: none; width: auto; margin: 0; padding: 10px 16px; background: var(--c-red); color: var(--c-text); border: 0; font-size: 14px; }
+#recap .rc-board .post .go:hover, #recap .rc-board .post .go:focus-visible { background: var(--c-paper); color: var(--c-on-paper); }
+#recap .rc-board .note, #recap .rc-board .empty { margin: 8px 0 0; font: 600 13px/1.3 var(--f-head); color: var(--c-mute); }
+#recap .rc-board.busy { opacity: 0.6; pointer-events: none; }
 #recap .rc .anchor { margin: auto 0 0; padding: 0; font: italic 600 19px/1.35 var(--f-head); color: var(--c-text); opacity: 1; }
 #recap .rc .anchor cite { display: block; margin-top: 8px; font: italic 800 12px/1 var(--f-head); letter-spacing: 0.16em; text-transform: uppercase; color: var(--c-mute); }
 

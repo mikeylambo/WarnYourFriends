@@ -24,8 +24,10 @@ import coverUrl from './assets/title-cover.webp';
 import { UPGRADE_ART } from './upgradeArt';
 import { PlayLog, appendLog, exportLog, type PlayEntry } from './playlog';
 import { readFlags } from './debug';
+import { encodeInputs, type Submission } from './leaderboard/verify';
+import { mountBoard } from './leaderboardClient';
 import { loadSettings, saveSettings } from './settings';
-import { applyStoredTuning, mountTuningPanel } from './tuningPanel';
+import { applyStoredTuning, mountTuningPanel, tuningChanged } from './tuningPanel';
 import { createGameApp, type InputDeviceFamily, type CoreSettings, type FrameAssembly, type GenreFrame, type RendererAdapter, type SLUWebShell } from '@slu/web-shell';
 
 applyStoredTuning();
@@ -243,6 +245,13 @@ let lastEntry: PlayEntry | null = null;
 // Recap REPLAY state (declared up here: newRun runs at boot). See startReplay below.
 let simOpts: { seed: number; segment: number; upgrades: UpgradeId[]; growth: boolean } = { seed: 0, segment: 0, upgrades: [], growth: false };
 const inputLog: SimInput[] = [];
+/** Leaderboard: this broadcast's (or run's) seed, each segment's inputs and the meeting buys, for the server to re-play. */
+let lb: { mode: 'run' | 'broadcast'; seed: number; segments: string[]; buys: (UpgradeId | null)[] } = { mode: 'broadcast', seed: 0, segments: [], buys: [] };
+/** Why this browser's scores can't go on the board (a setting that changes the sim), or null. */
+const lbBlocked = () =>
+  flags.bot || flags.seg !== null || flags.ability || flags.heat !== null || flags.nodecay || flags.god || (flags.size !== null && flags.size !== 'growth') || tuningChanged()
+    ? 'Debug or tuning settings are on, so this score stays off the board.'
+    : null;
 let moment: { t: number; score: number; kind: string; event: SimEvent; headline: Headline | null } | null = null;
 let replayRate = 1;
 const replayEl = $('replay');
@@ -555,8 +564,8 @@ function showMeeting() {
     <div class="padhint"></div>
   </div>`;
   recapArmedAt = performance.now() + 250;
-  for (const b of recapEl.querySelectorAll<HTMLButtonElement>('.pitch')) b.onclick = () => r.buy(b.dataset.id as UpgradeId) && nextSegment();
-  ($('skip') as HTMLButtonElement).onclick = () => r.nextSegment() && nextSegment();
+  for (const b of recapEl.querySelectorAll<HTMLButtonElement>('.pitch')) b.onclick = () => r.buy(b.dataset.id as UpgradeId) && (lb.buys.push(b.dataset.id as UpgradeId), nextSegment());
+  ($('skip') as HTMLButtonElement).onclick = () => r.nextSegment() && (lb.buys.push(null), nextSegment());
   (recapEl.querySelector<HTMLButtonElement>('.pitch:not([disabled])') ?? $<HTMLButtonElement>('skip')).focus();
 }
 
@@ -594,6 +603,8 @@ function showRecap() {
   ];
   if (run) tiles.splice(1, 0, ['Peak audience', viewers(sh.peak)]);
   const asks = sim.asks.list;
+  // The broadcast (or the whole run) is over: its score can go on the board.
+  const over = !run || run.phase === 'won' || run.phase === 'lost';
   const viewer = coverage.recapComment(sh.tier);
   if (!recapShot) {
     renderer.render(scene, rig.camera);
@@ -619,6 +630,7 @@ function showRecap() {
     <aside class="rc-side">
       ${shot}
       ${asks.length ? `<div class="rc-asks"><div class="hd">Producer's asks <span>${asks.filter((a) => a.done).length}/${asks.length}</span></div><ul>${asks.map((a) => `<li class="${a.done ? 'done' : ''}"><i>${a.done ? '✓' : ''}</i><span>${esc(a.text)}</span>${a.done ? `<b>+${n(a.reward)}</b>` : ''}</li>`).join('')}</ul></div>` : ''}
+      ${over ? '<div class="rc-board" hidden></div>' : ''}
       <blockquote class="anchor">“${esc(viewer.text)}”${viewer.who ? `<cite>${esc(viewer.who)}</cite>` : ''}</blockquote>
     </aside>
     <footer class="rc-foot">
@@ -637,6 +649,14 @@ function showRecap() {
   });
   recapEl.hidden = false;
   mountClip();
+  const boardEl = recapEl.querySelector<HTMLElement>('.rc-board');
+  if (boardEl) {
+    const blocked = lbBlocked();
+    const sub: Submission | null = blocked || lb.segments.length === 0
+      ? null
+      : { mode: lb.mode, seed: lb.seed, growth: simOpts.growth, segments: lb.segments, buys: lb.buys, claimed: Math.round(run ? run.earned : sim.show.banked) };
+    mountBoard(boardEl, lb.mode, sub, blocked ?? undefined);
+  }
   // Playtest export: log this broadcast once, then copy everything logged so far.
   if (!lastEntry || lastEntry.seed !== simOpts.seed || lastEntry.segment !== simOpts.segment || lastEntry.seconds !== Math.round(sim.time * 10) / 10) {
     lastEntry = playLog.entry(sim, simOpts.seed, run ? 'run' : 'single', simOpts.segment, simOpts.upgrades);
@@ -1299,6 +1319,7 @@ function beginBroadcast(mode = 'broadcast') {
   document.documentElement.classList.remove('attract');
   const seed = nextSeed ?? (Math.random() * 1e9) | 0;
   nextSeed = null;
+  lb = { mode: mode === 'run' ? 'run' : 'broadcast', seed, segments: [], buys: [] };
   if (mode === 'run') {
     run = new RunState(seed);
     newRun(run.segmentSeed(), 0, []);
@@ -1641,6 +1662,7 @@ function frame(now: number) {
     recapShown = true;
     if (attract) enterAttract(); // behind the menus: just roll another broadcast
     else {
+      lb.segments.push(encodeInputs(inputLog));
       if (run) run.finishSegment(sim.show);
       if (run?.phase !== 'meeting') {
         app?.shell.session.setPhase('results');
@@ -1654,7 +1676,7 @@ function frame(now: number) {
   // Back (Esc / B / Circle) closes How to Play.
   if (briefingClose && app?.shell.input.wasPressed('ui_back') && recapArmed()) briefingClose();
   // Controller parity on the recap: left/right to move, A to choose.
-  if (!recapEl.hidden && app) {
+  if (!recapEl.hidden && app && !(document.activeElement instanceof HTMLInputElement)) {
     const btns = ([...recapEl.querySelectorAll('button')] as HTMLButtonElement[]).filter((b) => !b.disabled && b.id !== 'playdata');
     const i = Math.max(0, btns.indexOf(document.activeElement as HTMLButtonElement));
     if (app.shell.input.wasPressed('ui_right') || app.shell.input.wasPressed('ui_down')) btns[(i + 1) % btns.length].focus();

@@ -30,6 +30,9 @@ src/broadcast/       headline generator (§21) + headlines.json word bank (pure 
 src/audio.ts         Web Audio, music/sfx/voice buses: authored SFX (assets/sfx, ElevenLabs) with synth fallback
 src/input.ts         KBM, gamepad, touch → SimInput
 src/glyphs.ts        button labels per device family (PS4: L1/R1/L2/✕), via the shell's glyph registry
+src/leaderboard/     submission encode + server-side re-simulation (pure, shared with the API)
+src/leaderboardClient.ts  the recap's board: post, top 10, your rank
+server/              leaderboard API (Upstash Redis REST); tools/build-api.mjs bundles it to api/leaderboard.js
 src/playlog.ts       playtest export: per-broadcast numbers kept locally, "Copy play data" on the recap (hide before release)
 src/main.ts          bootstrap: WebGL check, then loads game.ts; boot errors shown on screen
 src/game.ts          fixed-step loop, event presentation, window.__GAME

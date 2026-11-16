@@ -756,6 +756,24 @@ export const TUNING = {
     tailwind: { kind: 'passive', price: 140000, label: 'Tailwind', blurb: 'Tier up 30% sooner.', pitch: 'Cue the wide shot. He’s hitting the next speed tier 30% sooner.' },
   } as Record<UpgradeId, { kind: 'ability' | 'passive'; price: number; label: string; blurb: string; /** The producer's line on the meeting card (flavour). */ pitch: string }>,
 
+  /**
+   * Leaderboard (§29: shared, server-side). Scores are re-simulated from the inputs on the server.
+   */
+  leaderboard: {
+    /** Inputs per segment a submission may carry: 165s segment + the outro, with room (60 Hz). */
+    maxTicks: 20000,
+    /** Longest name on the board (fits the recap row at phone width). */
+    nameMax: 14,
+    /** Rows shown on the recap board. */
+    top: 10,
+    /** Claimed vs re-simulated score: allowed gap (fraction). Rounding only; anything more is rejected and counted. */
+    tolerance: 0.005,
+    /** Submissions per IP per minute (the server's own guard; a run takes minutes). */
+    perMinute: 12,
+    /** Never on the board (rule 10: never mean). Matched inside the name's letters. */
+    blocked: ['fuck', 'shit', 'cunt', 'nigg', 'fag', 'rape', 'nazi', 'hitler', 'retard', 'whore', 'slut', 'bitch', 'cock', 'pussy', 'kike', 'chink', 'spic', 'tranny'],
+  },
+
   /** Phase 3 abilities (lane-runner versions of §17's pool). 5f input buffer (§8). */
   abilities: {
     bufferFrames: 5,
