@@ -21,7 +21,6 @@ import { Gait } from './anim/gait';
 import { Audio } from './audio';
 import { Input } from './input';
 import { registerGlyphs, padFamily, type GlyphAction } from './glyphs';
-import { Tips } from './tips';
 import coverUrl from './assets/title-cover.webp';
 import { UPGRADE_ART } from './upgradeArt';
 import { PlayLog, appendLog, exportLog, type PlayEntry } from './playlog';
@@ -112,7 +111,6 @@ const abilCd = abilEl.querySelector('.cd i') as HTMLElement;
 const abilBtn = $<HTMLButtonElement>('btn-ability');
 const controlsEl = $('controls');
 const budgetEl = $('budget');
-const tips = new Tips();
 
 // --- Renderer ---------------------------------------------------------------
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
@@ -245,7 +243,7 @@ let moment: { t: number; score: number; kind: string; event: SimEvent; headline:
 let replayRate = 1;
 const replayEl = $('replay');
 type Parked = { sim: Sim; highway: HighwayView; gait: Gait; cruisers: CruiserView; units: UnitViews; director: Director; news: Newsroom; bot: Bot | null; rideMesh: THREE.Group | null; prev: typeof prev; runStats: typeof runStats; propKinds: Map<number, PropKind>; recent: SimEvent[] };
-let replay: { sim: Sim; live: Parked; slowFrom: number; slowTo: number; end: number; armedAt: number; done: () => void } | null = null;
+let replay: { sim: Sim; live: Parked; slowFrom: number; slowTo: number; end: number; armedAt: number; done: () => void; grab?: boolean } | null = null;
 
 const perf = { fps: 0, frames: 0, t: 0, simMs: 0 };
 /** Browser-side measurements, exposed for E2E. */
@@ -274,7 +272,6 @@ const where = (s: number, d: number) => sim.track.posAt(s, d, { x: 0, z: 0 });
 const sirenRight = new THREE.Vector3();
 
 function newRun(seed: number, segment = 0, upgrades: UpgradeId[] = []) {
-  tips.clear();
   if (replay) {
     // A new broadcast mid-replay: drop the replay (its views go below) and the parked live ones.
     replay = null;
@@ -311,6 +308,7 @@ function newRun(seed: number, segment = 0, upgrades: UpgradeId[] = []) {
   playLog.reset();
   inputLog.length = 0;
   moment = null;
+  recapShot = null;
   highway = new HighwayView(sim);
   highway.onHonk = (v, at) => audio.honk(v, at);
   highway.onBrush = (at) => audio.scrape(at);
@@ -403,18 +401,6 @@ function hideRecap() {
   // How to Play lives in this overlay: a broadcast rolling over behind the menus must not close it.
   if (briefingClose) return;
   recapEl.hidden = true;
-}
-/** Onboarding producer notes: what triggers each one (events trigger the rest). */
-function updateTips() {
-  const T = TUNING.tips;
-  const on = settings.producerTips && !attract && !replay && started && sim.live && !document.documentElement.classList.contains('coldopen');
-  if (on) {
-    const g = sim.giant;
-    if (g.tier === 0 && sim.time > T.gearAfter) tips.want('gear');
-    if (sim.track.propsBetween(g.s + 15, g.s + T.dozerAhead).some((p) => p.kind === 'dozer')) tips.want('dozer');
-    if (sim.show.ratings < T.losingBelow && sim.time > T.losingAfter) tips.want('losing');
-    if (run && sim.time > T.budgetAfter) tips.want('budget');
-  }
 }
 
 /** What an ability just did, beside its chip: the payoff has to read even when the chopper is far out. */
@@ -602,37 +588,69 @@ function showRecap() {
   const viewers = (r: number) => (r * VIEWERS_PER_POINT >= 1e6 ? `${((r * VIEWERS_PER_POINT) / 1e6).toFixed(2)}M` : `${Math.round((r * VIEWERS_PER_POINT) / 1000)}K`);
   const t = Math.floor(sim.time);
   const N = TUNING.run.segments;
-  const segLabel = run ? ` · SEGMENT ${run.segment + 1} OF ${N}` : '';
-  const runStatsHtml = run && run.phase !== 'meeting'
-    ? `<span>Run score <b>${Math.round(run.earned).toLocaleString()}</b></span><span>Segments cleared <b>${run.results.filter((x) => x.cleared).length} / ${N}</b></span>`
-    : run ? `<span>Added to budget <b>+${Math.round(sh.banked).toLocaleString()}</b></span><span>Budget <b>${run.purse.toLocaleString()}</b></span><span class="how">Spend it at the meeting.</span>` : '';
-  // Producer's notes: the onboarding lines this broadcast earned, handed over here instead of over the road.
-  const notes = settings.producerTips ? tips.take(TUNING.tips.perRecap) : [];
+  const n = (x: number) => Math.round(x).toLocaleString();
+  const segLabel = run ? `Segment ${run.segment + 1} of ${N}` : 'Single segment';
+  // The outcome stamp, and the plain-language why under it.
+  const won = run?.phase === 'won';
+  const stamp = won ? 'FULL BROADCAST' : cleared ? 'SIGNED OFF' : 'BUSTED';
+  const why = won ? 'Every segment, start to finish.' : cleared ? 'He took the exit. Coverage complete.' : reason === 'pin' ? 'Boxed in by the police.' : reason === 'ratings' ? 'The viewers changed the channel.' : 'He missed the exit.';
+  // Hero numbers: what this screen is about. A run segment reports the budget; a finished run, the run.
+  const hero = run && run.phase === 'meeting'
+    ? [['Added to budget', `+${n(sh.banked)}`, 'score'], ['Budget', n(run.purse), '']]
+    : run
+      ? [['Run score', n(run.earned), 'score'], ['Segments cleared', `${run.results.filter((x) => x.cleared).length}<small>/${N}</small>`, '']]
+      : [['Score', n(sh.banked), 'score'], ['Peak audience', viewers(sh.peak), '']];
+  const tiles: [string, string][] = [
+    ['Longest chain', String(runStats.bestChain)],
+    ['Flattened', String(sim.stats.smashes)],
+    ['Police cars', String(runStats.units + runStats.crashes)],
+    ['Heat', `<span class="stars">${[1, 2, 3, 4, 5].map((k) => `<i class="${k <= sh.heat ? 'on' : ''}">★</i>`).join('')}</span>`],
+  ];
+  if (run) tiles.splice(1, 0, ['Peak audience', viewers(sh.peak)]), tiles.splice(4, 1);
+  // The anchor's sign-off: "Name: "line"" → the quote, attributed.
+  const m = /^([^:]+):\s*"(.*)"$/.exec(anchorLine);
+  const quote = m ? m[2] : anchorLine;
+  const who = m ? m[1] : 'WYF 6';
+  const asks = sim.asks.list;
+  if (!recapShot) {
+    renderer.render(scene, rig.camera);
+    grabShot();
+  }
+  const shot = recapShot
+    ? `<figure class="rc-shot"><img src="${recapShot}" alt="" /><span class="tag">${recapShotFromReplay ? "TONIGHT'S TOP MOMENT" : 'THE LAST SHOT'}</span>${best ? `<figcaption class="rc-story"><span class="k">TOP STORY</span><span class="t">${esc(best.text)}</span></figcaption>` : ''}</figure>`
+    : best ? `<div class="rc-story"><span class="k">TOP STORY</span><span class="t">${esc(best.text)}</span></div>` : '';
   const buttons = run?.phase === 'meeting'
     ? `<button class="go" id="meet">Producer's Meeting</button>`
     : run
       ? `<button class="go" id="again">Run it again</button><button class="go alt" id="tomenu">Menu</button>`
       : `<button class="go" id="again">Run it again</button><button class="go alt" id="same">Same road</button><button class="go alt" id="tomenu">Menu</button>`;
-  recapEl.innerHTML = `<div class="card">
-    <div class="kicker">THE 11 O'CLOCK RECAP · WYF 6${segLabel}</div>
-    <h2>${esc(last?.text ?? (cleared ? 'Giant Takes The Exit' : 'Suspect In Custody'))}</h2>
-    <span class="outcome ${cleared ? 'cleared' : ''}">${run?.phase === 'won' ? 'FULL BROADCAST · SIGNED OFF' : cleared ? 'SIGNED OFF' : reason === 'pin' ? 'BUSTED · BOXED IN' : reason === 'ratings' ? 'BUSTED · CUT TO COMMERCIAL' : 'BUSTED · MISSED THE EXIT'}</span>
-    ${best ? `<div class="best"><small>TONIGHT'S TOP STORY</small>${esc(best.text)}</div>` : ''}
-    <div class="stats">
-      <span>Peak audience <b>${viewers(sh.peak)}</b></span><span>Score <b>${Math.round(sh.banked).toLocaleString()}</b></span><span>Longest chain <b>${runStats.bestChain}</b></span>
-      <span>On air <b>${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}</b></span><span>Rampage time <b>${Math.round(sim.stats.timeAtTier[2])}s</b></span>
-      <span>Things flattened <b>${sim.stats.smashes}</b></span><span>Police cars smashed <b>${runStats.units}</b></span><span>Police cars crashed <b>${runStats.crashes}</b></span>
-      <span>Pursuers shaken <b>${runStats.lost}</b></span><span>Heat reached <b>${'★'.repeat(sh.heat)}</b></span>
-      ${runStatsHtml}
-      ${!run && lastBest ? `<span>Best score <b>${lastBest.bestBanked.toLocaleString()}</b></span><span>Signed off <b>${lastBest.signOffs} / ${lastBest.broadcasts}</b></span>` : ''}
-    </div>
-    ${sim.asks.list.length ? `<ul class="asks">${sim.asks.list.map((a) => `<li class="${a.done ? 'done' : ''}"><i>${a.done ? '✓' : '✕'}</i>${esc(a.text)}${a.done ? `<b>+${a.reward.toLocaleString()}</b>` : ''}</li>`).join('')}</ul>` : ''}
-    ${notes.length ? `<div class="notes"><span class="who">Producer</span><ul>${notes.map((n) => `<li>${esc(n)}</li>`).join('')}</ul></div>` : ''}
-    <p class="anchor">${esc(anchorLine)}</p>
-    <div class="row">${buttons}</div>
-    <button class="playdata" id="playdata">Copy play data</button>
-    <div class="padhint"></div>
-  </div>`;
+  recapEl.innerHTML = `<div class="rc ${cleared || won ? 'cleared' : 'busted'}">
+    <header class="rc-top"><div class="kicker">THE 11 O'CLOCK RECAP<span class="seg"> · WYF 6 · ${segLabel.toUpperCase()}</span></div></header>
+    <section class="rc-lead">
+      <div class="rc-stamp"><span class="outcome ${cleared || won ? 'cleared' : ''}">${stamp}</span><span class="why">${why}</span></div>
+      <h2>${esc(last?.text ?? (cleared ? 'Giant Takes The Exit' : 'Suspect In Custody'))}</h2>
+      <div class="rc-hero">${hero.map(([k, v, c]) => `<div class="${c}"><small>${k}</small><b>${v}</b></div>`).join('')}</div>
+      <div class="rc-tiles">${tiles.map(([k, v]) => `<div><b>${v}</b><small>${k}</small></div>`).join('')}</div>
+    </section>
+    <aside class="rc-side">
+      ${shot}
+      ${asks.length ? `<div class="rc-asks"><div class="hd">Producer's asks <span>${asks.filter((a) => a.done).length}/${asks.length}</span></div><ul>${asks.map((a) => `<li class="${a.done ? 'done' : ''}"><i>${a.done ? '✓' : ''}</i><span>${esc(a.text)}</span>${a.done ? `<b>+${n(a.reward)}</b>` : ''}</li>`).join('')}</ul></div>` : ''}
+      <blockquote class="anchor">“${esc(quote)}”<cite>${esc(who)}, WYF 6</cite></blockquote>
+    </aside>
+    <footer class="rc-foot">
+      <div class="row">${buttons}</div>
+      <div class="rc-meta">On air ${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')} · Rampage ${Math.round(sim.stats.timeAtTier[2])}s<span class="bests"></span></div>
+      <div class="padhint"></div>
+    </footer>
+  </div>
+  <button class="playdata" id="playdata">Copy play data</button>`;
+  // Bests land once storage answers (it's async): a NEW BEST tag and the lifetime line.
+  void statsReady?.then((r) => {
+    if (!r || recapEl.hidden) return;
+    if (r.newBest) recapEl.querySelector('.rc-hero .score')?.classList.add('newbest');
+    const b = recapEl.querySelector('.rc-meta .bests');
+    if (b && !run) b.textContent = ` · Best ${n(r.best.bestBanked)} · Signed off ${r.best.signOffs} of ${r.best.broadcasts}`;
+  });
   recapEl.hidden = false;
   // Playtest export: log this broadcast once, then copy everything logged so far.
   if (!lastEntry || lastEntry.seed !== simOpts.seed || lastEntry.segment !== simOpts.segment || lastEntry.seconds !== Math.round(sim.time * 10) / 10) {
@@ -653,7 +671,7 @@ function showRecap() {
       (recapEl.querySelector('.row button') as HTMLButtonElement | null)?.focus(); // back to the real choice
     };
   }
-  (recapEl.querySelector('.row button') as HTMLButtonElement).focus();
+  (recapEl.querySelector('.row button') as HTMLButtonElement).focus({ preventScroll: true });
 }
 
 /** Recap buttons go through the shell's results flow (retry / menu). */
@@ -749,7 +767,6 @@ function present(e: SimEvent) {
       break;
     }
     case 'bounce': {
-      tips.want(e.cls === 'immovable' ? 'dozer' : 'bounce');
       const k = I.bounce;
       audio.bounce(where(e.s, e.d));
       giant.onBounce();
@@ -782,7 +799,6 @@ function present(e: SimEvent) {
       }
       break;
     case 'dodge': {
-      tips.want('dodge');
       runStats.nearMiss++;
       audio.whoosh(where(e.s, e.d));
       rig.jolt(I.dodge.shake, 0.1);
@@ -802,9 +818,6 @@ function present(e: SimEvent) {
       // From the unit if it's on the road already, else from its lane ahead of him.
       const u = sim.pursuit.units.find((x) => x.id === e.id);
       audio.tell(e.kind, u ? where(u.s, u.d) : where(g.s + 40, sim.track.laneCenter(e.lane)));
-      if (e.kind === 'net') tips.want('net');
-      else if (e.kind === 'carrier') tips.want('carrier');
-      else if (e.kind === 'rolling' && sim.pursuit.units.some((x) => x.alive && x.kind === 'armored' && x.unit === 'rolling')) tips.want('armored');
       break;
     }
     case 'netSlip': {
@@ -829,7 +842,6 @@ function present(e: SimEvent) {
       haptic(110, 0.6);
       break;
     case 'exitOpen':
-      tips.want('exit');
       highway.rebuild([e.segment - 1, e.segment, e.segment + 1, e.segment + 2]);
       break;
     case 'forkOpen':
@@ -992,7 +1004,6 @@ function present(e: SimEvent) {
       audio.capeWhip(0.5 + g.tier * 0.25);
       break;
     case 'tierUp': {
-      tips.want(e.tier === 1 ? 'stride' : 'rampage');
       rig.tierUpPulse();
       rig.gearPunch();
       highway.alarm();
@@ -1076,6 +1087,24 @@ function stepSim(inp: SimInput) {
 // normal renderer plays it from a cut-away angle in slow motion. The live views are parked and
 // restored untouched; run stats and headlines from the replay are thrown away.
 
+/** The recap's picture: a still of tonight's top moment (or the last shot when there was no replay). */
+let recapShot: string | null = null;
+let recapShotFromReplay = false;
+function grabShot() {
+  // Copied in the same task as the render, so the drawing buffer is still there.
+  const W = Math.min(TUNING.replay.shotWidth, canvas.width);
+  const c = document.createElement('canvas');
+  c.width = W;
+  c.height = Math.round((W * canvas.height) / canvas.width);
+  try {
+    c.getContext('2d')!.drawImage(canvas, 0, 0, c.width, c.height);
+    recapShot = c.toDataURL('image/jpeg', 0.84);
+    recapShotFromReplay = !!replay;
+  } catch {
+    recapShot = null;
+  }
+}
+
 function noteMoment(e: SimEvent) {
   if (replay || attract || !sim.live) return;
   const S = TUNING.replay.score;
@@ -1140,7 +1169,10 @@ function updateReplay() {
   const t = r.sim.time;
   replayRate = t >= r.slowFrom && t <= r.slowTo ? TUNING.replay.slow : 1;
   const skip = performance.now() > r.armedAt && !!app && (app.shell.input.wasPressed('ui_accept') || app.shell.input.wasPressed('ui_cancel'));
-  if (t >= r.end || skip || !r.sim.live) endReplay();
+  // Skipped before the picture was taken: take this frame for the recap, then leave on the next one.
+  if (skip && !recapShot) r.grab = true;
+  if (r.grab && !recapShot) return;
+  if (t >= r.end || skip || r.grab || !r.sim.live) endReplay();
 }
 
 function endReplay() {
@@ -1161,7 +1193,6 @@ function endReplay() {
   recentEvents.push(...L.recent);
   giant.reset();
   rig.snap(targetAt(sim.giant.s, sim.giant.d));
-  tips.clear();
   document.documentElement.classList.remove('replay');
   chyText.classList.remove('empty');
   replayEl.hidden = true;
@@ -1333,7 +1364,6 @@ app = await createGameApp({
         { id: 'wyf-livetime', label: `LIVE TIME: ${onOff(settings.liveTime)}`, description: 'Lighting follows your clock; off is always night' },
         { id: 'wyf-flashes', label: `Reduce Flashes: ${onOff(settings.reduceFlashes)}` },
         { id: 'wyf-colors', label: `HUD Colours: ${settings.hudColors === 'network' ? 'Network' : 'WYF 6'}`, description: 'The station\'s purple and cream, or network red, blue and white' },
-        { id: 'wyf-tips', label: `Producer Tips: ${onOff(settings.producerTips)}`, description: 'Turning them back on replays them' },
         { id: 'wyf-debug', label: `Debug Overlay: ${onOff(settings.debug)}` },
       ],
       handle: async (id) => {
@@ -1350,9 +1380,6 @@ app = await createGameApp({
         else if (id === 'wyf-colors') {
           settings.hudColors = settings.hudColors === 'network' ? 'wyf' : 'network';
           applyHudColors();
-        } else if (id === 'wyf-tips') {
-          settings.producerTips = !settings.producerTips;
-          if (settings.producerTips) tips.reset();
         } else if (id === 'wyf-debug') {
           settings.debug = !settings.debug;
           settings.debugChosen = true;
@@ -1541,7 +1568,7 @@ function frame(now: number) {
       if (run) run.finishSegment(sim.show);
       if (run?.phase !== 'meeting') {
         app?.shell.session.setPhase('results');
-        void recordStats();
+        statsReady = recordStats();
       }
       // Tonight's top moment first, then the recap.
       if (moment && flags.replay && !flags.stepMode) startReplay(showRecap);
@@ -1552,7 +1579,7 @@ function frame(now: number) {
   if (briefingClose && app?.shell.input.wasPressed('ui_back') && recapArmed()) briefingClose();
   // Controller parity on the recap: left/right to move, A to choose.
   if (!recapEl.hidden && app) {
-    const btns = ([...recapEl.querySelectorAll('button')] as HTMLButtonElement[]).filter((b) => !b.disabled);
+    const btns = ([...recapEl.querySelectorAll('button')] as HTMLButtonElement[]).filter((b) => !b.disabled && b.id !== 'playdata');
     const i = Math.max(0, btns.indexOf(document.activeElement as HTMLButtonElement));
     if (app.shell.input.wasPressed('ui_right') || app.shell.input.wasPressed('ui_down')) btns[(i + 1) % btns.length].focus();
     if (app.shell.input.wasPressed('ui_left') || app.shell.input.wasPressed('ui_up')) btns[(i + btns.length - 1) % btns.length].focus();
@@ -1597,6 +1624,8 @@ function frame(now: number) {
     renderer.render(scene, poseCam);
   } else if (updateTitleShot(realDt, t)) renderer.render(scene, titleCam);
   else renderer.render(scene, rig.camera);
+  // The recap's picture: the replay's own frame just as the moment lands (before the viewer-video window draws).
+  if (replay && !recapShot && moment && (replay.grab || replay.sim.time >= moment.t + TUNING.replay.shotAfter)) grabShot();
   pip.render(renderer, scene);
   updateHud(realDt);
   updateGlyphs();
@@ -1707,11 +1736,12 @@ let lastRatings = 0;
 const poseCam = new THREE.PerspectiveCamera(40, 16 / 9, 0.5, 500);
 
 /** Persist the bests (shell storage, per game id). */
-async function recordStats() {
-  if (!app) return;
+async function recordStats(): Promise<{ best: Stats; newBest: boolean } | null> {
+  if (!app) return null;
   const st = app.storage;
   const sh = sim.show;
   const best = (await st.get<Stats>('wyf.stats')) ?? { broadcasts: 0, signOffs: 0, bestBanked: 0, bestPeak: 0 };
+  const newBest = !run && best.broadcasts > 0 && Math.round(sh.banked) > best.bestBanked;
   best.broadcasts++;
   if (sh.state === 'cleared') best.signOffs++;
   best.bestBanked = Math.max(best.bestBanked, Math.round(sh.banked));
@@ -1722,11 +1752,12 @@ async function recordStats() {
     best.bestRun = Math.max(best.bestRun ?? 0, Math.round(run.earned));
   }
   await st.set('wyf.stats', best);
-  lastBest = best;
+  return { best, newBest };
 }
 /** Stored bests. Phase 3 fields are optional so older saves load unchanged. */
 type Stats = { broadcasts: number; signOffs: number; bestBanked: number; bestPeak: number; runs?: number; runsWon?: number; bestRun?: number };
-let lastBest: Stats | null = null;
+/** The bests as this broadcast's save lands (the recap reads them when they arrive). */
+let statsReady: Promise<{ best: Stats; newBest: boolean } | null> | null = null;
 let lastCoverage = performance.now();
 
 /** Edge arrow to the sign-off ramp (§21), pointing at the gore from wherever it is. */
@@ -1797,7 +1828,6 @@ function updateHud(dt: number) {
   chainResultT = Math.max(0, chainResultT - dt);
   if (ch.count === 0 && chainResultT <= 0 && chainEl.classList.contains('on')) chainEl.className = '';
   chainEl.hidden = attract;
-  updateTips();
   const falling = sim.live && sh.ratings < lastRatings - 1e-6;
   trendEl.textContent = falling ? '▼' : '';
   lastRatings = sh.ratings;

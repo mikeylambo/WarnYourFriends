@@ -400,6 +400,8 @@ export const TUNING = {
    */
   replay: {
     lead: 2.2, slow: 0.35, slowBefore: 0.35, slowAfter: 1.0, after: 1.6, angle: 'Long Lens',
+    /** The recap's picture: grabbed this long after the moment (debris in the air), at this width in px (a still, not a screenshot). */
+    shotAfter: 0.2, shotWidth: 960,
     score: { policeCrash: 10, unitSmash: 7, leapLand: 4, hijackBail: 5, heavyAcross: 6, heavy: 4, nearMiss: 4, ramMiss: 4, pose: 3 },
   },
 
@@ -828,21 +830,6 @@ export const TUNING = {
     chopperShadowEvery: [16, 32] as [number, number],
     /** Siren flash rate (Hz). */
     sirenHz: 2.2,
-  },
-
-  /** Onboarding producer notes (src/tips.ts): on screen this long, at least this far apart (s); thresholds. */
-  tips: {
-    /** Producer's notes on the recap: at most this many per broadcast, so the card stays a glance. */
-    perRecap: 2,
-    /** "He shifts up a gear" if he's still at Jog this far in (s). */
-    gearAfter: 4,
-    /** Warn about a bulldozer this far ahead (m). */
-    dozerAhead: 70,
-    /** "We're losing them" below this Ratings, after this long on air. */
-    losingBelow: 12,
-    losingAfter: 10,
-    /** Budget note this far into the first Full Broadcast segment (s). */
-    budgetAfter: 8,
   },
 
   /** Title screen chopper shot (Mike's visual direction): metres relative to the giant's travel. */

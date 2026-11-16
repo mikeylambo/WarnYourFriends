@@ -8,7 +8,6 @@ export interface Settings {
   /** Phase 0c LIVE TIME: lighting follows the local clock. Off = always night. */
   liveTime: boolean;
   /** Onboarding: one-line producer notes the first time each thing matters. */
-  producerTips: boolean;
   /** HUD colours (Mike, 2026-11-15): 'wyf' = the station's own (purple, ink, cream, red 6), 'network' = red / blue / white. */
   hudColors: 'wyf' | 'network';
   /** Kept for saves written while Giant Size was a setting (2026-11-15); the size is committed now. */
@@ -18,7 +17,7 @@ export interface Settings {
 }
 
 const KEY = 'wyf.settings.v1';
-const DEFAULTS: Settings = { reducedMotion: false, reduceFlashes: false, debug: false, cameraCuts: true, liveTime: false, producerTips: true, hudColors: 'wyf', giantSize: 'growth' };
+const DEFAULTS: Settings = { reducedMotion: false, reduceFlashes: false, debug: false, cameraCuts: true, liveTime: false, hudColors: 'wyf', giantSize: 'growth' };
 
 export function loadSettings(): Settings {
   try {
@@ -33,7 +32,6 @@ export function loadSettings(): Settings {
       debugChosen: parsed.debugChosen === true,
       cameraCuts: typeof parsed.cameraCuts === 'boolean' ? parsed.cameraCuts : DEFAULTS.cameraCuts,
       liveTime: typeof parsed.liveTime === 'boolean' ? parsed.liveTime : DEFAULTS.liveTime,
-      producerTips: typeof parsed.producerTips === 'boolean' ? parsed.producerTips : DEFAULTS.producerTips,
       hudColors: parsed.hudColors === 'network' ? 'network' : 'wyf',
       giantSize: parsed.giantSize === 'fixed' || parsed.giantSize === 'big' ? parsed.giantSize : 'growth',
     };
