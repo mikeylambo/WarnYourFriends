@@ -61,7 +61,9 @@ export class Show {
     if (outnumbered) amount *= S.outnumberedMult;
     const before = this.ratings;
     this.ratings = Math.min(S.max, this.ratings + amount);
-    this.lastGain = time;
+    // Sustained Rampage is a trickle against decay, not a reason to hold it off (balance 2026-11-16):
+    // otherwise +1/s at Rampage resets the 3s timer forever and Ratings can't fall while he runs.
+    if (type !== 'rampage') this.lastGain = time;
     const delta = this.ratings - before;
     this.peak = Math.max(this.peak, this.ratings);
     out.push({ type: 'ratings', delta, cause: type, ratings: this.ratings });
@@ -90,7 +92,7 @@ export class Show {
         this.gain('rampage', time, outnumbered, out);
       }
     } else this.rampageAcc = 0;
-    if (time - this.lastGain > S.decayAfter) {
+    if (time > S.decayGrace && time - Math.max(this.lastGain, S.decayGrace - S.decayAfter) > S.decayAfter) {
       this.ratings = Math.max(0, this.ratings - S.decayRate[Math.min(this.segment, S.decayRate.length - 1)] * dt);
     }
     if (this.chain.count > 0 && time - this.chain.last > TUNING.spectacle.window) this.endChain(false, out);

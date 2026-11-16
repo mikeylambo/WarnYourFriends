@@ -604,6 +604,8 @@ export const TUNING = {
     /** §12 decay: after 3s with no gain; segment 1 rate (2.0/2.75/3.5/4.25/5.0 by segment). */
     decayAfter: 3,
     decayRate: [2.0, 2.75, 3.5, 4.25, 5.0],
+    /** No decay in a segment's opening seconds (cold open, the prop-free run-up, Jog can't score): balance 2026-11-16, later segments otherwise bust at ~9s before he can reach anything. */
+    decayGrace: 12,
     /** §12 variety: repeats within 10s pay ×0.5 then ×0.25; a type unseen this segment pays ×1.5. */
     repeatWindow: 10,
     repeatMult: [1, 0.5, 0.25],

@@ -69,6 +69,7 @@ describe('police chopper spotlight (v0.3 §11)', () => {
     run(sim, 1);
     expect(u.phase).toBe('act');
     expect(sim.pursuit.marked).toBe(true);
+    sim.show.ratings = 50; // room under the cap to see the lost-track gain
     const before = sim.show.ratings;
     const ev = run(sim, 0.05, { ...NO_INPUT, lane: -1 }).concat(run(sim, 1));
     expect(ev.some((e) => e.type === 'lostTrack' && e.kind === 'chopper')).toBe(true);
