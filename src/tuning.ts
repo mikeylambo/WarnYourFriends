@@ -274,6 +274,8 @@ export const TUNING = {
   track: {
     /** A lane line is painted only where the lane beyond it is at least this share of a full lane (an opening lane gets its line late, not as a sliver). */
     laneLineAt: 0.9,
+    /** The built road edge (walls, verge, pavement) smooths lane-count changes over ±this many m, twice (max, then average): a ~3° drift, not a 40m S-bend. */
+    edgeSmooth: 40,
     /** v0.3: built from 40m segments. */
     segmentLength: 40,
     /** v0.3: curves turn at most 8° per segment, eased (no curvature kinks). */
@@ -806,8 +808,11 @@ export const TUNING = {
 
   /** Phase 0c broadcast (§21). */
   broadcast: {
-    /** A new headline at most every 7s (§21 said 4; Mike, 2026-11-16: "cycle far too quickly"); tier changes interrupt with BREAKING. */
-    headlineEvery: 7,
+    /**
+     * Each headline holds at least 12s (§21 said 4; Mike, 2026-11-16: 7 still "feels excessive"). Broadcast lower thirds hold
+     * ~8–15s (read twice); a cable news banner holds far longer. Tier changes still interrupt with BREAKING.
+     */
+    headlineEvery: 12,
     /** §21: no verb or place reused within the last 5 headlines. */
     antiRepeat: 5,
     /** Smashes inside one headline window are counted together ("3 Cars"). */
@@ -815,9 +820,9 @@ export const TUNING = {
     /** Opening headline after this long. */
     openAt: 1.2,
     /** Queued news older than this is dropped, not shown late (s). */
-    staleAfter: 9,
+    staleAfter: 14,
     /** ...except the player's own ability moments (Leap, Stare, Hijack, Pose): they wait longer for a slot. */
-    staleAfterAbility: 12,
+    staleAfterAbility: 18,
   },
 
   /** Phase 2 broadcast escalation (presentation). */
