@@ -33,6 +33,11 @@ export const PALETTE = {
   tunnelTrim: 0xc7a24a,
   storefronts: [0xd9c2a3, 0xb7c4c9, 0xc9a9a0, 0xa9b39a, 0xd6cfb8, 0xb3a6c4],
   awnings: [0xd7263d, 0x2f6f8f, 0xe8a33a, 0x3f7f5a],
+  /** Building pass: roof parapet caps and rooftop units (cooler and darker than the facades, so the roofline reads from above). */
+  roofCap: 0x8f877d,
+  roofUnit: 0xb8b4ac,
+  /** Shop signs above the awnings: lit, saturated, original (no real brands). */
+  signs: [0xff5a4e, 0x3fc1d9, 0xffd23f, 0x7ddc6f, 0xff8ad8],
   crack: 0x2e2a33,
 
   giantBody: 0x2b1446,

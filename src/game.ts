@@ -1899,6 +1899,8 @@ window.__GAME = {
   director: () => ({ enabled: director.enabled, current: director.current, pinned: director.pinned, awayCuts: director.awayCuts }),
   toggleHeadOn,
   /** Dev: slow motion (camera included), for filmstrips. */
+  /** Render cost of the last frame (draw calls, triangles): performance evidence. */
+  renderInfo: () => ({ calls: renderer.info.render.calls, triangles: renderer.info.render.triangles }),
   sfx: () => audio.loadedKinds(),
   /** Spatial mix check: pan and level of a sound `across` m to the camera's right of him and `along` m ahead. */
   sfxPlace: (across: number, along: number) => {

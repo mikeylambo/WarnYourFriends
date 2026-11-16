@@ -5,7 +5,7 @@ import type { Unit } from '../sim/types';
 import { KIND_COLORS, MATERIAL_DEBRIS } from './palette';
 import { GLOW } from './glow';
 import { toon } from './toon';
-import { partsFor, type HighwayView } from './highway';
+import { propBody, type HighwayView } from './highway';
 
 /**
  * Phase 2 pursuer views. Reads `sim.pursuit.units` each frame; never writes.
@@ -116,12 +116,7 @@ export class UnitViews {
     }
     const body = new THREE.Group();
     const kc = KIND_COLORS[u.kind][0];
-    for (const [x, y, z, w, h, d, c] of partsFor(u)) {
-      const m = new THREE.Mesh(BOX, toon(c === 'kind' ? kc : c));
-      m.position.set(x, y, z);
-      m.scale.set(w, h, d);
-      body.add(m);
-    }
+    body.add(propBody(u, kc));
     root.add(body);
     const L = u.hl * 2;
     const W = u.hw * 2;

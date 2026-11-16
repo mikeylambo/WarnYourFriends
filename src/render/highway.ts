@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { TUNING } from '../tuning';
 import type { Sim } from '../sim/sim';
 import type { Segment } from '../sim/track';
@@ -73,7 +74,33 @@ interface CarFx {
  * pooled debris, dust rings and Rampage crack decals. Reads sim state only.
  */
 
-export type Part = [x: number, y: number, z: number, w: number, h: number, d: number, color: number | 'kind'];
+/** A box (or a wheel: a cylinder across the vehicle, w = h = diameter, d = tyre width), optionally tilted about its across axis (rad). */
+export type Part = [x: number, y: number, z: number, w: number, h: number, d: number, color: number | 'kind', shape?: 'wheel', tilt?: number];
+
+const GLASS = 0x1d2633;
+const TYRE = 0x18181b;
+const TRIM = 0x2b2b2e;
+/** Four (or six) wheels under a body of length L and width W: diameter `dia`, axles at these fractions of L. */
+function wheels(L: number, W: number, dia: number, axles: number[]): Part[] {
+  const out: Part[] = [];
+  for (const a of axles) for (const side of [-1, 1]) out.push([a * L, dia / 2, side * (W / 2 - 0.14), dia, dia, 0.3, TYRE, 'wheel']);
+  return out;
+}
+/** A sedan-like car (cars, cruisers, compacts): body, shoulder line, glass cabin with a tilted windscreen, roof, bumpers, wheels. */
+function sedan(L: number, W: number, body: number | 'kind', roof: number | 'kind'): Part[] {
+  return [
+    [0, 0.6, 0, L, 0.55, W, body],
+    [-0.02 * L, 0.93, 0, 0.94 * L, 0.14, 0.97 * W, body],
+    [-0.06 * L, 1.26, 0, 0.5 * L, 0.52, 0.84 * W, GLASS],
+    [0.21 * L, 1.15, 0, 0.14 * L, 0.42, 0.82 * W, GLASS, undefined, -0.75],
+    [-0.34 * L, 1.15, 0, 0.12 * L, 0.4, 0.82 * W, GLASS, undefined, 0.7],
+    [-0.06 * L, 1.26, 0, 0.05 * L, 0.52, 0.86 * W, roof],
+    [-0.07 * L, 1.56, 0, 0.46 * L, 0.09, 0.87 * W, roof],
+    [L / 2 + 0.03, 0.42, 0, 0.1, 0.2, 0.98 * W, TRIM],
+    [-L / 2 - 0.03, 0.42, 0, 0.1, 0.2, 0.98 * W, TRIM],
+    ...wheels(L, W, 0.66, [0.31, -0.31]),
+  ];
+}
 
 /** Box parts per prop kind, in prop-local space: x along the road, z across it. */
 export function partsFor(p: Prop): Part[] {
@@ -87,27 +114,78 @@ export function partsFor(p: Prop): Part[] {
     case 'fence':
       return [[0, 0.75, 0, 0.08, 1.3, W, 'kind'], [0, 0.06, W * 0.45, 0.6, 0.12, 0.3, 0x6d737a], [0, 0.06, -W * 0.45, 0.6, 0.12, 0.3, 0x6d737a]];
     case 'scooter':
-      return [[0, 0.45, 0, L, 0.5, W, 'kind'], [-L * 0.15, 0.8, 0, L * 0.4, 0.15, W * 0.9, 0x333333], [L * 0.4, 0.95, 0, 0.1, 0.5, W * 1.6, 0x8c939b]];
+      // Step-through scooter: deck and seat, front apron and bars, two small wheels.
+      return [[0, 0.42, 0, L * 0.7, 0.18, W * 0.8, 'kind'], [-L * 0.15, 0.72, 0, L * 0.42, 0.42, W, 'kind'], [-L * 0.15, 0.98, 0, L * 0.36, 0.1, W * 0.9, 0x333333], [L * 0.34, 0.7, 0, 0.16, 0.7, W * 0.9, 'kind'], [L * 0.38, 1.1, 0, 0.08, 0.08, W * 1.8, 0x8c939b], [L * 0.38, 0.28, 0, 0.5, 0.5, 0.16, TYRE, 'wheel'], [-L * 0.36, 0.28, 0, 0.5, 0.5, 0.16, TYRE, 'wheel']];
     case 'car':
-      return [[0, 0.68, 0, L, 0.85, W, 'kind'], [-L * 0.05, 1.38, 0, L * 0.55, 0.55, W * 0.88, 0xa9cfe0], [-L * 0.05, 1.68, 0, L * 0.5, 0.07, W * 0.9, 'kind']];
+      return sedan(L, W, 'kind', 'kind');
     case 'van':
-      return [[0, 1.25, 0, L, 1.9, W, 'kind'], [L * 0.42, 1.55, 0, L * 0.18, 0.6, W * 0.9, 0xa9cfe0], [0, 1.0, 0, L * 1.01, 0.2, W * 1.01, 0xd94f4f]];
+      // Box truck: chassis, cab with a tilted windscreen, cargo box with the red stripe, three axles.
+      return [
+        [0, 0.48, 0, L, 0.3, W * 0.94, TRIM],
+        [-L * 0.12, 1.5, 0, L * 0.74, 1.95, W, 'kind'],
+        [-L * 0.12, 1.05, 0, L * 0.745, 0.2, W * 1.01, 0xd94f4f],
+        [L * 0.37, 1.08, 0, L * 0.24, 1.3, W * 0.96, 0xe8e4dc],
+        [L * 0.47, 1.45, 0, 0.12, 0.55, W * 0.84, GLASS, undefined, -0.35],
+        [L * 0.5 + 0.03, 0.55, 0, 0.1, 0.25, W * 0.98, TRIM],
+        ...wheels(L, W, 0.82, [0.36, -0.16, -0.36]),
+      ];
     case 'barricade':
       return [[0, 0.38, 0, L, 0.75, W, 'kind'], [0, 0.86, 0, L * 0.8, 0.2, W, 0xf08a24]];
     case 'dozer':
       // Tracked body, cab, and a wide blade facing the giant: reads as "not going through that".
-      return [[0, 0.35, W * 0.38, L * 0.95, 0.7, W * 0.22, 0x2b2b2e], [0, 0.35, -W * 0.38, L * 0.95, 0.7, W * 0.22, 0x2b2b2e], [0.1, 1.05, 0, L * 0.7, 0.75, W * 0.7, 'kind'], [-0.35, 1.9, 0, L * 0.35, 0.95, W * 0.5, 'kind'], [-0.35, 2.4, 0, L * 0.4, 0.08, W * 0.56, 0x2b2b2e], [-L * 0.55, 0.6, 0, 0.22, 1.1, W * 1.12, 0x8c939b]];
+      return [[0, 0.35, W * 0.38, L * 0.95, 0.7, W * 0.22, TRIM], [0, 0.35, -W * 0.38, L * 0.95, 0.7, W * 0.22, TRIM], [0.1, 1.05, 0, L * 0.7, 0.75, W * 0.7, 'kind'], [-0.35, 1.9, 0, L * 0.35, 0.95, W * 0.5, 'kind'], [-0.35, 1.95, 0, L * 0.3, 0.6, W * 0.52, GLASS], [-0.35, 2.4, 0, L * 0.4, 0.08, W * 0.56, TRIM], [0.45, 2.05, W * 0.22, 0.12, 0.9, 0.12, TRIM], [-L * 0.55, 0.6, 0, 0.22, 1.1, W * 1.12, 0x8c939b], [-L * 0.5, 0.5, 0, 0.3, 0.12, W * 0.9, TRIM, undefined, 0.6]];
     case 'tollgate':
       // A striped boom arm across the lane on a post at its left end.
       return [[0, 1.0, 0, 0.14, 0.14, W, 'kind'], [0, 1.0, -W * 0.25, 0.15, 0.15, W * 0.16, 0xd64545], [0, 1.0, W * 0.15, 0.15, 0.15, W * 0.16, 0xd64545], [0, 0.6, -W * 0.5, 0.3, 1.2, 0.3, 0x6d737a]];
     case 'foodtruck':
-      // Painted box with a serving hatch and awning on its right side, a roof sign.
-      return [[0, 1.6, 0, L, 2.4, W, 'kind'], [L * 0.38, 1.3, 0, L * 0.24, 1.2, W * 0.95, 0xa9cfe0], [-L * 0.05, 1.9, W * 0.51, L * 0.5, 0.8, 0.06, 0x2a2230], [-L * 0.05, 2.45, W * 0.62, L * 0.55, 0.08, 0.5, 0xf2efe8], [-L * 0.1, 3.05, 0, L * 0.4, 0.5, 0.12, 0xf5d33b], [0, 0.35, 0, L * 0.9, 0.4, W * 0.9, 0x2b2b2e]];
+      // Step van: painted box, cream band, serving hatch with a propped awning on his right side, cab windscreen, roof sign.
+      return [
+        [0, 0.5, 0, L * 0.95, 0.3, W * 0.92, TRIM],
+        [-L * 0.06, 1.75, 0, L * 0.86, 2.2, W, 'kind'],
+        [-L * 0.06, 1.0, 0, L * 0.865, 0.22, W * 1.01, 0xf2efe8],
+        [L * 0.41, 1.45, 0, L * 0.16, 1.6, W * 0.96, 'kind'],
+        [L * 0.49, 1.85, 0, 0.12, 0.7, W * 0.84, GLASS, undefined, -0.25],
+        [-L * 0.08, 1.95, W * 0.505, L * 0.46, 0.75, 0.06, 0x2a2230],
+        [-L * 0.08, 2.5, W * 0.66, L * 0.5, 0.06, 0.6, 0xf2efe8, undefined, 0],
+        [-L * 0.1, 3.1, 0, L * 0.42, 0.5, 0.12, 0xf5d33b],
+        ...wheels(L, W, 0.8, [0.33, -0.3]),
+      ];
     case 'cruiser':
     case 'compact':
-      // Black-and-white police car (white doors and roof read from the chopper).
-      return [[0, 0.62, 0, L, 0.72, W, 'kind'], [0.1, 0.66, 0, L * 0.42, 0.5, W * 1.01, 0xf1f1ee], [-0.25, 1.28, 0, L * 0.5, 0.55, W * 0.86, 0x1d2633], [-0.25, 1.58, 0, L * 0.48, 0.06, W * 0.88, 0xf1f1ee]];
+      // Black-and-white police car (white doors and roof read from the chopper), push bar up front.
+      return [...sedan(L, W, 'kind', 0xf1f1ee), [0.05, 0.66, 0, L * 0.42, 0.42, W * 1.01, 0xf1f1ee], [L / 2 + 0.12, 0.6, 0, 0.1, 0.45, W * 0.7, TRIM]];
   }
+}
+
+/**
+ * Vehicle and prop bodies: every part of one model merged into a single vertex-coloured mesh, the geometry
+ * cached per kind, colour and size and shared by every prop like it. More detail than the old separate
+ * boxes for fewer draw calls (one per prop). Never disposed: it's shared.
+ */
+const UNIT_BOX = new THREE.BoxGeometry(1, 1, 1);
+const UNIT_WHEEL = new THREE.CylinderGeometry(0.5, 0.5, 1, 12).rotateX(Math.PI / 2); // axis across the vehicle
+const bodyGeos = new Map<string, THREE.BufferGeometry>();
+export function propBody(p: Pick<Prop, 'kind' | 'hl' | 'hw'>, kc: number): THREE.Mesh {
+  const key = `${p.kind}:${kc}:${p.hl}:${p.hw}`;
+  let geo = bodyGeos.get(key);
+  if (!geo) {
+    const col = new THREE.Color();
+    const parts = partsFor(p as Prop).map(([x, y, z, w, h, d, c, shape, tilt]) => {
+      const g = (shape === 'wheel' ? UNIT_WHEEL : UNIT_BOX).clone();
+      g.scale(w, h, d);
+      if (tilt) g.rotateZ(tilt);
+      g.translate(x, y, z);
+      col.setHex(c === 'kind' ? kc : c);
+      const n = g.getAttribute('position').count;
+      const arr = new Float32Array(n * 3);
+      for (let i = 0; i < n; i++) arr.set([col.r, col.g, col.b], i * 3);
+      g.setAttribute('color', new THREE.BufferAttribute(arr, 3));
+      return g;
+    });
+    geo = mergeGeometries(parts)!;
+    bodyGeos.set(key, geo);
+  }
+  return new THREE.Mesh(geo, toon(0xffffff, { vertexColors: true }));
 }
 
 interface Debris {
@@ -387,12 +465,23 @@ export class HighwayView {
       const left = rng.chance(0.5);
       const ss = seg.s0 + 20;
       this.sim.track.posAt(ss, left ? -rng.range(45, 70) : this.sim.track.widthAt(ss) + rng.range(45, 70), this.pos);
-      const b = new THREE.Mesh(this.box, toon(rng.pick(PALETTE.buildings)));
+      // Off-road blocks: lit windows like the avenue's, a roof cap and a rooftop unit.
+      const b = new THREE.Mesh(this.box, facade(rng.pick(PALETTE.buildings), toonRamp()));
       const bh = rng.range(6, 16);
-      b.scale.set(rng.range(14, 26), bh, rng.range(14, 26));
+      const bw = rng.range(14, 26);
+      const bd = rng.range(14, 26);
+      b.scale.set(bw, bh, bd);
       b.position.set(this.pos.x, bh / 2, this.pos.z);
       b.rotation.y = -h;
-      group.add(b);
+      const cap = new THREE.Mesh(this.box, toon(PALETTE.roofCap));
+      cap.scale.set(bw + 0.4, 0.5, bd + 0.4);
+      cap.position.set(this.pos.x, bh + 0.25, this.pos.z);
+      cap.rotation.y = -h;
+      const unit = new THREE.Mesh(this.box, toon(PALETTE.roofUnit));
+      unit.scale.set(3, 1.4, 2.4);
+      unit.position.set(this.pos.x + 2, bh + 1.2, this.pos.z - 1.5);
+      unit.rotation.y = -h;
+      group.add(b, cap, unit);
     }
     if (seg.index % 6 === 4) {
       // Overhead gantry with green signs (the reference footage has these).
@@ -444,16 +533,35 @@ export class HighwayView {
         const ht = rng.range(8, 20);
         const d = left ? -6 - depth / 2 : w + 6 + depth / 2;
         track.posAt(sMid, d, this.pos);
-        const b = new THREE.Mesh(this.box, facade(rng.pick(PALETTE.storefronts), toonRamp()));
-        b.scale.set(wid - 0.6, ht, depth);
-        b.position.set(this.pos.x, ht / 2, this.pos.z);
-        b.rotation.y = -track.headingAt(sMid);
-        const aw = new THREE.Mesh(this.box, toon(rng.pick(PALETTE.awnings)));
-        track.posAt(sMid, left ? -6.6 : w + 6.6, this.pos);
-        aw.scale.set(wid - 1.5, 0.25, 1.6);
-        aw.position.set(this.pos.x, 3.2, this.pos.z);
-        aw.rotation.y = b.rotation.y;
-        group.add(b, aw);
+        const color = rng.pick(PALETTE.storefronts);
+        const rot = -track.headingAt(sMid);
+        const at = (dd: number) => track.posAt(sMid, d + (left ? -1 : 1) * dd, { x: 0, z: 0 });
+        const put = (m: THREE.Mesh, sx: number, sy: number, sz: number, y: number, p: { x: number; z: number }) => {
+          m.scale.set(sx, sy, sz);
+          m.position.set(p.x, y, p.z);
+          m.rotation.y = rot;
+          group.add(m);
+          return m;
+        };
+        // Tall ones step back above the fifth floor or so; every roof gets a parapet and a unit or two.
+        const setback = ht > 14;
+        const lowH = setback ? ht * 0.68 : ht;
+        put(new THREE.Mesh(this.box, facade(color, toonRamp())), wid - 0.6, lowH, depth, lowH / 2, at(0));
+        put(new THREE.Mesh(this.box, toon(PALETTE.roofCap)), wid - 0.3, 0.45, depth + 0.3, lowH + 0.22, at(0));
+        let roofY = lowH + 0.45;
+        if (setback) {
+          const upH = ht - lowH;
+          put(new THREE.Mesh(this.box, facade(color, toonRamp())), (wid - 0.6) * 0.7, upH, depth * 0.65, lowH + upH / 2, at(depth * 0.12));
+          put(new THREE.Mesh(this.box, toon(PALETTE.roofCap)), (wid - 0.6) * 0.7 + 0.3, 0.4, depth * 0.65 + 0.3, ht + 0.2, at(depth * 0.12));
+          roofY = ht + 0.4;
+        }
+        for (let k = 0; k < rng.int(1, 2); k++) put(new THREE.Mesh(this.box, toon(PALETTE.roofUnit)), rng.range(1.4, 2.4), 1.1, rng.range(1.4, 2.4), roofY + 0.55, at(rng.range(1, depth * 0.5)));
+        // Street level: awning, and a lit sign band above it (it reads as a shop from the chopper).
+        const front = track.posAt(sMid, left ? -6.6 : w + 6.6, { x: 0, z: 0 });
+        put(new THREE.Mesh(this.box, toon(rng.pick(PALETTE.awnings))), wid - 1.5, 0.25, 1.6, 3.2, front);
+        const sign = track.posAt(sMid, left ? -6.05 : w + 6.05, { x: 0, z: 0 });
+        const sc = rng.pick(PALETTE.signs);
+        put(new THREE.Mesh(this.box, toon(sc, { emissive: sc, emissiveIntensity: 0.55 })), (wid - 0.6) * rng.range(0.45, 0.75), 0.9, 0.2, 4.4, sign);
         a += wid;
       }
     }
@@ -797,12 +905,7 @@ export class HighwayView {
     const g = new THREE.Group();
     const colors = KIND_COLORS[p.kind];
     const kc = colors[p.variant % colors.length];
-    for (const [x, y, z, w, h, d, c] of partsFor(p)) {
-      const m = new THREE.Mesh(this.box, toon(c === 'kind' ? kc : c));
-      m.position.set(x, y, z);
-      m.scale.set(w, h, d);
-      g.add(m);
-    }
+    g.add(propBody(p, kc));
     g.userData.colors = [kc];
     g.userData.roof = Math.max(...partsFor(p).map((q) => q[1] + q[4] / 2));
     return g;
@@ -835,12 +938,7 @@ export class HighwayView {
     g.add(body);
     const colors = KIND_COLORS[p.kind];
     const kc = colors[p.variant % colors.length];
-    for (const [x, y, z, w, h, d, c] of partsFor(p)) {
-      const m = new THREE.Mesh(this.box, toon(c === 'kind' ? kc : c));
-      m.position.set(x, y, z);
-      m.scale.set(w, h, d);
-      body.add(m);
-    }
+    body.add(propBody(p, kc));
     this.sim.track.posAt(p.s, p.d, this.pos);
     g.position.set(this.pos.x, 0, this.pos.z);
     g.rotation.y = -this.sim.track.headingAt(p.s);

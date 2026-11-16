@@ -56,6 +56,7 @@ tools/shots-shoulder.mjs  Shoulder Check filmstrip: wind-up, drive, recover
 tools/shots-hud.mjs     HUD (Direction D) in both palettes: desktop, phone landscape, phone portrait
 tools/shots-landmarks.mjs  Landmarks: toll plaza, night market, roadworks, rush hour on approach (ONLY=, SEED_FROM=)
 tools/shots-size.mjs    Giant size: growth at each gear, fixed and big at Rampage
+tools/shots-vehicles.mjs  Vehicle sheet: every prop and police body from the chopper and side-on (dev page tools/modelsheet/vehicles.html)
 ```
 
 ## Deploys
