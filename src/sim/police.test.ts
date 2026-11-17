@@ -156,7 +156,7 @@ describe('police crashes', () => {
     expect(Math.abs(u.d - g.d)).toBeGreaterThan(TUNING.lanes.width * 0.5);
   });
 
-  it('caught: crawling with a cruiser on his tail fills the meter; the first catch shakes them, the second busts him', () => {
+  it('caught: crawling with a cruiser on his tail fills the meter, and the first catch busts him (Mike, 2026-11-17)', () => {
     const sim = emptySim(3);
     run(sim, 3);
     const g = sim.giant;
@@ -167,9 +167,9 @@ describe('police crashes', () => {
       sim.show.ratings = 100; // isolate the police from the audience
       ev.push(...sim.step({ ...NO_INPUT, brake: true }));
     }
-    const slip = ev.find((e) => e.type === 'netSlip');
-    expect(slip && slip.type === 'netSlip' && slip.cause).toBe('caught');
+    expect(ev.some((e) => e.type === 'netSlip')).toBe(false); // no shaking them off
     expect(sim.show.state).toBe('busted');
+    expect(sim.show.pinCause).toBe('caught');
     expect(sim.show.reason).toBe('pin');
     expect(sim.giant.speed).toBeGreaterThanOrEqual(TUNING.giant.speedFloor - 1e-9); // Law 1 held throughout
   });
@@ -224,5 +224,42 @@ describe('rams take Rampage (Mike, 2026-11-16)', () => {
     const ev = run(sim, 1 / HZ, { ...NO_INPUT, shoulder: true, lane: dir }).concat(run(sim, 0.5));
     expect(ev.some((e) => e.type === 'smash' && e.propId === u.id)).toBe(true);
     expect(ev.some((e) => e.type === 'tierDown')).toBe(false);
+  });
+});
+
+describe('kiting (Mike, 2026-11-17)', () => {
+  it('a cruiser alongside him holds its lane into a bulldozer and crashes on air', () => {
+    const sim = emptySim();
+    const g = sim.giant;
+    g.tier = 1;
+    g.speed = TUNING.tiers[1].topSpeed;
+    g.tierTimer = -1e9;
+    run(sim, 1);
+    const lane = g.lane > 0 ? g.lane - 1 : g.lane + 1;
+    const u = internals(sim).make('cruiser', 'cruiser', g.s - 1, sim.track.laneCenter(lane), lane);
+    u.speed = g.speed;
+    (sim as unknown as { tellBusy: () => boolean }).tellBusy = () => true; // no ram: this is about riding alongside
+    const dozer = placeProp(sim, 'immovable', g.s + 25, lane);
+    dozer.kind = 'dozer';
+    const ev = run(sim, 4);
+    const crash = ev.find((e) => e.type === 'policeCrash' && e.id === u.id);
+    expect(crash).toBeTruthy();
+    expect(crash && crash.type === 'policeCrash' && crash.onAir).toBe(true);
+  });
+
+  it('a cruiser runs over a spike strip that is down', () => {
+    const sim = emptySim();
+    const g = sim.giant;
+    g.tier = 1;
+    g.speed = TUNING.tiers[1].topSpeed;
+    g.tierTimer = -1e9;
+    run(sim, 1);
+    const lane = g.lane > 0 ? g.lane - 1 : g.lane + 1;
+    const u = internals(sim).make('cruiser', 'cruiser', g.s - 1, sim.track.laneCenter(lane), lane);
+    u.speed = g.speed;
+    const spike = internals(sim).make('barricade', 'spike', g.s + 20, sim.track.laneCenter(lane), lane);
+    Object.assign(spike, { solid: false, hl: 0.35, hw: 1.8, cls: 'immovable', phase: 'act' });
+    const ev = run(sim, 3);
+    expect(ev.some((e) => e.type === 'policeCrash' && e.id === u.id && e.spikes)).toBe(true);
   });
 });

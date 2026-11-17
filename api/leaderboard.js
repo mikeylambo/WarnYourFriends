@@ -393,7 +393,10 @@ var TUNING = {
       // Mike: a higher head-on. Steeper means more road per screen, so further out to keep ≥2s below him.
       { name: "High Head-On", yawDeg: 10, pitchDeg: 58, distance: 122, fov: 17, headOn: true, swoopHome: true },
       // Mike: almost directly above. Travel stays screen-up; shows lanes, merges and the convoy like a map.
-      { name: "Overhead", yawDeg: 0, pitchDeg: 82, distance: 70, fov: 30, swoopHome: true }
+      { name: "Overhead", yawDeg: 0, pitchDeg: 82, distance: 70, fov: 30, swoopHome: true },
+      // Mike (2026-11-17): the sign-off sweeps deeper into a head-on, low and close, looking back down the road he came
+      // along; framed behind him so the end of the ramp ahead of him is out of shot. Outro only.
+      { name: "Sign-Off", yawDeg: 16, pitchDeg: 20, distance: 46, fov: 24, headOn: true, outro: true, lookBehind: 9 }
     ],
     /** Away angles each trigger can cut to (random pick, never the last away angle). Overhead suits merges: you see the lanes close. */
     cutAngles: { rampage: [3, 4, 1], heavy: [4, 3, 2], merge: [5, 1, 2] },
@@ -566,6 +569,8 @@ var TUNING = {
       swerve: 0.35,
       fallBack: 6,
       sideSpeed: 5,
+      /** Alongside him it holds its lane whatever is ahead (Mike, 2026-11-17: kiting works anywhere, not just at the road edge). */
+      fixated: true,
       /** A ram that connects costs a gear even at Rampage (Mike, 2026-11-16: Rampage is defended, not kept); a Shoulder Check into it still flattens it. */
       ramBeatsRampage: true,
       /**
@@ -598,7 +603,8 @@ var TUNING = {
      * a Heavy prop goes flying with it. Only within `visibleBehind` m behind him and ahead of that, so every
      * crash is in the chopper's frame (§1).
      */
-    crash: { react: 6, plowKeep: 0.8, visibleBehind: 5 },
+    /** avoidLook: behind the frame (not news), a cruiser looks this many seconds ahead and steers round solid things; avoidHold s before it rejoins his path. */
+    crash: { react: 6, plowKeep: 0.8, visibleBehind: 5, avoidLook: 0.7, avoidHold: 0.8 },
     /**
      * Police Net (Mike, 2026-11-16: "a real box-in", one goal and two threats). From Heat 3, at most
      * `perSegment[heat - 1]` a segment, `minGap` s apart. An armoured truck (nothing smashes it) takes his
@@ -608,7 +614,27 @@ var TUNING = {
      * flanker (Stride+), brake and drop back behind them, take the gap before they close, Leap, the Stare.
      * The truck cruises like a rolling roadblock until its tell (on screen, like every tell), then brakes.
      */
-    net: { perSegment: [0, 0, 1, 2, 2], minGap: 30, cruiseFactor: 0.55, tellAhead: 1.9, tellMin: 25, tellMax: 28, tell: 1.5, decel: 7, crawl: 3.5, flankClose: 9, flankAccel: 8, flankDecel: 5, flankHold: 14, flankSide: 3, actMax: 10, escapeAfter: 1.5, slipRatings: 15 },
+    net: {
+      perSegment: [0, 0, 1, 2, 2],
+      minGap: 30,
+      cruiseFactor: 0.55,
+      tellAhead: 1.9,
+      tellMin: 25,
+      tellMax: 28,
+      /** The crew breaks off if its truck gets this far ahead before closing (spawns ≤120m ahead; he slowed and it never waits). */
+      giveUpAhead: 145,
+      tell: 1.5,
+      decel: 7,
+      crawl: 3.5,
+      flankClose: 9,
+      flankAccel: 8,
+      flankDecel: 5,
+      flankHold: 14,
+      flankSide: 3,
+      actMax: 10,
+      escapeAfter: 1.5,
+      slipRatings: 15
+    },
     /**
      * Rolling Blockade (the rolling roadblock, upgraded): from `armoredFrom` Heat, one car in the line is the
      * armoured truck; and with 3+ lanes the gap moves: every `shiftEvery` s a car next to it slides over
@@ -629,7 +655,8 @@ var TUNING = {
      * `reach` m of him fill the meter at `fill`/s (≈3.3s). The first fill in a segment
      * he shakes them (they drop back for `backOff` s; a gear, a stumble and `net.slipRatings` lost), the second busts.
      */
-    caught: { below: 4, from: 20, gap: 2.5, reach: 3.5, fill: 30, backOff: 2.5, runDown: 14 },
+    /** `slips`: catches shaken off before one busts him. 0 (Mike, 2026-11-17: "if they catch the giant once it's game over"). */
+    caught: { below: 4, from: 20, gap: 2.5, reach: 3.5, fill: 30, backOff: 2.5, runDown: 14, slips: 0 },
     /** Near-miss (§12): a pursuer passes within 1.5m without contact. */
     nearMiss: 1.5,
     /** A unit this far behind the giant has lost track (§12) and leaves. */
@@ -682,6 +709,8 @@ var TUNING = {
    * Rampage on air (Mike, 2026-11-16: "embellish it"). Placeholder synth until the Suno stems land; the API
    * (Audio.setGear) stays. A music layer drops in at Rampage and cuts on losing it, with a power-down sweep.
    */
+  /** Smash sample levels by class: the light/medium takes are ~16 dB quieter than heavy, so they play hotter. */
+  sfxLevels: { light: 1.1, medium: 1.6, heavy: 1 },
   rampageAudio: {
     /** Layer level on the music bus, fade in (s), fade out on loss (s). */
     layer: 0.9,
@@ -787,6 +816,8 @@ var TUNING = {
     duskStart: 17,
     nightStart: 20,
     /** Sodium streetlights every this many metres, alternating sides. */
+    /** Roadside furniture on a bridge (signs, gantry posts, lamps) stands this far outside the edge: on the parapet, never over the water. */
+    bridgeMount: 0.45,
     lampSpacing: 20,
     /** Real point lights reused on the nearest lamps (the rest are glow decals). Each light costs every lit pixel. */
     lampLights: 2,
@@ -1465,7 +1496,7 @@ var Show = class _Show {
       this.pinCause = "caught";
     } else if (speed > S.pinDrainAbove || !boxed && speed >= TUNING.pursuit.caught.below) this.pin = Math.max(0, this.pin - S.pinDrain * this.pinDrainMult * dt);
     if (this.pin >= 100) {
-      if (this.netSlips < 1) {
+      if (this.netSlips < (this.pinCause === "caught" ? TUNING.pursuit.caught.slips : 1)) {
         this.netSlips++;
         this.pin = 0;
         const before = this.ratings;
@@ -1791,6 +1822,10 @@ var Pursuit = class {
     const truck = crew.find((x) => x.kind === "armored");
     const isTruck = u === truck;
     const W = TUNING.lanes.width;
+    if (u.phase !== "leave" && (!truck || truck.phase === "approach" && truck.s - g.s > N.giveUpAhead)) {
+      this.setPhase(u, "leave");
+      u.hit = true;
+    }
     switch (u.phase) {
       case "approach": {
         if (isTruck) {
@@ -1934,6 +1969,7 @@ var Pursuit = class {
     const sides = [-1, 1].filter((d) => g.lane + d >= 0 && g.lane + d < lanes);
     if (!sides.length) return false;
     const lane = g.lane + sides[this.rng.int(0, sides.length - 1)];
+    if (this.propIn(lane, s - 4, s + 30)) return false;
     const u = this.make("cruiser", "cruiser", s, sim.track.laneCenter(lane), lane);
     u.speed = g.speed + P.cruiser.closeSpeed;
     sim.emitPublic({ type: "unitSpawn", id: u.id, kind: "cruiser", s, d: u.d, lanes: [lane] });
@@ -1971,8 +2007,11 @@ var Pursuit = class {
         if (!close) {
           u.speed = g.speed + (g.speed < CA.below ? CA.runDown : C.closeSpeed);
           u.s += u.speed * dt;
-          const pd = sim.escort.pathAt(u.s);
-          u.d += clamp(pd - u.d, -C.sideSpeed * 2 * dt, C.sideSpeed * 2 * dt);
+          if (u.avoid && u.avoid > 0) u.avoid -= dt;
+          else {
+            const pd = sim.escort.pathAt(u.s);
+            u.d += clamp(pd - u.d, -C.sideSpeed * 2 * dt, C.sideSpeed * 2 * dt);
+          }
           u.lane = clamp(Math.round(u.d / TUNING.lanes.width - 0.5), 0, lanes - 1);
           u.phaseT = 0;
           break;
@@ -1989,7 +2028,8 @@ var Pursuit = class {
           if (u.phaseT > T.giveUp) this.setPhase(u, "leave");
           break;
         }
-        if (u.lane !== g.lane && Math.abs(u.d - g.d) < TUNING.lanes.width * 1.5 && !clear(u.lane)) {
+        if (alongside && C.fixated) {
+        } else if (u.lane !== g.lane && Math.abs(u.d - g.d) < TUNING.lanes.width * 1.5 && !clear(u.lane)) {
           const away = u.lane + Math.sign(u.lane - g.lane);
           if (clear(away)) u.lane = away;
         } else if (!clear(u.lane) || Math.abs(u.lane - g.lane) !== 1) {
@@ -2325,17 +2365,23 @@ var Pursuit = class {
     const sim = this.sim;
     const g = sim.giant;
     const K = TUNING.pursuit.crash;
-    if (u.s < g.s - K.visibleBehind) return;
+    const onAir = u.s >= g.s - K.visibleBehind;
     const track = sim.track;
-    if (u.phase === "leave" || u.phase === "approach" && u.s >= g.s - 9) {
+    const fixated = u.phase === "approach" && u.s >= g.s - 4 && Math.abs(u.lane - g.lane) === 1;
+    if (u.phase === "leave" && !this.inHisWay(u) || !onAir && !fixated && u.phase === "approach") {
       const lanes = track.lanesAt(u.s);
       const lane = clamp(Math.round(u.d / TUNING.lanes.width - 0.5), 0, lanes - 1);
-      const heavyAhead = (l) => track.propsBetween(u.s, u.s + u.hl + K.react).some((p) => p.cls !== "medium" && p.cls !== "light" && Math.abs(p.d - track.laneCenter(l)) < p.hw + u.hw);
-      if (u.phase === "leave" && !this.inHisWay(u) && heavyAhead(lane)) {
-        const opts = [lane - 1, lane + 1].filter((l) => l >= 0 && l < lanes && l !== g.lane && !this.propIn(l, u.s - u.hl, u.s + u.hl + K.react));
+      const look = Math.max(K.react, u.speed * K.avoidLook);
+      const solidAhead = (l) => track.propsBetween(u.s, u.s + u.hl + look).some((p) => p.alive && p.cls !== "medium" && p.cls !== "light" && Math.abs(p.d - track.laneCenter(l)) < p.hw + u.hw);
+      if (solidAhead(lane)) {
+        const opts = [lane - 1, lane + 1, lane - 2, lane + 2].filter((l) => l >= 0 && l < lanes && (onAir ? l !== g.lane : true) && !solidAhead(l));
         if (opts.length) {
           u.lane = opts[0];
-          u.d += clamp(track.laneCenter(u.lane) - u.d, -TUNING.pursuit.cruiser.sideSpeed * 2 * this.sim.dt, TUNING.pursuit.cruiser.sideSpeed * 2 * this.sim.dt);
+          if (u.phase === "leave") u.d += clamp(track.laneCenter(u.lane) - u.d, -TUNING.pursuit.cruiser.sideSpeed * 2 * this.sim.dt, TUNING.pursuit.cruiser.sideSpeed * 2 * this.sim.dt);
+          else {
+            u.d += clamp(track.laneCenter(u.lane) - u.d, -TUNING.pursuit.cruiser.sideSpeed * 2 * this.sim.dt, TUNING.pursuit.cruiser.sideSpeed * 2 * this.sim.dt);
+            u.avoid = K.avoidHold;
+          }
         }
       }
     }
@@ -2351,12 +2397,29 @@ var Pursuit = class {
       }
       const smashed = p.cls === "heavy";
       if (smashed) p.alive = false;
-      u.alive = false;
-      u.lost = true;
-      sim.emitPublic({ type: "policeCrash", id: u.id, propId: p.id, propKind: p.kind, propCls: p.cls, propSmashed: smashed, s: u.s, d: u.d, speed: Math.max(u.speed, g.speed) });
-      sim.award("policeCrash");
+      this.crashOut(u, p, smashed, onAir);
       return;
     }
+    for (const o of this.units) {
+      if (o === u || !o.alive || o.unit === "chopper" || o.unit === "carrier" || o.unit === "cruiser") continue;
+      if (Math.abs(o.s - u.s) >= o.hl + u.hl || Math.abs(o.d - u.d) >= o.hw + u.hw - 0.15) continue;
+      if (o.unit === "spike") {
+        if (o.phase !== "act") continue;
+        this.crashOut(u, o, false, onAir, true);
+        return;
+      }
+      if (!o.solid) continue;
+      this.crashOut(u, o, false, onAir);
+      return;
+    }
+  }
+  /** A chasing cruiser is out of the chase against `p`; on air it's news (Ratings, stunt, headline). */
+  crashOut(u, p, smashed, onAir, spikes = false) {
+    const sim = this.sim;
+    u.alive = false;
+    u.lost = true;
+    sim.emitPublic({ type: "policeCrash", id: u.id, propId: p.id, propKind: p.kind, propCls: p.cls, propSmashed: smashed, s: u.s, d: u.d, speed: Math.max(u.speed, sim.giant.speed), onAir, spikes });
+    if (onAir) sim.award("policeCrash");
   }
   update(u, dt) {
     u.phaseT += dt;
@@ -2468,7 +2531,7 @@ var Asks = class {
         if (zone === "tunnel") done.push(this.bump("tunnel", 1, out));
         break;
       case "policeCrash":
-        done.push(this.bump("crash", 1, out));
+        if (e.onAir) done.push(this.bump("crash", 1, out));
         break;
       case "chain":
         done.push(this.bump("chain", 0, out, e.count));
@@ -2918,7 +2981,7 @@ var Sim = class {
         this.stunt(e.kind === "chopper" ? "chopperShaken" : "lostTrack");
         break;
       case "policeCrash":
-        this.stunt("policeCrash");
+        if (e.onAir) this.stunt("policeCrash");
         break;
       case "policeSmash":
         this.stunt("collateral");

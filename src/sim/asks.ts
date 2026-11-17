@@ -71,7 +71,7 @@ export class Asks {
         if (zone === 'bridge') done.push(this.bump('bridge', 1, out));
         if (zone === 'tunnel') done.push(this.bump('tunnel', 1, out));
         break;
-      case 'policeCrash': done.push(this.bump('crash', 1, out)); break;
+      case 'policeCrash': if (e.onAir) done.push(this.bump('crash', 1, out)); break;
       case 'chain': done.push(this.bump('chain', 0, out, e.count)); break;
       case 'lostTrack': if (e.kind === 'chopper') done.push(this.bump('chopper', 1, out)); break;
       case 'ram': if (!e.hit) done.push(this.bump('dodge', 1, out)); break;

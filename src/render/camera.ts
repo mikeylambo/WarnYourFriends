@@ -279,7 +279,7 @@ export class CameraRig {
 
   private desired(t: CameraTarget) {
     const dist = this.distance();
-    const lookAhead = Math.max(0, Math.min(t.speed * this.leadTime(), this.leadCap));
+    const lookAhead = this.angle.lookBehind ? -this.angle.lookBehind : Math.max(0, Math.min(t.speed * this.leadTime(), this.leadCap));
     const fx = Math.cos(t.travel);
     const fz = Math.sin(t.travel);
     const look = new THREE.Vector3(t.x + fx * lookAhead, 0, t.z + fz * lookAhead);
@@ -558,7 +558,7 @@ export function cutTriggerFor(e: SimEvent): CutTrigger | null {
   if (e.type === 'tierUp' && e.tier === TUNING.tiers.length - 1) return 'rampage';
   if (e.type === 'smash' && e.cls === 'heavy') return 'heavy';
   // A police crash is a Heavy moment too: the cut-away shows the wreck still flying.
-  if (e.type === 'policeCrash') return 'heavy';
+  if (e.type === 'policeCrash' && e.onAir) return 'heavy';
   if (e.type === 'merge' && e.from !== e.to) return 'merge';
   return null;
 }
@@ -642,7 +642,7 @@ export class Director {
     // Each trigger has preferred angles (picked at random, seeded); never the same away angle twice running.
     const prefs = C.cutAngles[kind].filter((i) => i !== this.lastAwayAngle && i !== C.homeAngle && i < C.angles.length);
     const away: number[] = [];
-    for (let i = 0; i < C.angles.length; i++) if (i !== C.homeAngle && i !== this.lastAwayAngle) away.push(i);
+    for (let i = 0; i < C.angles.length; i++) if (i !== C.homeAngle && i !== this.lastAwayAngle && !C.angles[i].outro) away.push(i);
     this.current = prefs.length ? prefs[this.rng.int(0, prefs.length - 1)] : away[this.rng.int(0, away.length - 1)];
     this.lastAwayAngle = this.current;
     this.side = this.rng.chance(0.5) ? 1 : -1;

@@ -521,9 +521,10 @@ function openBriefing(goLive: boolean): Promise<void> {
     <div class="kicker">HOW TO PLAY</div>
     <ol class="steps">
       <li><b>Run.</b> He never stops. ${k('lanes')} change lanes, ${k('brake')} brake.</li>
-      <li><b>Gear up.</b> Hold top speed to shift: Jog, Stride, Rampage. Each gear smashes bigger things. Bulldozers and armored trucks never break: go round.</li>
+      <li><b>Gear up.</b> Hold top speed to shift: Jog, Stride, Rampage. Each gear is bigger and smashes bigger things. Bulldozers and armored trucks never break: go round.</li>
+      <li><b>Keep Rampage.</b> A police car swerving in, a spike strip or anything too big to smash knocks you down a gear. Dodge the swerve, or ${k('shoulder')} shoulder-check into it.</li>
       <li><b>Keep them watching.</b> Smashes, close calls and combos fill the audience bar. Empty, they cut to commercial.</li>
-      <li><b>Don't get boxed in.</b> Police close in with an armored truck. ${k('shoulder')} shoulder-checks a car beside you (Stride and up), or brake and drop back. Caught once, you slip; twice, you're busted.</li>
+      <li><b>Lose the police.</b> Run a car beside you into whatever is in its lane. Slow down and they catch you: busted. Boxed in by the armored truck, ${k('shoulder')} a car beside you or brake out the back; the second box-in is the end.</li>
       <li><b>Take the exit.</b> At ${clock} a ramp opens on the right. Be in the far-right lane when you reach it; miss it and coverage ends.</li>
     </ol>
     <div class="row"><button class="go" id="brief-go">${goLive ? 'Go live' : 'Back'}</button></div>
@@ -600,8 +601,8 @@ function showRecap() {
       : [['Score', n(sh.banked), 'score'], ['Peak audience', viewers(sh.peak), '']];
   const tiles: [string, string][] = [
     ['Longest combo', String(runStats.bestChain)],
-    ['Flattened', String(sim.stats.smashes)],
-    ['Police cars', String(runStats.units + runStats.crashes)],
+    // Everything he smashed (police cars he flattened included) plus the police he led into a wreck (Mike, 2026-11-17).
+    ['Objects flattened', String(sim.stats.smashes + runStats.crashes)],
   ];
   if (run) tiles.splice(1, 0, ['Peak audience', viewers(sh.peak)]);
   const asks = sim.asks.list;
@@ -621,7 +622,7 @@ function showRecap() {
     ? `<button class="go" id="meet">Producer's Meeting</button>`
     : run
       ? `<button class="go" id="again">Run Again</button><button class="go alt" id="tomenu">Menu</button>`
-      : `<button class="go" id="again">Run Again</button><button class="go alt" id="same">Same road</button><button class="go alt" id="tomenu">Menu</button>`;
+      : `<button class="go" id="again">Run Again</button><button class="go alt" id="tomenu">Menu</button>`; // same road: Pause → Restart
   recapEl.innerHTML = `<div class="rc ${cleared || won ? 'cleared' : 'busted'}">
     ${run ? `<header class="rc-top"><div class="kicker">SEGMENT ${run.segment + 1} OF ${N}</div></header>` : ''}
     <section class="rc-lead">
@@ -668,7 +669,6 @@ function showRecap() {
   const btn = (id: string) => document.getElementById(id) as HTMLButtonElement | null;
   if (btn('meet')) btn('meet')!.onclick = () => showMeeting();
   if (btn('again')) btn('again')!.onclick = () => restart(false);
-  if (btn('same')) btn('same')!.onclick = () => restart(true);
   if (btn('tomenu')) btn('tomenu')!.onclick = () => recapToMenu();
   if (btn('playdata')) {
     const b = btn('playdata')!;
@@ -883,7 +883,7 @@ function present(e: SimEvent) {
       const seg = ex ? sim.track.segments.find((x) => x.index === ex.segment) : undefined;
       if (seg) outro = { seg };
       if (!attract && !flags.stepMode) {
-        const H = TUNING.camera.angles.findIndex((a) => a.name === 'Head-On');
+        const H = TUNING.camera.angles.findIndex((a) => a.name === 'Sign-Off');
         director.force(H, director.side, true);
         rig.swoopTo(H, director.side, targetAt(sim.giant.s, sim.giant.d));
       }
@@ -1004,12 +1004,13 @@ function present(e: SimEvent) {
     }
     case 'policeCrash': {
       // Out of the chase: the cruiser and (if Heavy) what it hit both go flying. Never anyone hurt (§ rule 10).
-      runStats.crashes++;
+      if (e.onAir) runStats.crashes++;
       // Both go off his line, away from him.
       const side = Math.sign(e.d - g.d) || 1;
       units.smash(e.id, Math.cos(h), Math.sin(h), e.speed, side);
-      if (e.propSmashed) highway.smash(e.propId, Math.cos(h), Math.sin(h), e.speed * 0.6, side);
+      if (e.propSmashed) (e.propId >= 1_000_000 ? units : highway).smash(e.propId, Math.cos(h), Math.sin(h), e.speed * 0.6, side);
       audio.smash('heavy', where(e.s, e.d));
+      if (!e.onAir) break; // behind the frame: it still wrecks, it just isn't the show
       hitstop = Math.max(hitstop, TUNING.impact.medium.hitstop);
       rig.jolt(TUNING.impact.medium.shake, 0.12);
       haptic(TUNING.impact.medium.haptic, TUNING.impact.medium.hapticStrength);
@@ -1811,6 +1812,7 @@ function updateTitleShot(dt: number, t: CameraTarget): boolean {
   coverEl.hidden = !onTitle; // leaving the title, the camera glide is the transition: the art cuts away
   coverEl.classList.toggle('away', !cover);
   document.documentElement.classList.toggle('cover', cover);
+  audio.setHushed(cover); // no footsteps from a giant hidden behind the cover art
   if (inMenus) {
     titleK = 1;
     const seg = sim.track.segmentAt(sim.giant.s);

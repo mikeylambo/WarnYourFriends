@@ -125,7 +125,8 @@ export class Show {
     } else if (speed > S.pinDrainAbove || (!boxed && speed >= TUNING.pursuit.caught.below)) this.pin = Math.max(0, this.pin - S.pinDrain * this.pinDrainMult * dt);
     if (this.pin >= 100) {
       // Police Net: the first catch in a segment he slips (a gear and Ratings, the caller applies them); the next busts him.
-      if (this.netSlips < 1) {
+      // Caught (police ran him down while he dawdled): busted the first time.
+      if (this.netSlips < (this.pinCause === 'caught' ? TUNING.pursuit.caught.slips : 1)) {
         this.netSlips++;
         this.pin = 0;
         const before = this.ratings;

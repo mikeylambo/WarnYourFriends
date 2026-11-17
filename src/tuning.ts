@@ -62,7 +62,7 @@ export interface TierTuning {
 }
 
 export interface CameraAngle {
-  name: 'Chase High' | 'Wide Side' | 'Long Lens' | 'Head-On' | 'High Head-On' | 'Overhead';
+  name: 'Chase High' | 'Wide Side' | 'Long Lens' | 'Head-On' | 'High Head-On' | 'Overhead' | 'Sign-Off';
   /** Requested yaw off the direction of travel. Clamped by the screen-up law. */
   yawDeg: number;
   pitchDeg: number;
@@ -80,6 +80,10 @@ export interface CameraAngle {
   headOn?: boolean;
   /** Phase 0c: the return home from this angle is the swoop, not a hard cut. */
   swoopHome?: boolean;
+  /** Only the sign-off outro uses it (never a cut-away). */
+  outro?: boolean;
+  /** Frame a point this far (m) behind him instead of ahead: he sits low and the road ahead stays out of shot. */
+  lookBehind?: number;
 }
 
 export const TUNING = {
@@ -490,6 +494,9 @@ export const TUNING = {
       { name: 'High Head-On', yawDeg: 10, pitchDeg: 58, distance: 122, fov: 17, headOn: true, swoopHome: true },
       // Mike: almost directly above. Travel stays screen-up; shows lanes, merges and the convoy like a map.
       { name: 'Overhead', yawDeg: 0, pitchDeg: 82, distance: 70, fov: 30, swoopHome: true },
+      // Mike (2026-11-17): the sign-off sweeps deeper into a head-on, low and close, looking back down the road he came
+      // along; framed behind him so the end of the ramp ahead of him is out of shot. Outro only.
+      { name: 'Sign-Off', yawDeg: 16, pitchDeg: 20, distance: 46, fov: 24, headOn: true, outro: true, lookBehind: 9 },
     ] as CameraAngle[],
     /** Away angles each trigger can cut to (random pick, never the last away angle). Overhead suits merges: you see the lanes close. */
     cutAngles: { rampage: [3, 4, 1], heavy: [4, 3, 2], merge: [5, 1, 2] } as Record<'rampage' | 'heavy' | 'merge', number[]>,
@@ -661,6 +668,8 @@ export const TUNING = {
     /** Cruiser ram (v0.3: blinker + 0.6s drift, then swerve into your lane). */
     cruiser: {
       closeSpeed: 7, tell: 0.6, drift: 0.6, swerve: 0.35, fallBack: 6, sideSpeed: 5,
+      /** Alongside him it holds its lane whatever is ahead (Mike, 2026-11-17: kiting works anywhere, not just at the road edge). */
+      fixated: true,
       /** A ram that connects costs a gear even at Rampage (Mike, 2026-11-16: Rampage is defended, not kept); a Shoulder Check into it still flattens it. */
       ramBeatsRampage: true,
       /**
@@ -693,7 +702,8 @@ export const TUNING = {
      * a Heavy prop goes flying with it. Only within `visibleBehind` m behind him and ahead of that, so every
      * crash is in the chopper's frame (§1).
      */
-    crash: { react: 6, plowKeep: 0.8, visibleBehind: 5 },
+    /** avoidLook: behind the frame (not news), a cruiser looks this many seconds ahead and steers round solid things; avoidHold s before it rejoins his path. */
+    crash: { react: 6, plowKeep: 0.8, visibleBehind: 5, avoidLook: 0.7, avoidHold: 0.8 },
     /**
      * Police Net (Mike, 2026-11-16: "a real box-in", one goal and two threats). From Heat 3, at most
      * `perSegment[heat - 1]` a segment, `minGap` s apart. An armoured truck (nothing smashes it) takes his
@@ -703,7 +713,7 @@ export const TUNING = {
      * flanker (Stride+), brake and drop back behind them, take the gap before they close, Leap, the Stare.
      * The truck cruises like a rolling roadblock until its tell (on screen, like every tell), then brakes.
      */
-    net: { perSegment: [0, 0, 1, 2, 2] as number[], minGap: 30, cruiseFactor: 0.55, tellAhead: 1.9, tellMin: 25, tellMax: 28, tell: 1.5, decel: 7, crawl: 3.5, flankClose: 9, flankAccel: 8, flankDecel: 5, flankHold: 14, flankSide: 3, actMax: 10, escapeAfter: 1.5, slipRatings: 15 },
+    net: { perSegment: [0, 0, 1, 2, 2] as number[], minGap: 30, cruiseFactor: 0.55, tellAhead: 1.9, tellMin: 25, tellMax: 28, /** The crew breaks off if its truck gets this far ahead before closing (spawns ≤120m ahead; he slowed and it never waits). */ giveUpAhead: 145, tell: 1.5, decel: 7, crawl: 3.5, flankClose: 9, flankAccel: 8, flankDecel: 5, flankHold: 14, flankSide: 3, actMax: 10, escapeAfter: 1.5, slipRatings: 15 },
     /**
      * Rolling Blockade (the rolling roadblock, upgraded): from `armoredFrom` Heat, one car in the line is the
      * armoured truck; and with 3+ lanes the gap moves: every `shiftEvery` s a car next to it slides over
@@ -724,7 +734,8 @@ export const TUNING = {
      * `reach` m of him fill the meter at `fill`/s (≈3.3s). The first fill in a segment
      * he shakes them (they drop back for `backOff` s; a gear, a stumble and `net.slipRatings` lost), the second busts.
      */
-    caught: { below: 4, from: 20, gap: 2.5, reach: 3.5, fill: 30, backOff: 2.5, runDown: 14 },
+    /** `slips`: catches shaken off before one busts him. 0 (Mike, 2026-11-17: "if they catch the giant once it's game over"). */
+    caught: { below: 4, from: 20, gap: 2.5, reach: 3.5, fill: 30, backOff: 2.5, runDown: 14, slips: 0 },
     /** Near-miss (§12): a pursuer passes within 1.5m without contact. */
     nearMiss: 1.5,
     /** A unit this far behind the giant has lost track (§12) and leaves. */
@@ -781,6 +792,9 @@ export const TUNING = {
    * Rampage on air (Mike, 2026-11-16: "embellish it"). Placeholder synth until the Suno stems land; the API
    * (Audio.setGear) stays. A music layer drops in at Rampage and cuts on losing it, with a power-down sweep.
    */
+  /** Smash sample levels by class: the light/medium takes are ~16 dB quieter than heavy, so they play hotter. */
+  sfxLevels: { light: 1.1, medium: 1.6, heavy: 1 },
+
   rampageAudio: {
     /** Layer level on the music bus, fade in (s), fade out on loss (s). */
     layer: 0.9,
@@ -887,6 +901,8 @@ export const TUNING = {
     duskStart: 17,
     nightStart: 20,
     /** Sodium streetlights every this many metres, alternating sides. */
+    /** Roadside furniture on a bridge (signs, gantry posts, lamps) stands this far outside the edge: on the parapet, never over the water. */
+    bridgeMount: 0.45,
     lampSpacing: 20,
     /** Real point lights reused on the nearest lamps (the rest are glow decals). Each light costs every lit pixel. */
     lampLights: 2,

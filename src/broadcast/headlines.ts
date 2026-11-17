@@ -115,7 +115,7 @@ export class Newsroom {
       case 'ram': add(e.hit ? 'ramHit' : 'ramMiss'); break;
       case 'lostTrack': add(e.kind === 'chopper' ? 'chopperLost' : 'lostTrack'); break;
       case 'spotlight': add('spotlight'); break;
-      case 'policeCrash': add('policeCrash'); break;
+      case 'policeCrash': if (e.onAir) add('policeCrash'); break;
       case 'policeSmash': add('policeSmash'); break;
       case 'netSlip': add('netSlip'); break;
       case 'netEscape': add('netEscape'); break;
@@ -295,7 +295,8 @@ export class Newsroom {
         const line = this.freshLine(L[q.kind]);
         if (!line) return null;
         const place = line[1].includes('{place}') ? this.freshPlace(ctx) : null;
-        return mk(this.fill(line[1], { noun: BANK.nouns[kind][0], place }), line[0], place);
+        const noun = e.type === 'policeCrash' && e.spikes ? L.spikeStrip : BANK.nouns[kind][0];
+        return mk(this.fill(line[1], { noun, place }), line[0], place);
       }
       case 'netSlip': {
         // Caught once: it breaks in (the chyron says exactly what happened).

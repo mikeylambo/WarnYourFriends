@@ -3,7 +3,7 @@ import { clamp } from './math';
 import { Rng } from './rng';
 import { PROP_DEFS } from './track';
 import type { Sim } from './sim';
-import type { PropKind, Unit, UnitKind } from './types';
+import type { Prop, PropKind, Unit, UnitKind } from './types';
 
 const smoothstep = (t: number) => t * t * (3 - 2 * t);
 
@@ -280,6 +280,12 @@ export class Pursuit {
     const truck = crew.find((x) => x.kind === 'armored');
     const isTruck = u === truck;
     const W = TUNING.lanes.width;
+    // A crew that lost its truck, or whose truck has run away up the road while he crawls (it never slows to
+    // wait), can't box him in: it breaks off. Otherwise two flankers could pace either side of him for good (Law 1).
+    if (u.phase !== 'leave' && (!truck || (truck.phase === 'approach' && truck.s - g.s > N.giveUpAhead))) {
+      this.setPhase(u, 'leave');
+      u.hit = true;
+    }
     switch (u.phase) {
       case 'approach': {
         if (isTruck) {
@@ -445,6 +451,7 @@ export class Pursuit {
     const sides = [-1, 1].filter((d) => g.lane + d >= 0 && g.lane + d < lanes);
     if (!sides.length) return false;
     const lane = g.lane + sides[this.rng.int(0, sides.length - 1)];
+    if (this.propIn(lane, s - 4, s + 30)) return false; // never spawn on top of (or just short of) something
     const u = this.make('cruiser', 'cruiser', s, sim.track.laneCenter(lane), lane);
     u.speed = g.speed + P.cruiser.closeSpeed;
     sim.emitPublic({ type: 'unitSpawn', id: u.id, kind: 'cruiser', s, d: u.d, lanes: [lane] });
@@ -487,8 +494,11 @@ export class Pursuit {
           // Far behind: ride the giant's own path (it's clear: he smashed or avoided everything). He's crawling: they run him down.
           u.speed = g.speed + (g.speed < CA.below ? CA.runDown : C.closeSpeed);
           u.s += u.speed * dt;
-          const pd = sim.escort.pathAt(u.s);
-          u.d += clamp(pd - u.d, -C.sideSpeed * 2 * dt, C.sideSpeed * 2 * dt);
+          if (u.avoid && u.avoid > 0) u.avoid -= dt; // steering round something: hold that line for a moment
+          else {
+            const pd = sim.escort.pathAt(u.s);
+            u.d += clamp(pd - u.d, -C.sideSpeed * 2 * dt, C.sideSpeed * 2 * dt);
+          }
           u.lane = clamp(Math.round(u.d / TUNING.lanes.width - 0.5), 0, lanes - 1);
           u.phaseT = 0; // the give-up clock only runs once it's close
           break;
@@ -509,8 +519,11 @@ export class Pursuit {
           if (u.phaseT > T.giveUp) this.setPhase(u, 'leave');
           break;
         }
-        if (u.lane !== g.lane && Math.abs(u.d - g.d) < TUNING.lanes.width * 1.5 && !clear(u.lane)) {
-          // Alongside him and its lane is blocked just ahead: the only way out is away from him.
+        if (alongside && C.fixated) {
+          // Alongside him it's fixated on him, not the road (Mike, 2026-11-17: kiting): it holds its lane, so
+          // whatever is in that lane ahead (a car, a bulldozer, a spike strip, another unit) it hits.
+        } else if (u.lane !== g.lane && Math.abs(u.d - g.d) < TUNING.lanes.width * 1.5 && !clear(u.lane)) {
+          // Coming up beside him and its lane is blocked just ahead: the only way out is away from him.
           const away = u.lane + Math.sign(u.lane - g.lane);
           if (clear(away)) u.lane = away;
         } else if (!clear(u.lane) || Math.abs(u.lane - g.lane) !== 1) {
@@ -883,18 +896,27 @@ export class Pursuit {
     const sim = this.sim;
     const g = sim.giant;
     const K = TUNING.pursuit.crash;
-    if (u.s < g.s - K.visibleBehind) return; // out of the chopper's frame: not news, no crash
+    // Out of the chopper's frame it still can't drive through things (Mike, 2026-11-17: police through bulldozers);
+    // it just isn't news (no Ratings, no stunt, no headline).
+    const onAir = u.s >= g.s - K.visibleBehind;
     const track = sim.track;
-    // Last-moment swerve: a clear neighbouring lane that isn't his.
-    if (u.phase === 'leave' || (u.phase === 'approach' && u.s >= g.s - 9)) {
+    // Last-moment swerve: a clear neighbouring lane. Leaving the chase, or behind the frame where it isn't
+    // fixated on him, a cruiser drives like a cop (it steers round what's solid); his lane is fair game back there.
+    const fixated = u.phase === 'approach' && u.s >= g.s - 4 && Math.abs(u.lane - g.lane) === 1;
+    if ((u.phase === 'leave' && !this.inHisWay(u)) || (!onAir && !fixated && u.phase === 'approach')) {
       const lanes = track.lanesAt(u.s);
       const lane = clamp(Math.round(u.d / TUNING.lanes.width - 0.5), 0, lanes - 1);
-      const heavyAhead = (l: number) => track.propsBetween(u.s, u.s + u.hl + K.react).some((p) => p.cls !== 'medium' && p.cls !== 'light' && Math.abs(p.d - track.laneCenter(l)) < p.hw + u.hw);
-      if (u.phase === 'leave' && !this.inHisWay(u) && heavyAhead(lane)) {
-        const opts = [lane - 1, lane + 1].filter((l) => l >= 0 && l < lanes && l !== g.lane && !this.propIn(l, u.s - u.hl, u.s + u.hl + K.react));
+      const look = Math.max(K.react, u.speed * K.avoidLook);
+      const solidAhead = (l: number) => track.propsBetween(u.s, u.s + u.hl + look).some((p) => p.alive && p.cls !== 'medium' && p.cls !== 'light' && Math.abs(p.d - track.laneCenter(l)) < p.hw + u.hw);
+      if (solidAhead(lane)) {
+        const opts = [lane - 1, lane + 1, lane - 2, lane + 2].filter((l) => l >= 0 && l < lanes && (onAir ? l !== g.lane : true) && !solidAhead(l));
         if (opts.length) {
           u.lane = opts[0];
-          u.d += clamp(track.laneCenter(u.lane) - u.d, -TUNING.pursuit.cruiser.sideSpeed * 2 * this.sim.dt, TUNING.pursuit.cruiser.sideSpeed * 2 * this.sim.dt);
+          if (u.phase === 'leave') u.d += clamp(track.laneCenter(u.lane) - u.d, -TUNING.pursuit.cruiser.sideSpeed * 2 * this.sim.dt, TUNING.pursuit.cruiser.sideSpeed * 2 * this.sim.dt);
+          else {
+            u.d += clamp(track.laneCenter(u.lane) - u.d, -TUNING.pursuit.cruiser.sideSpeed * 2 * this.sim.dt, TUNING.pursuit.cruiser.sideSpeed * 2 * this.sim.dt);
+            u.avoid = K.avoidHold; // hold the dodge a moment before rejoining his path
+          }
         }
       }
     }
@@ -911,12 +933,33 @@ export class Pursuit {
       // Heavy or immovable: out of the chase. A Heavy prop goes flying with it.
       const smashed = p.cls === 'heavy';
       if (smashed) p.alive = false;
-      u.alive = false;
-      u.lost = true;
-      sim.emitPublic({ type: 'policeCrash', id: u.id, propId: p.id, propKind: p.kind, propCls: p.cls, propSmashed: smashed, s: u.s, d: u.d, speed: Math.max(u.speed, g.speed) });
-      sim.award('policeCrash');
+      this.crashOut(u, p, smashed, onAir);
       return;
     }
+    // Its own side's hardware: a spike strip that's down, or another police vehicle (kiting, Mike 2026-11-17).
+    for (const o of this.units) {
+      // Pursuing cruisers drive in convoy on his path: only the slow or standing hardware counts (blockade, roadblock, net crew).
+      if (o === u || !o.alive || o.unit === 'chopper' || o.unit === 'carrier' || o.unit === 'cruiser') continue;
+      if (Math.abs(o.s - u.s) >= o.hl + u.hl || Math.abs(o.d - u.d) >= o.hw + u.hw - 0.15) continue;
+      if (o.unit === 'spike') {
+        if (o.phase !== 'act') continue;
+        this.crashOut(u, o, false, onAir, true);
+        return;
+      }
+      if (!o.solid) continue;
+      // A blockade car, roadblock or net crew member stays put (the cruiser hit it).
+      this.crashOut(u, o, false, onAir);
+      return;
+    }
+  }
+
+  /** A chasing cruiser is out of the chase against `p`; on air it's news (Ratings, stunt, headline). */
+  private crashOut(u: Unit, p: Prop, smashed: boolean, onAir: boolean, spikes = false) {
+    const sim = this.sim;
+    u.alive = false;
+    u.lost = true;
+    sim.emitPublic({ type: 'policeCrash', id: u.id, propId: p.id, propKind: p.kind, propCls: p.cls, propSmashed: smashed, s: u.s, d: u.d, speed: Math.max(u.speed, sim.giant.speed), onAir, spikes });
+    if (onAir) sim.award('policeCrash');
   }
 
   private update(u: Unit, dt: number) {

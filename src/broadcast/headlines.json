@@ -257,6 +257,7 @@
       ]
     ],
     "rampageFallback": "Giant: Full Rampage",
+    "spikeStrip": "Own Spike Strip",
     "mergeFallback": "{lanes} Lanes Ahead",
     "ratingsTier": [
       [],

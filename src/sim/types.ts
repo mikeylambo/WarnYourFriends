@@ -152,7 +152,7 @@ export type SimEvent =
   /** A chasing cruiser ploughs through a Medium (or lighter) prop in its lane. */
   | { type: 'policeSmash'; id: number; propId: number; cls: MassClass; mat: Material; s: number; d: number; speed: number }
   /** A chasing cruiser crashes into something Heavy or immovable and is out of the chase; a Heavy prop goes with it. */
-  | { type: 'policeCrash'; id: number; propId: number; propKind: PropKind; propCls: MassClass; propSmashed: boolean; s: number; d: number; speed: number }
+  | { type: 'policeCrash'; id: number; propId: number; propKind: PropKind; propCls: MassClass; propSmashed: boolean; s: number; d: number; speed: number; /** In the chopper's frame: news (Ratings, stunt, headline). */ onAir: boolean; /** It ran over a spike strip. */ spikes?: boolean }
   /** Phase 2 road variety: the giant enters a new stretch of road. */
   | { type: 'zone'; zone: 'highway' | 'avenue' | 'bridge' | 'tunnel'; name: string }
   | { type: 'landmark'; kind: LandmarkKind; name: string; s: number }
@@ -199,6 +199,8 @@ export interface Unit extends Prop {
   shakeT: number;
   /** Police Net flanker: nothing breaks it but a Shoulder Check (it counts as Heavy only during one). */
   ram?: boolean;
+  /** Cruiser: seconds left holding a dodge (behind the frame) before rejoining his path. */
+  avoid?: number;
   /** Car carrier: cars left to drop, and time to the next one. */
   drops?: number;
   dropT?: number;

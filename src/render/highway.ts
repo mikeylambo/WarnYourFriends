@@ -470,7 +470,8 @@ export class HighwayView {
       const closing = merge.lanes1 < merge.lanes0;
       const sAt = merge.index === seg.index ? seg.s0 + 2 : seg.s0 + 20;
       const w = this.edgeW(sAt);
-      this.sim.track.posAt(sAt, w + 2.5, this.pos);
+      // On a bridge the shoulder is open water: the sign stands on the parapet (Mike, 2026-11-17).
+      this.sim.track.posAt(sAt, w + (zone === 'bridge' ? TUNING.look.bridgeMount : 2.5), this.pos);
       const sign = new THREE.Group();
       const post = new THREE.Mesh(this.box, toon(PALETTE.pole));
       post.scale.set(0.15, 3, 0.15);
@@ -820,7 +821,8 @@ export class HighwayView {
       const h = track.headingAt(s);
       const left = Math.round(s / sp) % 2 === 0;
       if (!left && (this.exitFor(seg) || this.nearRamp(seg))) continue; // the ramp peels off on the right
-      const baseD = left ? -1.6 : w + 1.6;
+      const out = seg.zone === 'bridge' ? TUNING.look.bridgeMount : 1.6; // bridge lamps stand on the parapet, not the water
+      const baseD = left ? -out : w + out;
       const headD = left ? 2.0 : w - 2.0;
       const H = 9;
       const base = track.posAt(s, baseD, { x: 0, z: 0 });

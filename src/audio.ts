@@ -166,7 +166,15 @@ export class Audio {
     if (!this.ctx) return;
     this.master.gain.value = this.vol.master;
     this.buses.music.gain.value = 0.55 * this.vol.music;
-    this.buses.sfx.gain.value = this.vol.sfx;
+    this.buses.sfx.gain.setTargetAtTime(this.hushed ? 0 : this.vol.sfx, this.ctx.currentTime, 0.12);
+  }
+
+  /** The title's cover art hides the attract broadcast: its sounds (steps, sirens, rotor) wait for the main menu. */
+  private hushed = false;
+  setHushed(h: boolean) {
+    if (h === this.hushed) return;
+    this.hushed = h;
+    this.applyVolumes();
   }
 
   /** §8: pause freezes broadcast audio. */
@@ -230,7 +238,15 @@ export class Audio {
   }
   private smashAt(cls: MassClass) {
     const t = this.ctx!.currentTime;
-    if (cls !== 'immovable' && this.play(`smash-${cls}` as SfxKind, cls === 'heavy' ? 1 : cls === 'medium' ? 0.8 : 0.6)) return;
+    // Small smashes (Mike, 2026-11-17: "no SFX on breaking smaller objects at times"): their takes are quiet (medium
+    // averages −27.6 dB vs −11 for heavy) and the hit lands ~0.2s in, so a crack goes under them at once, and they play louder.
+    if (cls === 'light' || cls === 'medium') {
+      const k = cls === 'medium' ? 1 : 0.7;
+      this.noise(t, 0.09, 'bandpass', 1800, 0.9, 0.55 * k, 700);
+      this.tone(t, 0.1, 160, 70, 0.35 * k);
+    }
+    const SV = TUNING.sfxLevels;
+    if (cls !== 'immovable' && this.play(`smash-${cls}` as SfxKind, cls === 'heavy' ? SV.heavy : cls === 'medium' ? SV.medium : SV.light)) return;
     if (cls === 'medium') {
       // crunch
       this.noise(t, 0.22, 'bandpass', 1100, 0.8, 0.7, 400);

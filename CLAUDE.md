@@ -62,6 +62,7 @@ tools/shots-hud.mjs     HUD (Direction D) in both palettes: desktop, phone lands
 tools/shots-landmarks.mjs  Landmarks: toll plaza, night market, roadworks, rush hour on approach (ONLY=, SEED_FROM=)
 tools/shots-size.mjs    Giant size: growth at each gear, fixed and big at Rampage
 tools/shots-vehicles.mjs  Vehicle sheet: every prop and police body from the chopper and side-on (dev page tools/modelsheet/vehicles.html)
+tools/shots-bridge.mjs  Bridge furniture: a merge sign and lamps on the parapet, not over the water
 tools/shots-events.mjs  Traffic events: Police Net closing (BOXED IN meter), Rolling Blockade with the armored truck, Car Carrier dropping cars (ONLY=)
 ```
 

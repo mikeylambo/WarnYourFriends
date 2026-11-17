@@ -1,4 +1,4 @@
-// Sign-off outro evidence: he takes the ramp's road (not the grass) while the chopper swivels to Head-On, then the replay cuts in.
+// Sign-off outro evidence: he takes the ramp's road while the chopper sweeps low into the Sign-Off head-on (the ramp's end stays out of shot), then the replay cuts in.
 // Usage: npm run build && node tools/shots-signoff.mjs  (writes docs/evidence/signoff/*.png)
 import { createRequire } from 'node:module';
 import { spawn } from 'node:child_process';
