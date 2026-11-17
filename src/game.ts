@@ -1497,8 +1497,9 @@ app.ui.updateScreen('title', { title: 'Giant\nat Large', subtitle: 'Warn your fr
 app.ui.updateScreen('main-menu', {
   title: 'Giant\nat Large',
   choices: [
-    { id: 'run', label: 'Full Broadcast', description: 'Five segments, upgrades between them' },
-    { id: 'broadcast', label: 'Single Segment' },
+    // One mode on the menu (Mike, 2026-11-17: Single Segment adds no challenge; maybe a daily mode later).
+    // 'broadcast' (one segment) stays reachable by ?mode=broadcast for tests and evidence tools.
+    { id: 'run', label: 'Go Live', description: 'Five segments, upgrades between them' },
     { id: 'howto', label: 'How to Play' },
     { id: 'settings', label: 'Settings' },
   ],

@@ -106,7 +106,7 @@ try {
   {
     const { ctx, page, problems } = await bootAndStart(browser, 'desktop click', { viewport: { width: 1280, height: 720 } }, async (p) => {
       // One menu: the mode is on it. A first broadcast shows How to Play; Go live starts it.
-      for (const id of ['start', 'broadcast']) {
+      for (const id of ['start', 'run']) {
         await p.click(`[data-choice-id="${id}"]`);
         await p.waitForTimeout(150);
       }
@@ -148,7 +148,7 @@ try {
   // 2. Mobile: tap the start button.
   {
     const { ctx, problems } = await bootAndStart(browser, 'mobile tap', { viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true }, async (p) => {
-      for (const id of ['start', 'broadcast']) {
+      for (const id of ['start', 'run']) {
         await p.tap(`[data-choice-id="${id}"]`);
         await p.waitForTimeout(150);
       }
@@ -427,7 +427,7 @@ try {
     await page.keyboard.press('Escape');
     await page.waitForTimeout(400);
     if (m.hud || m.asks) fail(`broadcast HUD shows behind the menu (${JSON.stringify(m)})`);
-    else if (m.choices !== 'run|broadcast|howto|settings') fail(`main menu choices: ${m.choices}`);
+    else if (m.choices !== 'run|howto|settings') fail(`main menu choices: ${m.choices}`);
     else ok(`main menu over a clean chopper shot: ${m.choices}`);
     await ctx.close();
   }
