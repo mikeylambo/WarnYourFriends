@@ -51,7 +51,7 @@ tools/shots-title.mjs   title screen (desktop, phone, glide)
 tools/filmstrip.mjs     slow-motion strip of an impact (smash-heavy, bounce, bounce-immovable)
 tools/shots-onboarding.mjs  live budget, recap and meeting
 tools/shots-recap.mjs   The 11 O'Clock Recap: through the real replay (its picture) and stepped, desktop and phones (ONLY=, SEED=)
-tools/shots-cards.mjs   Card art for the Rampage upgrades (in-engine placeholders) → src/assets/upgrades/
+tools/shots-cards.mjs   In-engine stand-in card art for a new upgrade (→ test-results/cards/; the real cards are painted)
 tools/shots-rampage.mjs Rampage loop: the SA2-style opening, the meter filling / ready / in Rampage
 tools/shots-caught.mjs  Caught: Brake held with police behind, the CAUGHT meter, then busted
 tools/shots-signoff.mjs Sign-off outro: on the ramp, the swivel to Head-On, the cut to the replay

@@ -17,5 +17,5 @@ import groundZero from './assets/upgrades/groundZero.webp';
  * Pool v2 (2026-11-17) reads each image afresh: flying over traffic → Breakaway, the camera on him → Prime Time, the
  * armored shin → Thick Skin, the breath → Second Wind, the filmstrip → Crowd Pleaser, the cape in the wind → Slipstream.
  */
-/** Rampage upgrades (2026-11-17): in-engine placeholder art (tools/shots-cards.mjs) until painted cards exist. */
+/** Rampage upgrades (2026-11-17): Shoulder Check (the charge through concrete), Overdrive (the stopwatch), Short Fuse (the lit fuse), Ground Zero (the shockwave). */
 export const UPGRADE_ART: Record<UpgradeId, string> = { leap, stare, breakaway, primeTime, shoulder, thickSkin, secondWind, crowdPleaser, slipstream, overdrive, shortFuse, groundZero };

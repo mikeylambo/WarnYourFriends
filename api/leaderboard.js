@@ -808,7 +808,7 @@ var TUNING = {
     secondWind: { kind: "passive", price: 125e3, label: "Second Wind", blurb: "Each Rampage ends with the meter a third full.", pitch: "He\u2019s catching his breath. Stay on him, he\u2019s coming back." },
     crowdPleaser: { kind: "passive", price: 15e4, label: "Crowd Pleaser", blurb: "At Rampage the audience drains 40% slower.", pitch: "Keep rolling. Nobody can look away." },
     slipstream: { kind: "passive", price: 16e4, label: "Slipstream", blurb: "Police crashes pay double: Ratings and points.", pitch: "Anyone chasing him ends up in the scenery. Keep it wide." },
-    // Rampage upgrades (Mike, 2026-11-17: "upgrades built around Rampage"). Card art: in-engine placeholders (tools/shots-cards.mjs).
+    // Rampage upgrades (Mike, 2026-11-17: "upgrades built around Rampage"). Card art: Mike's (2026-11-17), in the cards' flat low-poly style.
     shoulder: { kind: "ability", price: 15e4, label: "Shoulder Check", blurb: "A short charge that breaks concrete and police lines without Rampage.", pitch: "He\u2019s dropping the shoulder. Stay wide, this one goes through the barrier.", levels: ["", "Charges for longer.", "Every smash in the charge fills the Rampage meter."] },
     overdrive: { kind: "passive", price: 15e4, label: "Overdrive", blurb: "Rampage lasts 3 seconds longer.", pitch: "Don\u2019t cut away. He\u2019s not done yet." },
     shortFuse: { kind: "passive", price: 14e4, label: "Short Fuse", blurb: "The Rampage meter fills 25% faster.", pitch: "He\u2019s wound tight tonight. It won\u2019t take much." },

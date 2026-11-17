@@ -1,5 +1,5 @@
-// Card art for the Rampage upgrades (2026-11-17): in-engine placeholders until painted cards exist.
-// Usage: npm run build && node tools/shots-cards.mjs   (writes src/assets/upgrades/{shoulder,overdrive,shortFuse,groundZero}.webp)
+// In-engine stand-in card art (2026-11-17), for a new upgrade before its painted card exists. The four Rampage cards
+// now have Mike's art, so this writes to test-results/cards/ only. Usage: npm run build && node tools/shots-cards.mjs
 import { createRequire } from 'node:module';
 import { spawn, execFileSync } from 'node:child_process';
 import { mkdirSync } from 'node:fs';
@@ -28,7 +28,7 @@ async function card(name, { ability = '', angle, setup }) {
   const cy = Math.max(size / 2, Math.min(720 - size / 2, y * 720 - 90));
   const png = `${TMP}/${name}.png`;
   await page.screenshot({ path: png, clip: { x: 640 - size / 2, y: cy - size / 2, width: size, height: size } });
-  execFileSync('python3', ['-c', `from PIL import Image; Image.open('${png}').convert('RGB').resize((256, 256), Image.LANCZOS).save('src/assets/upgrades/${name}.webp', quality=88)`]);
+  execFileSync('python3', ['-c', `from PIL import Image; Image.open('${png}').convert('RGB').resize((256, 256), Image.LANCZOS).save('${TMP}/${name}.webp', quality=88)`]);
   console.log(name, 'giant y', y.toFixed(2));
   await page.close();
 }
