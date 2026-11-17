@@ -86,7 +86,10 @@ describe('headlines (§21)', () => {
       }
       // Heat only makes news going up (a Pose spends it).
       for (const { h } of out) if (h.sources[0]?.type === 'heat') expect((h.sources[0] as Extract<SimEvent, { type: 'heat' }>).heat).toBeGreaterThan(0);
-      if (ups.length && out.length > 10) expect(out.some(({ h }) => h.sources.some((e) => ['leapLand', 'stare', 'breakawayLand', 'primeTime'].includes(e.type)))).toBe(true);
+      // An ability he actually used makes the news (Stride smashes most things now, so a Leap isn't always needed).
+      const used = [...log].some((e) => ['leapLand', 'stare', 'breakawayLand', 'primeTime'].includes(e.type));
+      // (A Leap's landing can run as what it flattened: "Lands On Fruit Cart", sourced from the smash.)
+      if (ups.length && used && out.length > 10) expect(out.some(({ h }) => /\bLands\b/.test(h.text) || h.sources.some((e) => ['leapLand', 'stare', 'breakawayLand', 'primeTime'].includes(e.type)))).toBe(true);
       // The broadcast ends with a sign-off or busted line, from the event that ended it.
       const final = out[out.length - 1].h;
       expect(["SIGN-OFF", "BUSTED"]).toContain(final.kicker);

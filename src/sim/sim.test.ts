@@ -99,8 +99,8 @@ describe('track (v0.3 highway)', () => {
 });
 
 describe('lanes', () => {
-  it('lane change times are Jog 0.22s, Stride 0.30s, Rampage 0.40s', () => {
-    for (const [tier, dur] of [[0, 0.22], [1, 0.3], [2, 0.4]] as const) {
+  it('lane change times follow each gear (TUNING.tiers laneChangeTime)', () => {
+    for (const [tier, dur] of [0, 1, 2].map((t) => [t, TUNING.tiers[t].laneChangeTime] as const)) {
       const sim = emptySim();
       setTier(sim, tier);
       const from = sim.giant.lane;

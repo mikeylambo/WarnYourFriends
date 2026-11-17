@@ -125,7 +125,7 @@ describe('abilities and passives (§17)', () => {
   it('Breakaway: a dive faster than his top speed, a slam, and the police behind him lose track', () => {
     const sim = new Sim({ seed: 5, upgrades: ['breakaway'] });
     run(sim, 300);
-    const cop = (sim.pursuit as unknown as { make: (k: string, u: string, s: number, d: number, l: number) => { speed: number; lost: boolean } }).make('cruiser', 'cruiser', sim.giant.s - 12, sim.giant.d, sim.giant.lane);
+    const cop = (sim.pursuit as unknown as { make: (k: string, u: string, s: number, d: number, l: number) => { speed: number; lost: boolean } }).make('cruiser', 'cruiser', sim.giant.s - 30, sim.track.laneCenter(sim.giant.lane > 0 ? sim.giant.lane - 1 : sim.giant.lane + 1), sim.giant.lane > 0 ? sim.giant.lane - 1 : sim.giant.lane + 1); // a lane over: Stride flattens a police car it runs into
     cop.speed = sim.giant.speed;
     run(sim, 1, { ability: true });
     let maxSpeed = 0;

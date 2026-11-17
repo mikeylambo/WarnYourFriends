@@ -126,13 +126,13 @@ try {
     const sp = await page.evaluate(() => ({ r: window.__GAME.sfxPlace(10, 0), l: window.__GAME.sfxPlace(-10, 0), far: window.__GAME.sfxPlace(0, 120) }));
     if (!(sp.r.pan > 0.3 && sp.l.pan < -0.3 && sp.far.gain < 0.3 && sp.r.gain > 0.8)) fail(`spatial mix (${JSON.stringify(sp)})`);
     else ok(`spatial mix: right pans ${sp.r.pan.toFixed(2)}, left ${sp.l.pan.toFixed(2)}, 120m ahead at ${(sp.far.gain * 100).toFixed(0)}% level`);
-    // The broadcast opens on the low hero shot in front of him (SA2-style), then swings round into Chase High.
+    // The broadcast opens on High Head-On (he runs at the camera), then pivots round into Chase High.
     const openAng = await page.evaluate(() => window.__GAME.cutLog().length ? -1 : window.__GAME.director().current);
-    if (openAng !== 6 && openAng !== -1) fail(`broadcast opened on angle ${openAng}, expected the hero shot (6)`);
+    if (openAng !== 4 && openAng !== -1) fail(`broadcast opened on angle ${openAng}, expected High Head-On (4)`);
     await page.waitForFunction(() => window.__GAME.director().current === 0 && !window.__GAME.camera().transition, null, { timeout: 15000 }).catch(() => {});
     const home = await page.evaluate(() => ({ cut: window.__GAME.cutLog()[0], cur: window.__GAME.director().current }));
     if (home.cur !== 0 || !home.cut || home.cut.reason !== 'home') fail(`opening did not swing home to Chase High (${JSON.stringify(home)})`);
-    else ok(`opening hero shot swings home to Chase High at ${home.cut.t.toFixed(1)}s`);
+    else ok(`opening High Head-On pivots home to Chase High at ${home.cut.t.toFixed(1)}s`);
     // v0.3: A changes lane left (Chase High: screen-left is his left).
     const lane0 = await page.evaluate(() => window.__GAME.state().lane);
     await page.keyboard.press('KeyA');

@@ -918,3 +918,19 @@ html.paused #asks { opacity: 1; transform: none; transition: none; }
 #gears.ready { background: var(--c-red); }
 #gears.ready i.meter::after { animation: gearnext 0.4s steps(2) infinite; } /* 2.5 blinks/s, under the photosensitivity limit */
 @media (prefers-reduced-motion: reduce) { #gears.ready i.meter::after { animation: none; } }
+
+/* Menus over the cover art (2026-11-17): beyond the title, the art's wordmark and PRESS START sit under the menu
+   panel, so a dark wash takes the left side; the giant stays in view on the right. */
+#cover::after { content: ''; position: absolute; inset: 0; background: linear-gradient(90deg, rgba(7, 5, 13, 0.97) 0%, rgba(7, 5, 13, 0.95) 40%, rgba(7, 5, 13, 0) 66%); opacity: 0; transition: opacity 0.4s; }
+html:not(:has(#ui [data-screen-id="title"])) #cover::after { opacity: 1; }
+@media (max-aspect-ratio: 1/1) { #cover::after { background: linear-gradient(0deg, rgba(7, 5, 13, 0.94) 0%, rgba(7, 5, 13, 0.85) 45%, rgba(7, 5, 13, 0.2) 75%); } }
+/* How to Play before the first broadcast: over the cover art, a lighter wash so the art shows behind the card. */
+html.briefing.cover #recap { background: rgba(7, 5, 13, 0.62); z-index: 45; }
+
+/* Rampage tell (2026-11-17): hot edges while he's in Rampage, a slow throb (0.8 Hz, well under 3/s); held still under Reduce Flashes / Reduced Motion. */
+#rampfx { position: absolute; inset: 0; pointer-events: none; z-index: 3; opacity: 0; transition: opacity 0.3s; box-shadow: inset 0 0 120px 30px rgba(255, 80, 20, 0.55), inset 0 0 26px 4px rgba(255, 150, 60, 0.5); }
+html.rampage #rampfx { opacity: 1; animation: rampthrob 1.25s ease-in-out infinite; }
+html.rampage.title #rampfx, html.replay #rampfx { opacity: 0; animation: none; }
+@keyframes rampthrob { 50% { opacity: 0.6; } }
+@media (prefers-reduced-motion: reduce) { html.rampage #rampfx { animation: none; } }
+html.reduceflashes.rampage #rampfx { animation: none; }

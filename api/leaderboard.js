@@ -16,7 +16,8 @@ var TUNING = {
    */
   growth: {
     /** Scale per gear (Jog, Stride, Rampage), body and collision radius. */
-    scale: [1.3, 1.3, 1.3],
+    /** Rampage swells him (2026-11-17, a Rampage tell; he runs through everything then, so the bigger hit-box only smashes more). */
+    scale: [1.3, 1.3, 1.45],
     /** The fixed-size alternative to compare in playtest (?size=big): Rampage size all the time, look only. */
     big: 1.3,
     /** Grow/shrink ease time constant (s): a swell, not a pop. */
@@ -89,8 +90,11 @@ var TUNING = {
     // (little bob), knee drive and heel kick, a big exaggerated arm pump (Mike: "exaggerated a bit"). Speeds, cadence
     // and stride are unchanged.
     { name: "Jog", topSpeed: 6, accel: 8, tierUpAfter: 2, smashes: "light", laneChangeTime: 0.22, cadence: 2.6, specStrideLength: 2.5, leanDeg: 20, hipHeight: 1.68, bodyDrop: 0.12, footLift: 0.45, cameraDistanceScale: 0.9, armSwing: 0.9, armBase: -0.1, flightLift: 0.03, elbowBend: 1.2, capeAngle: 20, capeFlutterHz: 1.3, capeFlutterAmp: 0.05 },
-    { name: "Stride", topSpeed: 10, accel: 6, tierUpAfter: Infinity, smashes: "heavy", laneChangeTime: 0.3, cadence: 2.8, specStrideLength: 4, leanDeg: 30, hipHeight: 1.64, bodyDrop: 0.18, footLift: 0.75, cameraDistanceScale: 1, armSwing: 1.25, armBase: -0.05, flightLift: 0.07, elbowBend: 1.4, capeAngle: 52, capeFlutterHz: 3.2, capeFlutterAmp: 0.12 },
-    { name: "Rampage", topSpeed: 15, accel: 4, tierUpAfter: Infinity, smashes: "heavy", laneChangeTime: 0.4, cadence: 3.1, specStrideLength: 6, leanDeg: 40, hipHeight: 1.6, bodyDrop: 0.24, footLift: 1.05, cameraDistanceScale: 1.2, armSwing: 1.6, armBase: 0, flightLift: 0.11, elbowBend: 1.6, capeAngle: 80, capeFlutterHz: 6.5, capeFlutterAmp: 0.2 }
+    // Mike (2026-11-17): "his rampage speed should be his default speed, game feels slow without it". Stride runs at
+    // 15 m/s with the full-speed run (the old Rampage pose and framing); a quicker lane change keeps it light on its feet.
+    { name: "Stride", topSpeed: 15, accel: 6, tierUpAfter: Infinity, smashes: "heavy", laneChangeTime: 0.3, cadence: 3.1, specStrideLength: 6, leanDeg: 38, hipHeight: 1.6, bodyDrop: 0.24, footLift: 1.05, cameraDistanceScale: 1.2, armSwing: 1.5, armBase: 0, flightLift: 0.11, elbowBend: 1.6, capeAngle: 78, capeFlutterHz: 6, capeFlutterAmp: 0.18 },
+    // Rampage is a state now, not a faster gear: same speed, a deeper lean, a wilder arm pump and cape, the chopper a little further out (plus the tells in TUNING.rampageFx).
+    { name: "Rampage", topSpeed: 15, accel: 6, tierUpAfter: Infinity, smashes: "heavy", laneChangeTime: 0.32, cadence: 3.1, specStrideLength: 6, leanDeg: 46, hipHeight: 1.58, bodyDrop: 0.28, footLift: 1.15, cameraDistanceScale: 1.3, armSwing: 1.9, armBase: 0.05, flightLift: 0.13, elbowBend: 1.7, capeAngle: 86, capeFlutterHz: 8, capeFlutterAmp: 0.26 }
   ],
   tierDrop: {
     /** §9 braking longer than this drops a tier (repeats while held). */
@@ -114,7 +118,8 @@ var TUNING = {
    * meter instead of a gear. Score: `distancePoints` a metre at all times (× the gear's bankMult).
    */
   rampage: {
-    gain: { medium: 9, heavy: 12, unit: 16, policeCrash: 20, collateral: 6, nearMiss: 10, ramDodge: 12, lostTrack: 12, chopperShaken: 15, leapLand: 10, breakawayLand: 12 },
+    /** At 15 m/s (2026-11-17) Stride meets more per second: gains ×0.8 keep Rampage about a quarter of the run. */
+    gain: { medium: 7, heavy: 10, unit: 13, policeCrash: 16, collateral: 5, nearMiss: 8, ramDodge: 10, lostTrack: 10, chopperShaken: 12, leapLand: 8, breakawayLand: 10 },
     duration: 8,
     perSmash: 0.3,
     maxDuration: 12,
@@ -124,6 +129,13 @@ var TUNING = {
     secondWindKeep: 33,
     bufferFrames: 5
   },
+  /**
+   * Rampage tells (presentation, 2026-11-17: "we just need a stronger tell for the rampage state"). His rim light
+   * heats from the look's lilac to `rimColor` at `rimBoost`× strength (eased over `ease` s, a slow `pulseHz`
+   * throb), a hot vignette at the screen edges (CSS), plus the size swell (growth.scale), the pose, the music layer
+   * and the meter's countdown. All under 3 Hz; Reduce Flashes holds the throb still.
+   */
+  rampageFx: { rimColor: 16734751, rimBoost: 2.4, rimFloor: 1.4, ease: 0.25, pulseHz: 1.6, pulseAmp: 0.25 },
   shoulderCheck: {
     /** §7 0.25s burst that smashes one mass class up (unchanged in v0.3). */
     duration: 0.25,
@@ -456,14 +468,14 @@ var TUNING = {
      */
     homeAngle: 0,
     /**
-     * Mike (2026-11-17, "think how SA2 starts City Escape"): every broadcast opens on the low hero shot in front
-     * of him (the Sign-Off angle: he runs at the lens), held `openingHold` s (the cold open is most of it), then
-     * the chopper swings round behind him into Chase High in one move (the swoop). It counts as a cut-away, so
+     * Mike (2026-11-17, "think how SA2 starts City Escape", then his screenshot of the shot he meant): every
+     * broadcast opens on High Head-On (he runs down the screen at you), held `openingHold` s (the cold open is
+     * part of it), then the chopper pivots round behind him into Chase High in one move (the swoop). It counts as a cut-away, so
      * the next one waits the usual `cutMinInterval`. Off when camera cuts are off. Like the swoop, the hero shot
      * is exempt from the ≥2s-of-road framing rule: nothing is placed within 45m of the start or spawns before 12s.
      */
-    openingAngle: 6,
-    openingHold: 2.6,
+    openingAngle: 4,
+    openingHold: 3.5,
     /** Phase 0c: at least 15s between cut-aways (tighter than v0.3's 7s). */
     cutMinInterval: 15,
     /** Phase 0c: return to Chase High after this long away (s, random in range). */
@@ -731,15 +743,16 @@ var TUNING = {
    * a different one replaces it. Passives stack. Prices are paid from banked spectacle points (spending never lowers
    * the score). Breakaway and Slipstream start locked (Awards unlock them, src/awards.ts).
    */
+  /** Prices ×1.25 (2026-11-17): at 15 m/s a cleared segment banks ~200k with the bot (was ~160k). */
   upgrades: {
-    leap: { kind: "ability", price: 195e3, label: "Leap", blurb: "Hop lanes of trouble. The landing flattens what you land on.", pitch: "Get a clean shot of him clearing the spike strip.", levels: ["", "Longer jump, bigger landing.", "The landing flattens anything, armored trucks too."] },
-    stare: { kind: "ability", price: 16e4, label: "The Stare", blurb: "Traffic and police ahead pull out of your lane.", pitch: "Stay tight on the eyes. We have time.", levels: ["", "Reaches half again as far.", "Police that pull over crash out."] },
-    breakaway: { kind: "ability", price: 21e4, label: "Breakaway", blurb: "Dive over everything ahead. The police behind lose you.", pitch: "Get the long lens on him. He\u2019s about to leave them all behind.", levels: ["", "Longer dive, bigger slam.", "Lands straight into Rampage."] },
-    primeTime: { kind: "ability", price: 18e4, label: "Prime Time", blurb: "For a few seconds the audience can\u2019t drop and every smash counts double.", pitch: "Every station is taking our feed. Make it count.", levels: ["", "Lasts 8 seconds.", "Lasts 10 seconds."] },
-    thickSkin: { kind: "passive", price: 14e4, label: "Thick Skin", blurb: "Shrug off the first hit each segment: no meter lost.", pitch: "He walked through that like a turnstile." },
-    secondWind: { kind: "passive", price: 125e3, label: "Second Wind", blurb: "Each Rampage ends with the meter a third full.", pitch: "He\u2019s catching his breath. Stay on him, he\u2019s coming back." },
-    crowdPleaser: { kind: "passive", price: 15e4, label: "Crowd Pleaser", blurb: "At Rampage the audience drains 40% slower.", pitch: "Keep rolling. Nobody can look away." },
-    slipstream: { kind: "passive", price: 16e4, label: "Slipstream", blurb: "Police crashes pay double: Ratings and points.", pitch: "Anyone chasing him ends up in the scenery. Keep it wide." }
+    leap: { kind: "ability", price: 245e3, label: "Leap", blurb: "Hop lanes of trouble. The landing flattens what you land on.", pitch: "Get a clean shot of him clearing the spike strip.", levels: ["", "Longer jump, bigger landing.", "The landing flattens anything, armored trucks too."] },
+    stare: { kind: "ability", price: 2e5, label: "The Stare", blurb: "Traffic and police ahead pull out of your lane.", pitch: "Stay tight on the eyes. We have time.", levels: ["", "Reaches half again as far.", "Police that pull over crash out."] },
+    breakaway: { kind: "ability", price: 26e4, label: "Breakaway", blurb: "Dive over everything ahead. The police behind lose you.", pitch: "Get the long lens on him. He\u2019s about to leave them all behind.", levels: ["", "Longer dive, bigger slam.", "Lands straight into Rampage."] },
+    primeTime: { kind: "ability", price: 225e3, label: "Prime Time", blurb: "For a few seconds the audience can\u2019t drop and every smash counts double.", pitch: "Every station is taking our feed. Make it count.", levels: ["", "Lasts 8 seconds.", "Lasts 10 seconds."] },
+    thickSkin: { kind: "passive", price: 175e3, label: "Thick Skin", blurb: "Shrug off the first hit each segment: no meter lost.", pitch: "He walked through that like a turnstile." },
+    secondWind: { kind: "passive", price: 155e3, label: "Second Wind", blurb: "Each Rampage ends with the meter a third full.", pitch: "He\u2019s catching his breath. Stay on him, he\u2019s coming back." },
+    crowdPleaser: { kind: "passive", price: 19e4, label: "Crowd Pleaser", blurb: "At Rampage the audience drains 40% slower.", pitch: "Keep rolling. Nobody can look away." },
+    slipstream: { kind: "passive", price: 2e5, label: "Slipstream", blurb: "Police crashes pay double: Ratings and points.", pitch: "Anyone chasing him ends up in the scenery. Keep it wide." }
   },
   /** Ability level-up price, as a share of the ability's price; highest level. */
   levelPrice: 0.8,

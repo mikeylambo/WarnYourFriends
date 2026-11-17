@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { RIM } from './render/toon';
 import { TUNING, type AbilityId, type UpgradeId } from './tuning';
 import { RunState, ABILITIES } from './sim/run';
 import { Sim } from './sim/sim';
@@ -49,6 +50,27 @@ if (flags.cuts !== null) settings.cameraCuts = flags.cuts;
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const canvas = $<HTMLCanvasElement>('view');
 const flashEl = $('flash');
+/** Rampage tells (TUNING.rampageFx): the rim light heats, the screen edges glow. `rampK` eases 0..1. */
+let rampK = 0;
+let rimBaseStrength = RIM.strength.value;
+const rimBaseColor = RIM.color.value.clone();
+const rimHot = new THREE.Color(TUNING.rampageFx.rimColor);
+function updateRampageFx(dt: number, now: number) {
+  const F = TUNING.rampageFx;
+  const want = sim.inRampage && !attract ? 1 : 0;
+  rampK += (want - rampK) * Math.min(1, dt / F.ease);
+  if (rampK < 0.002) rampK = 0;
+  if (rampK === 0) rimBaseStrength = RIM.strength.value; // the look owns it while he's not in Rampage
+  else {
+    const throb = settings.reduceFlashes ? 1 : 1 + F.pulseAmp * Math.sin(now * Math.PI * 2 * F.pulseHz);
+    // Boosted from the look's own level, never below `rimFloor` (the day look's rim is faint, the tell isn't).
+    const hot = Math.max(rimBaseStrength * F.rimBoost, F.rimFloor) * throb;
+    RIM.strength.value = rimBaseStrength + (hot - rimBaseStrength) * rampK;
+  }
+  RIM.color.value.copy(rimBaseColor).lerp(rimHot, rampK);
+  document.documentElement.classList.toggle('rampage', rampK > 0.5);
+  document.documentElement.classList.toggle('reduceflashes', settings.reduceFlashes);
+}
 const debugEl = $('debug');
 const tierbar = $('tierbar');
 const chyPlace = document.querySelector('#chyron .place') as HTMLElement;
@@ -1940,6 +1962,7 @@ function frame(now: number) {
     }
   }
 
+  updateRampageFx(paused ? 0 : realDt, performance.now() / 1000);
   flashEl.style.opacity = flashFrames > 0 ? '0.85' : bulbFrames > 0 ? '0.18' : '0';
   if (bulbFrames > 0) bulbFrames--;
   if (flashFrames > 0) flashFrames--;
@@ -2037,11 +2060,20 @@ function updateTitleShot(dt: number, t: CameraTarget): boolean {
     wasTitle = inMenus;
     if (inMenus) {
       if (!forcedLook) lighting.setMode('night');
-    } else applyLook();
+    } else {
+      applyLook();
+      // Going live from the cover art: straight into the broadcast's own opening shot, no glide down.
+      if (document.documentElement.classList.contains('cover')) titleK = 0;
+    }
   }
   const idle = (performance.now() - lastInputAt) / 1000;
-  const cover = onTitle && idle < T.idleToAttract;
-  coverEl.hidden = !onTitle; // leaving the title, the camera glide is the transition: the art cuts away
+  // Mike (2026-11-17): the cover art is the backdrop for every menu, not just the title, so the game isn't
+  // spoiled before Go Live; the live attract shot only slides in after `idleToAttract` s with no input.
+  // How to Play before the first broadcast sits on the art too (the broadcast behind it hasn't gone live yet).
+  const briefingFirst = !started && !attract; // a broadcast that hasn't gone live yet (How to Play is up, or about to be)
+  const cover = (inMenus && idle < T.idleToAttract) || briefingFirst;
+  coverEl.hidden = !inMenus && !briefingFirst;
+  void onTitle;
   coverEl.classList.toggle('away', !cover);
   document.documentElement.classList.toggle('cover', cover);
   audio.setHushed(cover); // no footsteps from a giant hidden behind the cover art
