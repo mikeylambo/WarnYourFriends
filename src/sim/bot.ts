@@ -37,7 +37,13 @@ export class Bot {
     }
   }
 
+  /** Rampage loop: the bot fires Rampage the moment the meter is full. */
   input(): SimInput {
+    const g = this.sim.giant;
+    return { ...this.decide(), shoulder: g.meter >= 100 && !this.sim.inRampage };
+  }
+
+  private decide(): SimInput {
     const sim = this.sim;
     const g = sim.giant;
     const track = sim.track;
@@ -63,8 +69,8 @@ export class Bot {
     };
     // A police chopper has him: two lane changes in a row shake it.
     const spotted = units.some((u) => u.unit === 'chopper' && u.phase === 'act');
-    // Police Net: a flanker alongside with the truck braking ahead. Shoulder Check out through a flanker
-    // (Stride+), else brake and drop back behind them; a Leap or the Stare if equipped.
+    // Police Net: a flanker alongside with the truck braking ahead. Brake and drop back behind them; a Leap or
+    // the Stare if equipped (a full meter fires Rampage, which runs through them).
     const net = units.filter((u) => u.unit === 'net' && (u.phase === 'tell' || u.phase === 'act'));
     if (net.length) {
       const flank = net.filter((u) => u.ram && Math.abs(u.s - g.s) < 6);
@@ -73,11 +79,6 @@ export class Bot {
       if (closing && flank.length) {
         if (sim.ability === 'leap' || sim.ability === 'stare') {
           if (g.abilityCd <= 0) return { lane: 0, brake: false, shoulder: false, ability: true };
-        }
-        if (g.tier >= 1 && g.shoulderCd <= 0 && this.shoulderCooldown <= 0) {
-          this.shoulderCooldown = 1;
-          this.decideCooldown = 0.2;
-          return { lane: Math.sign(flank[0].d - g.d), brake: false, shoulder: true };
         }
         // Behind the flankers now? Then step out of the box.
         if (flank.every((f) => f.s - f.hl > g.s + 1)) {
@@ -122,11 +123,7 @@ export class Bot {
       }
     }
 
-    let shoulder = false;
-    if (here <= -100 && bestScore <= -100 && this.shoulderCooldown <= 0) {
-      shoulder = true;
-      this.shoulderCooldown = 3;
-    }
+    const shoulder = false;
     const ability = this.wantAbility(here, bestScore, best);
     if (best !== g.lane) {
       this.decideCooldown = 0.15;

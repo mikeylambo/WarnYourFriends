@@ -22,7 +22,9 @@ export interface Ask {
 export class Asks {
   readonly list: Ask[];
   /** Rampage held continuously (s), for the "hold Rampage" ask. */
-  private rampageRun = 0;
+  /** Smashes in the current Rampage (the one-Rampage ask). */
+  private rampSmashes = 0;
+  private inRampage = false;
 
   constructor(seed: number, segment: number, track: Track) {
     const A = TUNING.asks;
@@ -63,7 +65,15 @@ export class Asks {
   observe(e: SimEvent, zone: string, unitKind: string | null, out: SimEvent[]): Ask[] {
     const done: (Ask | null)[] = [];
     switch (e.type) {
+      case 'rampageStart':
+        this.inRampage = true;
+        this.rampSmashes = 0;
+        done.push(this.bump('rampage', 1, out));
+        break;
+      case 'rampageEnd': this.inRampage = false; break;
       case 'smash':
+        // Best single Rampage so far (a shorter one later never lowers it).
+        if (this.inRampage && ++this.rampSmashes > (this.list.find((x) => x.id === 'rampsmash')?.progress ?? Infinity)) done.push(this.bump('rampsmash', 0, out, this.rampSmashes));
         if (e.propId >= 1_000_000) done.push(this.bump('units', 1, out));
         if (unitKind === 'roadblock' || unitKind === 'rolling') done.push(this.bump('roadblock', 1, out));
         if (e.across) done.push(this.bump('across', 1, out));
@@ -81,19 +91,8 @@ export class Asks {
     return done.filter((a): a is Ask => a !== null);
   }
 
-  /** Per tick: the "hold Rampage" clock (whole seconds, reset when he drops out of Rampage). */
-  step(dt: number, atRampage: boolean, out: SimEvent[]): Ask[] {
-    if (!this.list.some((a) => a.id === 'rampage' && !a.done)) return [];
-    const before = Math.floor(this.rampageRun);
-    this.rampageRun = atRampage ? this.rampageRun + dt : 0;
-    const now = Math.floor(this.rampageRun);
-    const a = this.list.find((x) => x.id === 'rampage')!;
-    if (now === before && !(now === 0 && a.progress > 0)) return [];
-    const done = this.bump('rampage', 0, out, now);
-    if (now === 0 && a.progress > 0 && !a.done) {
-      a.progress = 0;
-      out.push({ type: 'ask', id: a.id, progress: 0, n: a.n, done: false, failed: false, reward: 0 });
-    }
-    return done ? [done] : [];
+  /** Per tick (kept for callers; the Rampage asks now count events). */
+  step(_dt: number, _atRampage: boolean, _out: SimEvent[]): Ask[] {
+    return [];
   }
 }

@@ -623,7 +623,7 @@ export class Director {
     this.side = 1;
     this.hold = C.openingHold;
     this.awayFor = 0;
-    this.sinceAway = C.cutMinInterval - C.openingHold - C.openingQuiet;
+    this.sinceAway = 0; // the opening counts as a cut-away: the next one waits the usual cutMinInterval
     return this.current;
   }
 

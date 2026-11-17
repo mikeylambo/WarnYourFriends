@@ -148,6 +148,7 @@ describe('police crashes', () => {
     const sim = emptySim();
     const g = sim.giant;
     run(sim, 1);
+    g.tier = 0; // a gear that can't flatten it: this is about the cruiser driving off, not a smash
     g.speed = TUNING.giant.speedFloor;
     const u = internals(sim).make('cruiser', 'cruiser', g.s + 1, g.d, g.lane);
     u.phase = 'leave';
@@ -208,20 +209,24 @@ describe('rams take Rampage (Mike, 2026-11-16)', () => {
     return u;
   }
 
-  it('a ram that connects costs Rampage, and the cruiser is not flattened', () => {
+  it('a ram that connects in Stride costs meter (never a gear), and the cruiser is not flattened', () => {
     const sim = emptySim();
     const u = ramming(sim);
+    sim.giant.tier = 1;
+    sim.giant.meter = 50;
     const ev = run(sim, 0.5);
-    expect(ev.some((e) => e.type === 'tierDown' && e.tier === 1)).toBe(true);
+    expect(ev.some((e) => e.type === 'meterLoss')).toBe(true);
+    expect(ev.some((e) => e.type === 'tierDown')).toBe(false);
     expect(ev.some((e) => e.type === 'smash' && e.propId === u.id)).toBe(false);
     expect(sim.giant.speed).toBeGreaterThanOrEqual(TUNING.giant.speedFloor);
   });
 
-  it('a Shoulder Check into the ram flattens it and keeps Rampage', () => {
+  it('in Rampage a ram is flattened and Rampage carries on (Rampage loop: he runs through everything)', () => {
     const sim = emptySim();
     const u = ramming(sim);
+    sim.giant.rampT = 5;
     const dir = Math.sign(u.d - sim.giant.d);
-    const ev = run(sim, 1 / HZ, { ...NO_INPUT, shoulder: true, lane: dir }).concat(run(sim, 0.5));
+    const ev = run(sim, 1 / HZ, { ...NO_INPUT, lane: dir }).concat(run(sim, 0.5));
     expect(ev.some((e) => e.type === 'smash' && e.propId === u.id)).toBe(true);
     expect(ev.some((e) => e.type === 'tierDown')).toBe(false);
   });

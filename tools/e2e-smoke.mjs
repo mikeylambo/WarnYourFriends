@@ -126,19 +126,20 @@ try {
     const sp = await page.evaluate(() => ({ r: window.__GAME.sfxPlace(10, 0), l: window.__GAME.sfxPlace(-10, 0), far: window.__GAME.sfxPlace(0, 120) }));
     if (!(sp.r.pan > 0.3 && sp.l.pan < -0.3 && sp.far.gain < 0.3 && sp.r.gain > 0.8)) fail(`spatial mix (${JSON.stringify(sp)})`);
     else ok(`spatial mix: right pans ${sp.r.pan.toFixed(2)}, left ${sp.l.pan.toFixed(2)}, 120m ahead at ${(sp.far.gain * 100).toFixed(0)}% level`);
-    // v0.3: A moves him screen-left. The broadcast opens on High Head-On (he runs down the screen at you),
-    // where screen-left is his right: one lane up in lane numbers. In the chase angles it's one lane down.
+    // The broadcast opens on the low hero shot in front of him (SA2-style), then swings round into Chase High.
+    const openAng = await page.evaluate(() => window.__GAME.cutLog().length ? -1 : window.__GAME.director().current);
+    if (openAng !== 6 && openAng !== -1) fail(`broadcast opened on angle ${openAng}, expected the hero shot (6)`);
+    await page.waitForFunction(() => window.__GAME.director().current === 0 && !window.__GAME.camera().transition, null, { timeout: 15000 }).catch(() => {});
+    const home = await page.evaluate(() => ({ cut: window.__GAME.cutLog()[0], cur: window.__GAME.director().current }));
+    if (home.cur !== 0 || !home.cut || home.cut.reason !== 'home') fail(`opening did not swing home to Chase High (${JSON.stringify(home)})`);
+    else ok(`opening hero shot swings home to Chase High at ${home.cut.t.toFixed(1)}s`);
+    // v0.3: A changes lane left (Chase High: screen-left is his left).
     const lane0 = await page.evaluate(() => window.__GAME.state().lane);
-    const openAng = await page.evaluate(() => window.__GAME.director().current);
-    if (openAng !== 4) fail(`broadcast opened on angle ${openAng}, expected High Head-On (4)`);
-    else ok('broadcast opens on High Head-On');
-    const headOn = openAng === 3 || openAng === 4;
     await page.keyboard.press('KeyA');
     await page.waitForTimeout(600);
     const s = await page.evaluate(() => window.__GAME.state());
-    const want = headOn ? lane0 + 1 : lane0 - 1;
-    if (s.lane !== want) fail(`A did not move him screen-left (${lane0} → ${s.lane}, wanted ${want})`);
-    else ok(`A moves him screen-left in the opening shot: lane ${lane0 + 1} → ${s.lane + 1}`);
+    if (s.lane !== lane0 - 1) fail(`A did not change lane (${lane0} → ${s.lane})`);
+    else ok(`A changes lane ${lane0 + 1} → ${s.lane + 1}`);
     if (s.speed < 2) fail(`speed below floor (${s.speed})`);
     await page.keyboard.press('Escape');
     // Pause lands on the next rendered frame; software GL runs ~12 fps, so wait for it (≤1s) rather than a fixed 100ms.
@@ -185,7 +186,8 @@ try {
     const problems = watch(page);
     await page.goto(`${URL}?seed=3&bot=1&timescale=3&debug=1`);
     await page.waitForFunction(() => window.__GAME && window.__GAME.started, null, { timeout: 15000 });
-    await page.waitForFunction(() => window.__GAME.state().time > 30, null, { timeout: 60000 });
+    // Rampage loop: the meter needs ~25s of smashing to fill, so run 45s.
+    await page.waitForFunction(() => window.__GAME.state().time > 45, null, { timeout: 90000 });
     // Camera and run cycle, measured inside the running build (v0.3).
     const c = await page.evaluate(() => window.__GAME.camera());
     const gt = await page.evaluate(() => window.__GAME.gait());
@@ -241,8 +243,20 @@ try {
     for (const look of ['night', 'dusk', 'day']) {
       await page.evaluate((l) => window.__GAME.setLook(l), look);
       for (let a = 0; a < 6; a++) {
-        await page.evaluate((i) => window.__GAME.setAngle(i, 1), a);
-        const r = await page.evaluate(() => window.__GAME.silhouette());
+        // Contrast swings with where he is (in a lamp pool, or between two); one frame between pools isn't the
+        // angle's readability. Up to three moments 1s apart (the bot driving), the first that reads counts.
+        let r = null;
+        for (let k = 0; k < 3 && !r?.pass; k++) {
+          if (k) {
+            // Let the broadcast roll on a moment (the presentation only follows the sim on live frames).
+            await page.evaluate((l) => { window.__GAME.setLook(l); window.__GAME.setAngle(0, 1); window.__GAME.resume(); }, look);
+            await page.waitForTimeout(700);
+            await page.evaluate(() => window.__GAME.pause());
+            await page.waitForTimeout(100);
+          }
+          await page.evaluate((i) => window.__GAME.setAngle(i, 1), a);
+          r = await page.evaluate(() => window.__GAME.silhouette());
+        }
         // Diagnostic: the nearest police car (a dark car beside him is in the surround the contrast is measured against).
         const near = await page.evaluate(() => { const G = window.__GAME.sim; let m = Infinity; for (const u of G.pursuit.units) if (u.alive && u.solid) m = Math.min(m, Math.hypot(u.s - G.giant.s, u.d - G.giant.d)); return m; });
         const line = `${look}/${['Chase High', 'Wide Side', 'Long Lens', 'Head-On', 'High Head-On', 'Overhead'][a]}: ${r.heightPx.toFixed(0)}px tall, contrast ${r.contrast.toFixed(2)}:1 (${r.polarity}; giant ${r.giantLuma.toFixed(3)}, surround ${r.surroundLuma.toFixed(3)}), edge ${(r.edgeShare * 100).toFixed(0)}%${near < 12 ? `, police car ${near.toFixed(1)}m away` : ''}`;

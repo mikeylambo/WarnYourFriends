@@ -99,10 +99,9 @@ for (let seed = 1; seed <= seeds; seed++) {
   const dt = sim.dt;
   // Every broadcast opens on the opening angle (High Head-On), held like a cut-away, then swoops home.
   const opening = director.open();
-  if (opening !== null) {
-    rig.cut(opening, director.side, target());
-    lastAway = 0;
-  }
+  if (opening !== null) rig.cut(opening, director.side, target());
+  /** The opening hero shot is a cinematic like the swoop: bounded, and exempt from the framing rules. */
+  let inOpening = opening !== null;
 
   const seenUnits = new Set<number>();
   let segNets = 0;
@@ -202,7 +201,11 @@ for (let seed = 1; seed <= seeds; seed++) {
       if (cutsOff) cuts.offCuts++;
       cam.cuts++;
       cam.minCutGap = Math.min(cam.minCutGap, sim.time - lastCut);
-      if (cutTo.reason === 'home') {
+      if (cutTo.reason === 'home' && inOpening) {
+        // The opening's swing home: held exactly openingHold (plus a lane change at most), not a cut-away's 6–10s.
+        inOpening = false;
+        if (sim.time > TUNING.camera.openingHold + TUNING.camera.triggerPending + 0.05) fail(`seed ${seed}: opening held ${sim.time.toFixed(2)}s`);
+      } else if (cutTo.reason === 'home') {
         cuts.home++;
         const held = sim.time - lastAway;
         cuts.minAwayHold = Math.min(cuts.minAwayHold, held);
@@ -236,7 +239,7 @@ for (let seed = 1; seed <= seeds; seed++) {
       swoop.maxLen = Math.max(swoop.maxLen, swoopRun);
       if (swoopRun > TUNING.camera.swoop.time + dt * 1.5) fail(`seed ${seed}: swoop running ${swoopRun.toFixed(2)}s`);
     } else swoopRun = 0;
-    if (!inSwoop) {
+    if (!inSwoop && !inOpening) {
     cam.frames++;
     cam.perAngle[info.angle] = (cam.perAngle[info.angle] ?? 0) + 1;
     cam.maxScreenUp = Math.max(cam.maxScreenUp, Math.abs(info.screenUpDeg));
@@ -440,7 +443,8 @@ console.log(`  landmarks passed: ${Object.entries(landmarks).sort().map(([k, v])
 console.log(`  producer's asks (offered → done): ${Object.entries(asksAgg).sort().map(([k, v]) => `${k} ${v.done}/${v.offered}`).join(', ')}`);
 console.log(`  escort: ${esc.joins} joins, nearest join ${esc.minJoinBehind.toFixed(1)}m back, ${esc.joinsOnCamera} on camera; closest gap ever ${esc.minGap.toFixed(2)}m (floor ${TUNING.escort.minGap}m)`);
 if (Object.keys(aheadBy).length) console.log('  road-ahead shortfalls (min s by angle/tier):', JSON.stringify(Object.fromEntries(Object.entries(aheadBy).map(([k, v]) => [k, +v.toFixed(2)]))));
-for (let t = 0; t < 3; t++) {
+// Rampage loop: Jog (tier 0) is gone; Stride and Rampage carry the run.
+for (let t = 1; t < 3; t++) {
   if (cad[t].n < 20) fail(`too few cadence samples at ${TUNING.tiers[t].name} (${cad[t].n})`);
   if (cad[t].min < TUNING.gait.cadenceMin - 1e-6 || cad[t].max > TUNING.gait.cadenceMax + 1e-6) fail(`cadence out of band at ${TUNING.tiers[t].name}: ${cad[t].min}–${cad[t].max}`);
   if (slide[t] >= TUNING.gait.maxFootSlide) fail(`foot slide ${slide[t]}m at ${TUNING.tiers[t].name}`);

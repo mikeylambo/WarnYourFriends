@@ -910,3 +910,11 @@ html.title #hud::after, html.attract #hud::after { display: none; }
 
 /* Pause: the producer's asks show beside the pause menu. */
 html.paused #asks { opacity: 1; transform: none; transition: none; }
+
+/* --- Rampage meter (2026-11-17): one bar on the old gear strip; full, it pulses and shows the button --- */
+#gears i.meter { width: 150px; }
+#gears .nm { min-width: 9ch; display: flex; align-items: center; gap: 6px; }
+#gears .nm kbd { font: 800 13px/1 var(--f-head); border: 1px solid currentColor; border-radius: 3px; padding: 2px 5px; font-style: normal; }
+#gears.ready { background: var(--c-red); }
+#gears.ready i.meter::after { animation: gearnext 0.4s steps(2) infinite; } /* 2.5 blinks/s, under the photosensitivity limit */
+@media (prefers-reduced-motion: reduce) { #gears.ready i.meter::after { animation: none; } }

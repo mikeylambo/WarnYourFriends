@@ -36,6 +36,8 @@ export function stepLengthAt(speed: number): number {
 
 export interface SimStats {
   timeAtTier: [number, number, number];
+  /** Score earned by distance (Rampage loop): part of show.banked. */
+  distancePoints: number;
   smashes: number;
   smashesAcross: number;
   bounces: number;
@@ -92,7 +94,7 @@ export class Sim {
   private forksOpened = 0;
   tick = 0;
   time = 0;
-  stats: SimStats = { timeAtTier: [0, 0, 0], smashes: 0, smashesAcross: 0, bounces: 0, wallBumps: 0, laneChanges: 0, tierUps: 0, tierDowns: 0, footfalls: 0, merges: 0, minSpeed: Infinity };
+  stats: SimStats = { timeAtTier: [0, 0, 0], distancePoints: 0, smashes: 0, smashesAcross: 0, bounces: 0, wallBumps: 0, laneChanges: 0, tierUps: 0, tierDowns: 0, footfalls: 0, merges: 0, minSpeed: Infinity };
 
   private events: SimEvent[] = [];
   private near: Prop[] = [];
@@ -137,7 +139,7 @@ export class Sim {
       laneBufferDir: 0,
       laneBufferFrames: 0,
       speed,
-      tier: 0,
+      tier: 1, // Rampage loop: Stride is the base gear (Jog is gone; the run-up from startSpeed is the ease-in)
       tierTimer: 0,
       stumble: 0,
       brakeHeld: 0,
@@ -155,7 +157,10 @@ export class Sim {
       airKind: 'leap',
       prime: 0,
       skin: this.upgrades.has('thickSkin') ? TUNING.passives.thickSkinHits : 0,
-      peakTier: 0,
+      peakTier: 1,
+      meter: 0,
+      rampT: 0,
+      rampElapsed: 0,
     };
   }
 
@@ -172,6 +177,8 @@ export class Sim {
 
   /** Progress toward the next gear, 0..1 (0 at top gear): the HUD pip and the build-up cue read it. */
   get tierUpProgress(): number {
+    // Rampage loop: the HUD's build-up reads the meter.
+    if (this.giant.tier >= 1) return this.giant.meter / 100;
     const g = this.giant;
     const t = this.tierTuning;
     if (!Number.isFinite(t.tierUpAfter)) return 0;
@@ -210,12 +217,17 @@ export class Sim {
       if (this.show.state === 'cleared') this.runOffRamp(dt);
       return this.events;
     }
-    this.stepShoulder(input, dt);
+    this.stepRampage(input, dt);
     this.stepAbility(input, dt);
     this.stepLanes(input);
     this.stepSpeed(input, dt);
     const segBefore = this.track.segmentAt(this.giant.s).index;
+    const s0 = this.giant.s;
     this.advance(dt);
+    // Score for distance at all times (Rampage pays its gear multiplier on it too).
+    const dp = (this.giant.s - s0) * TUNING.rampage.distancePoints * TUNING.show.bankMult[this.giant.tier];
+    this.show.banked += dp;
+    this.stats.distancePoints += dp;
     this.stepLateral(dt);
     this.collide();
     this.judgePasses();
@@ -233,7 +245,7 @@ export class Sim {
     if (this.show.netSlips > slipsBefore) {
       // Slipped the net (or shook off the police on his tail): a gear down, a stumble, and they fall away.
       const g = this.giant;
-      if (g.tier > 0) this.setTier(g.tier - 1, 'slip');
+      this.hit('slip');
       g.stumble = TUNING.tierDrop.stumbleTime;
       if (this.show.pinCause === 'net') this.pursuit.disperseNet();
       else this.pursuit.shakeOff();
@@ -282,6 +294,7 @@ export class Sim {
 
   /** Spectacle: a stunt joins the chain (score; Ratings are separate). */
   private stunt(cause: StuntType, base?: number) {
+    this.fillMeter(cause);
     const n = this.events.length;
     this.show.stunt(cause, this.time, this.giant.tier, this.events, base);
     this.observeShowEvents(n);
@@ -332,10 +345,11 @@ export class Sim {
   /** Spike strip (v0.3): −1 tier, keep 70% speed, a stumble. No knock-back. */
   spikeHit(u: Unit) {
     const g = this.giant;
+    if (this.inRampage) return; // Rampage: he runs over the strip
     g.speed = Math.max(TUNING.giant.speedFloor, g.speed * TUNING.pursuit.spike.speedKeep);
     g.stumble = TUNING.tierDrop.stumbleTime;
     g.tierTimer = 0;
-    if (g.tier > 0) this.setTier(g.tier - 1, 'impact');
+    this.hit('impact');
     this.emit({ type: 'spiked', id: u.id });
   }
 
@@ -432,7 +446,8 @@ export class Sim {
     // where he'll be when it opens: keep it ramp-friendly so the exit always lands in reach.
     if (!this.exitPlanned && now >= X.exitOpensAt - X.planAhead) {
       this.exitPlanned = true;
-      const at = Math.max(this.track.end, g.s + g.speed * X.planAhead + X.exitDistance[0] - 30);
+      // Planned at Stride pace (the base gear): planned mid-Rampage, it landed out of reach at Stride later.
+      const at = Math.max(this.track.end, g.s + Math.min(g.speed, TUNING.tiers[1].topSpeed) * X.planAhead + X.exitDistance[0] - 30);
       this.track.reserveExit(at, at + X.planLength);
     }
     if (!this.exit && !this.fork && now >= X.exitOpensAt && now < X.length + X.grace) this.openExit();
@@ -526,17 +541,86 @@ export class Sim {
     }
   }
 
+  /** In Rampage (the burst), not just at top speed. */
+  get inRampage(): boolean {
+    return this.giant.rampT > 0;
+  }
+
+  /** The Rampage button: fires a full meter. In Rampage, the clock runs down; smashes add to it (capped). */
+  private rampBuffer = 0;
+  private stepRampage(input: SimInput, dt: number) {
+    const g = this.giant;
+    const R = TUNING.rampage;
+    if (input.shoulder) this.rampBuffer = R.bufferFrames;
+    if (this.rampBuffer > 0) {
+      if (g.meter >= 100 && !this.inRampage) {
+        this.rampBuffer = 0;
+        this.startRampage();
+      } else this.rampBuffer--;
+    }
+    if (this.inRampage) {
+      g.rampElapsed += dt;
+      g.rampT = Math.max(0, g.rampT - dt);
+      if (g.rampT === 0) this.endRampage();
+    }
+  }
+
+  /** Fire Rampage (the button with a full meter, or Breakaway III's landing). */
+  private startRampage() {
+    const g = this.giant;
+    g.meter = 0;
+    g.rampT = TUNING.rampage.duration;
+    g.rampElapsed = 0;
+    this.setTier(TUNING.tiers.length - 1);
+    this.emit({ type: 'rampageStart', time: g.rampT });
+  }
+
+  private endRampage() {
+    const g = this.giant;
+    g.rampT = 0;
+    g.meter = this.upgrades.has('secondWind') ? TUNING.rampage.secondWindKeep : 0;
+    this.setTier(1, 'rampageEnd');
+    this.emit({ type: 'rampageEnd' });
+  }
+
+  /** A stunt in Stride fills the meter; in Rampage a smash keeps it going a little longer (capped). */
+  private fillMeter(cause: StuntType) {
+    const g = this.giant;
+    const R = TUNING.rampage;
+    if (this.inRampage) {
+      if (cause === 'medium' || cause === 'heavy' || cause === 'unit') g.rampT = Math.min(g.rampT + R.perSmash, Math.max(0, R.maxDuration - g.rampElapsed));
+      return;
+    }
+    if (g.meter >= 100) return;
+    g.meter = Math.min(100, g.meter + (R.gain[cause] ?? 0));
+    if (g.meter >= 100) this.emit({ type: 'meterFull' });
+  }
+
+  /**
+   * What used to cost a gear: a bounce, spikes, a slipped Net, the police shaken off. In Stride it costs
+   * meter (Thick Skin shrugs off the first); in Rampage only being caught or slipping a Net ends it.
+   */
+  private hit(reason: TierDropReason) {
+    const g = this.giant;
+    if (this.inRampage) {
+      if (reason === 'slip') this.endRampage();
+      return;
+    }
+    if (reason === 'impact' && g.skin > 0) {
+      g.skin--;
+      this.emit({ type: 'thickSkin', left: g.skin });
+      return;
+    }
+    const before = g.meter;
+    g.meter = Math.max(0, g.meter - TUNING.rampage.bounceCost);
+    if (before > g.meter) this.emit({ type: 'meterLoss', amount: before - g.meter, reason });
+  }
+
   private setTier(tier: number, reason?: TierDropReason) {
     const g = this.giant;
     const next = clamp(tier, 0, TUNING.tiers.length - 1);
     if (next === g.tier) return;
     const up = next > g.tier;
-    // Thick Skin: the first gear-costing hit of a segment is shrugged off (a brake or a slipped net still costs it).
-    if (!up && reason === 'impact' && g.skin > 0) {
-      g.skin--;
-      this.emit({ type: 'thickSkin', left: g.skin });
-      return;
-    }
     g.tier = next;
     g.tierTimer = 0;
     g.peakTier = Math.max(g.peakTier, next);
@@ -544,23 +628,7 @@ export class Sim {
     else this.emit({ type: 'tierDown', tier: next, reason: reason ?? 'impact' });
   }
 
-  private stepShoulder(input: SimInput, dt: number) {
-    const g = this.giant;
-    if (input.shoulder) g.shoulderBuffer = TUNING.shoulderCheck.bufferFrames;
-    g.shoulderCd = Math.max(0, g.shoulderCd - dt);
-    g.shoulderT = Math.max(0, g.shoulderT - dt);
-    if (g.shoulderBuffer > 0) {
-      if (g.shoulderCd <= 0 && g.stumble <= 0) {
-        g.shoulderBuffer = 0;
-        g.shoulderT = TUNING.shoulderCheck.duration;
-        g.shoulderCd = TUNING.shoulderCheck.cooldown;
-        g.speed += TUNING.shoulderCheck.burstSpeed;
-        this.emit({ type: 'shoulder', s: g.s, d: g.d });
-      } else {
-        g.shoulderBuffer--;
-      }
-    }
-  }
+
 
   // --- Lanes ---------------------------------------------------------------
 
@@ -751,7 +819,7 @@ export class Sim {
     const smashed = this.slam(TUNING.abilities.breakaway.shockRadius[L], false);
     g.speed = Math.min(g.speed, this.tierTuning.topSpeed); // the landing takes the dive's extra speed
     const shaken = this.pursuit.loseAllBehind();
-    if (this.abilityLevel >= 3) this.setTier(TUNING.tiers.length - 1);
+    if (this.abilityLevel >= 3) this.startRampage();
     this.emit({ type: 'breakawayLand', s: g.s, d: g.d, smashed, shaken });
   }
 
@@ -803,10 +871,8 @@ export class Sim {
       g.speed -= TUNING.brake.decel * dt;
       g.brakeHeld += dt;
       g.tierTimer = 0;
-      if (g.brakeHeld > TUNING.tierDrop.brakeHold) {
-        g.brakeHeld = 0;
-        if (g.tier > 0) this.setTier(g.tier - 1, 'brake');
-      }
+      // Rampage loop: braking never costs a gear (Stride is the floor; Rampage runs its clock).
+      if (g.brakeHeld > TUNING.tierDrop.brakeHold) g.brakeHeld = 0;
     } else {
       g.brakeHeld = 0;
       if (g.stumble > 0) {
@@ -864,9 +930,10 @@ export class Sim {
   /** Heaviest class the giant smashes right now (Shoulder Check lifts one class, never Immovable). */
   smashRank(): number {
     const g = this.giant;
+    // Rampage loop: in Rampage he runs through everything, bulldozers and police included.
+    if (this.inRampage) return CLASS_RANK.immovable;
     const base = this.tierTuning.smashes ? CLASS_RANK[this.tierTuning.smashes] : -1;
-    let rank = Math.min(base + (g.shoulderT > 0 ? 1 : 0), CLASS_RANK.heavy);
-    return rank;
+    return Math.min(base + (g.shoulderT > 0 ? 1 : 0), CLASS_RANK.heavy);
   }
 
   /** Is `lane` free of things the giant can't smash over [s0, s1]? */
@@ -906,7 +973,7 @@ export class Sim {
       // A Police Net flanker breaks only to a Shoulder Check (then it's Heavy); otherwise nothing moves it.
       const u = p as Unit;
       // A cruiser mid-ram is driving into him: it can't be shrugged off at Rampage (only a Shoulder Check flattens it).
-      const ramming = u.unit === 'cruiser' && u.phase === 'act' && TUNING.pursuit.cruiser.ramBeatsRampage && this.giant.shoulderT <= 0;
+      const ramming = u.unit === 'cruiser' && u.phase === 'act' && TUNING.pursuit.cruiser.ramBeatsRampage && this.giant.shoulderT <= 0 && !this.inRampage;
       const cls = ramming ? 'immovable' : u.ram && this.giant.shoulderT > 0 ? 'heavy' : p.cls;
       if (CLASS_RANK[cls] <= rank) {
         // Smash, forward or across: the same class rule either way (v0.3 smash-across).
@@ -939,7 +1006,7 @@ export class Sim {
       g.tierTimer = 0;
       g.laneQueue = 0;
       const toLane = this.knockLane(p);
-      if (g.tier > 0) this.setTier(g.tier - 1, 'impact');
+      this.hit('impact');
       // Nowhere to be knocked to (something unbreakable either side) and it isn't unbreakable itself: he
       // stumbles through it instead of bouncing in place against it for good (Law 1: he never stops).
       if (toLane === g.lane && !unit && p.cls !== 'immovable' && g.move !== 'change') {

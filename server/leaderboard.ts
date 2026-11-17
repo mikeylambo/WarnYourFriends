@@ -90,7 +90,8 @@ export interface Reply {
   body: unknown;
 }
 
-const KEY = (mode: BoardMode) => `wyf:lb:${mode}`;
+// Season 1 boards were the bare `wyf:lb:<mode>` keys; later seasons get their own (old scores were earned under other rules).
+const KEY = (mode: BoardMode) => (TUNING.leaderboard.season > 1 ? `wyf:lb:s${TUNING.leaderboard.season}:${mode}` : `wyf:lb:${mode}`);
 const NAMES = 'wyf:lb:names';
 const isMode = (m: unknown): m is BoardMode => m === 'run' || m === 'broadcast';
 const isPlayer = (p: unknown): p is string => typeof p === 'string' && /^[a-z0-9]{16,32}$/.test(p);

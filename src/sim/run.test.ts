@@ -160,23 +160,24 @@ describe('abilities and passives (§17)', () => {
     expect(sim.show.prime).toBe(false);
   });
 
-  it('Thick Skin shrugs off the first hit each segment; Second Wind gears back up sooner', () => {
+  it('Thick Skin shrugs off the first hit each segment (no meter lost); Second Wind ends a Rampage with the meter a third full', () => {
     const hit = (ups: UpgradeId[]) => {
       const sim = new Sim({ seed: 1, upgrades: ups });
-      sim.giant.tier = 2;
-      (sim as unknown as { setTier: (t: number, r: string) => void }).setTier(1, 'impact');
-      return sim.giant.tier;
+      sim.giant.meter = 80;
+      (sim as unknown as { hit: (r: string) => void }).hit('impact');
+      return sim.giant.meter;
     };
-    expect(hit(['thickSkin'])).toBe(2);
-    expect(hit([])).toBe(1);
-    const regain = (ups: UpgradeId[]) => {
+    expect(hit(['thickSkin'])).toBe(80);
+    expect(hit([])).toBe(80 - TUNING.rampage.bounceCost);
+    const after = (ups: UpgradeId[]) => {
       const sim = new Sim({ seed: 1, upgrades: ups });
-      sim.giant.peakTier = 2;
-      sim.giant.tier = 1;
-      for (let i = 0; i < 1200; i++) for (const e of sim.step({ lane: 0, brake: false, shoulder: false })) if (e.type === 'tierUp' && e.tier === 2) return sim.time;
-      return Infinity;
+      sim.giant.meter = 100;
+      sim.step({ lane: 0, brake: false, shoulder: true });
+      for (let i = 0; i < 60 * (TUNING.rampage.maxDuration + 1) && sim.inRampage; i++) sim.step({ lane: 0, brake: false, shoulder: false });
+      return sim.giant.meter;
     };
-    expect(regain(['secondWind'])).toBeLessThan(regain([]));
+    expect(after(['secondWind'])).toBe(TUNING.rampage.secondWindKeep);
+    expect(after([])).toBe(0);
   });
 
   it('Crowd Pleaser slows the drain at Rampage; Slipstream doubles a police crash', () => {

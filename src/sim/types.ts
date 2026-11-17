@@ -85,13 +85,18 @@ export interface GiantState {
   skin: number;
   /** Second Wind: the highest gear he's had this segment. */
   peakTier: number;
+  /** Rampage meter 0..100: stunts in Stride fill it; full, the Rampage button fires it. */
+  meter: number;
+  /** Rampage: seconds left (0 when not in Rampage), and how long this one has run. */
+  rampT: number;
+  rampElapsed: number;
 }
 
 export interface SimInput {
   /** Lane input edge: −1 left, +1 right, 0 none. */
   lane: number;
   brake: boolean;
-  /** True on the frame the button was pressed. */
+  /** True on the frame the button was pressed. The Rampage button (it was Shoulder Check; the field keeps its name for recorded inputs). */
   shoulder: boolean;
   /** Phase 3: ability button (edge), 5f buffer. */
   ability?: boolean;
@@ -99,7 +104,7 @@ export interface SimInput {
 
 export const NO_INPUT: SimInput = { lane: 0, brake: false, shoulder: false, ability: false };
 
-export type TierDropReason = 'impact' | 'brake' | 'slip';
+export type TierDropReason = 'impact' | 'brake' | 'slip' | 'rampageEnd';
 
 export type SimEvent =
   | { type: 'smash'; propId: number; cls: MassClass; mat: Material; s: number; d: number; across: boolean; speed: number }
@@ -111,6 +116,11 @@ export type SimEvent =
   /** `t` is the exact sim time of the plant (sub-tick), for cadence measurement. */
   | { type: 'footfall'; tier: number; foot: 0 | 1; step: number; t: number; s: number; d: number; speed: number; stepLen: number }
   | { type: 'shoulder'; s: number; d: number }
+  /** Rampage loop (2026-11-17): the meter filled; Rampage fired (how long it lasts); a hit cost meter (how much). */
+  | { type: 'meterFull' }
+  | { type: 'rampageStart'; time: number }
+  | { type: 'rampageEnd' }
+  | { type: 'meterLoss'; amount: number; reason: TierDropReason }
   /** Phase 0c: the giant enters a merge segment (lane count changes from `from` to `to`). */
   | { type: 'merge'; from: number; to: number; s: number }
   /** Phase 0c: an escort cruiser joins the chase, `behind` metres back. */

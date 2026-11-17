@@ -180,7 +180,7 @@ export const TUNING = {
     // (little bob), knee drive and heel kick, a big exaggerated arm pump (Mike: "exaggerated a bit"). Speeds, cadence
     // and stride are unchanged.
     { name: 'Jog', topSpeed: 6, accel: 8, tierUpAfter: 2.0, smashes: 'light', laneChangeTime: 0.22, cadence: 2.6, specStrideLength: 2.5, leanDeg: 20, hipHeight: 1.68, bodyDrop: 0.12, footLift: 0.45, cameraDistanceScale: 0.9, armSwing: 0.9, armBase: -0.1, flightLift: 0.03, elbowBend: 1.2, capeAngle: 20, capeFlutterHz: 1.3, capeFlutterAmp: 0.05 },
-    { name: 'Stride', topSpeed: 10, accel: 6, tierUpAfter: 3.0, smashes: 'medium', laneChangeTime: 0.3, cadence: 2.8, specStrideLength: 4.0, leanDeg: 30, hipHeight: 1.64, bodyDrop: 0.18, footLift: 0.75, cameraDistanceScale: 1.0, armSwing: 1.25, armBase: -0.05, flightLift: 0.07, elbowBend: 1.4, capeAngle: 52, capeFlutterHz: 3.2, capeFlutterAmp: 0.12 },
+    { name: 'Stride', topSpeed: 10, accel: 6, tierUpAfter: Infinity, smashes: 'heavy', laneChangeTime: 0.3, cadence: 2.8, specStrideLength: 4.0, leanDeg: 30, hipHeight: 1.64, bodyDrop: 0.18, footLift: 0.75, cameraDistanceScale: 1.0, armSwing: 1.25, armBase: -0.05, flightLift: 0.07, elbowBend: 1.4, capeAngle: 52, capeFlutterHz: 3.2, capeFlutterAmp: 0.12 },
     { name: 'Rampage', topSpeed: 15, accel: 4, tierUpAfter: Infinity, smashes: 'heavy', laneChangeTime: 0.4, cadence: 3.1, specStrideLength: 6.0, leanDeg: 40, hipHeight: 1.6, bodyDrop: 0.24, footLift: 1.05, cameraDistanceScale: 1.2, armSwing: 1.6, armBase: 0, flightLift: 0.11, elbowBend: 1.6, capeAngle: 80, capeFlutterHz: 6.5, capeFlutterAmp: 0.2 },
   ] as TierTuning[],
 
@@ -196,6 +196,27 @@ export const TUNING = {
     decel: 14,
     /** §7 brake floor equals the Law 1 floor. */
     floor: 2,
+  },
+
+  /**
+   * The Rampage loop (Mike, 2026-11-17: "keep it in Stride, remove the Jog state, make Rampage the payoff").
+   * Deviation from v0.3 §7–9's three gears built by running. Stride is the base gear (every segment opens on a
+   * short run-up from `giant.startSpeed`); stunts in Stride fill the meter (`gain`, points per stunt, a full
+   * meter is 100); full, the Rampage button (the old Shoulder Check button) fires Rampage for `duration` s,
+   * each smash adding `perSmash` s up to `maxDuration` in all. In Rampage he runs through everything
+   * (bulldozers, police, the Net's truck) and spikes don't touch him. A hit in Stride costs `bounceCost` of the
+   * meter instead of a gear. Score: `distancePoints` a metre at all times (× the gear's bankMult).
+   */
+  rampage: {
+    gain: { medium: 9, heavy: 12, unit: 16, policeCrash: 20, collateral: 6, nearMiss: 10, ramDodge: 12, lostTrack: 12, chopperShaken: 15, leapLand: 10, breakawayLand: 12 } as Record<string, number>,
+    duration: 8,
+    perSmash: 0.3,
+    maxDuration: 12,
+    bounceCost: 25,
+    distancePoints: 4,
+    /** Second Wind: a Rampage ends with the meter this full. */
+    secondWindKeep: 33,
+    bufferFrames: 5,
   },
 
   shoulderCheck: {
@@ -467,7 +488,8 @@ export const TUNING = {
       { id: 'chopper', text: 'Shake the police chopper', n: 1, reward: 25000, fromSegment: 1 },
       { id: 'dodge', text: "Dodge a cruiser's swerve", n: 1, reward: 20000 },
       { id: 'clean', text: 'Sign off without a bounce', n: 1, reward: 35000 },
-      { id: 'rampage', text: 'Hold Rampage for {n} seconds', n: 60, reward: 25000 },
+      { id: 'rampage', text: 'Go Rampage {n} times', n: 4, reward: 25000 },
+      { id: 'rampsmash', text: 'Smash {n} things in one Rampage', n: 10, reward: 30000 },
     ] as { id: string; text: string; n: number; reward: number; zone?: 'bridge' | 'tunnel' | 'avenue'; fromSegment?: number }[],
   },
 
@@ -514,7 +536,7 @@ export const TUNING = {
       { name: 'Overhead', yawDeg: 0, pitchDeg: 82, distance: 70, fov: 30, swoopHome: true },
       // Mike (2026-11-17): the sign-off sweeps deeper into a head-on, low and close, looking back down the road he came
       // along; framed behind him so the end of the ramp ahead of him is out of shot. Outro only.
-      { name: 'Sign-Off', yawDeg: 16, pitchDeg: 20, distance: 46, fov: 24, headOn: true, outro: true, lookBehind: 9 },
+      { name: 'Sign-Off', yawDeg: 16, pitchDeg: 20, distance: 46, fov: 24, headOn: true, outro: true, lookBehind: 9, swoopHome: true },
     ] as CameraAngle[],
     /** Away angles each trigger can cut to (random pick, never the last away angle). Overhead suits merges: you see the lanes close. */
     cutAngles: { rampage: [3, 4, 1], heavy: [4, 3, 2], merge: [5, 1, 2] } as Record<'rampage' | 'heavy' | 'merge', number[]>,
@@ -537,13 +559,14 @@ export const TUNING = {
      */
     homeAngle: 0,
     /**
-     * Mike (2026-11-17): every broadcast opens on High Head-On (he runs down the screen at you), held for
-     * `openingHold` s, then the swoop home to Chase High. The next cut-away waits at least `openingQuiet` s
-     * after that so the swoop home isn't followed by a cut straight away. Off when camera cuts are off.
+     * Mike (2026-11-17, "think how SA2 starts City Escape"): every broadcast opens on the low hero shot in front
+     * of him (the Sign-Off angle: he runs at the lens), held `openingHold` s (the cold open is most of it), then
+     * the chopper swings round behind him into Chase High in one move (the swoop). It counts as a cut-away, so
+     * the next one waits the usual `cutMinInterval`. Off when camera cuts are off. Like the swoop, the hero shot
+     * is exempt from the ≥2s-of-road framing rule: nothing is placed within 45m of the start or spawns before 12s.
      */
-    openingAngle: 4,
-    openingHold: 10,
-    openingQuiet: 6,
+    openingAngle: 6,
+    openingHold: 2.6,
     /** Phase 0c: at least 15s between cut-aways (tighter than v0.3's 7s). */
     cutMinInterval: 15,
     /** Phase 0c: return to Chase High after this long away (s, random in range). */
@@ -619,7 +642,7 @@ export const TUNING = {
     /** §4: the sign-off spawns 150–250m away. */
     exitDistance: [150, 250] as [number, number],
     /** The ramp's stretch of road is planned this long before it opens (s), and kept ramp-friendly for this far (m). */
-    planAhead: 30,
+    planAhead: 40, // Rampage loop: 40 (was 30): at Stride pace the road 30s out was already generated (480m ahead), so the plan came too late
     planLength: 450,
     /** If no eligible segment sits inside that window, search up to this far. */
     exitSearchMax: 330,
@@ -661,7 +684,8 @@ export const TUNING = {
     outnumberedAt: 6,
     outnumberedMult: 1.25,
     /** Gear multiplier on spectacle points (was §12's per-second banking multiplier). */
-    bankMult: [1, 1.5, 2],
+    /** Rampage loop: Rampage pays double Stride. */
+    bankMult: [1, 1, 2],
     /** §12 Heat: rises at these Ratings, and +1 every 45s; never falls in a segment. */
     heatAt: [30, 50, 70, 90],
     heatEvery: 45,
@@ -733,7 +757,7 @@ export const TUNING = {
      * crash is in the chopper's frame (§1).
      */
     /** avoidLook: behind the frame (not news), a cruiser looks this many seconds ahead and steers round solid things; avoidHold s before it rejoins his path. */
-    crash: { react: 6, plowKeep: 0.8, visibleBehind: 5, avoidLook: 0.7, avoidHold: 0.8 },
+    crash: { react: 6, plowKeep: 0.8, visibleBehind: 3, avoidLook: 0.7, avoidHold: 0.8 },
     /**
      * Police Net (Mike, 2026-11-16: "a real box-in", one goal and two threats). From Heat 3, at most
      * `perSegment[heat - 1]` a segment, `minGap` s apart. An armoured truck (nothing smashes it) takes his
@@ -795,8 +819,8 @@ export const TUNING = {
     stare: { kind: 'ability', price: 160000, label: 'The Stare', blurb: 'Traffic and police ahead pull out of your lane.', pitch: 'Stay tight on the eyes. We have time.', levels: ['', 'Reaches half again as far.', 'Police that pull over crash out.'] },
     breakaway: { kind: 'ability', price: 210000, label: 'Breakaway', blurb: 'Dive over everything ahead. The police behind lose you.', pitch: 'Get the long lens on him. He’s about to leave them all behind.', levels: ['', 'Longer dive, bigger slam.', 'Lands straight into Rampage.'] },
     primeTime: { kind: 'ability', price: 180000, label: 'Prime Time', blurb: 'For a few seconds the audience can’t drop and every smash counts double.', pitch: 'Every station is taking our feed. Make it count.', levels: ['', 'Lasts 8 seconds.', 'Lasts 10 seconds.'] },
-    thickSkin: { kind: 'passive', price: 140000, label: 'Thick Skin', blurb: 'Shrug off the first hit each segment: no gear lost.', pitch: 'He walked through that like a turnstile.' },
-    secondWind: { kind: 'passive', price: 125000, label: 'Second Wind', blurb: 'Gear back up 40% faster after losing one.', pitch: 'He’s catching his breath. Stay on him, he’s coming back.' },
+    thickSkin: { kind: 'passive', price: 140000, label: 'Thick Skin', blurb: 'Shrug off the first hit each segment: no meter lost.', pitch: 'He walked through that like a turnstile.' },
+    secondWind: { kind: 'passive', price: 125000, label: 'Second Wind', blurb: 'Each Rampage ends with the meter a third full.', pitch: 'He’s catching his breath. Stay on him, he’s coming back.' },
     crowdPleaser: { kind: 'passive', price: 150000, label: 'Crowd Pleaser', blurb: 'At Rampage the audience drains 40% slower.', pitch: 'Keep rolling. Nobody can look away.' },
     slipstream: { kind: 'passive', price: 160000, label: 'Slipstream', blurb: 'Police crashes pay double: Ratings and points.', pitch: 'Anyone chasing him ends up in the scenery. Keep it wide.' },
   } as Record<UpgradeId, { kind: 'ability' | 'passive'; price: number; label: string; blurb: string; /** The producer's line on the meeting card (flavour). */ pitch: string; /** Abilities: what levels II and III add ([0] unused). */ levels?: string[] }>,
@@ -808,6 +832,8 @@ export const TUNING = {
    * Leaderboard (§29: shared, server-side). Scores are re-simulated from the inputs on the server.
    */
   leaderboard: {
+    /** Board season: bumped when the rules change what a score means (2: the Rampage loop, 2026-11-17). Old boards stay in the store, unread. */
+    season: 2,
     /** Inputs per segment a submission may carry: 165s segment + the outro, with room (60 Hz). */
     maxTicks: 20000,
     /** Longest name on the board (fits the recap row at phone width). */
@@ -825,10 +851,10 @@ export const TUNING = {
   /**
    * Onboarding prompts (Mike, 2026-11-17). Each once per browser, one at a time, `gap` s apart, held `hold` s.
    * quietStart: nothing in the first seconds (the cold open). blockedLead: an unsmashable thing within this many
-   * seconds of him. gearAfter: still at Jog this long in. audienceBelow: audience bar under this. kiteAhead: m of
+   * seconds of him. audienceBelow: audience bar under this. kiteAhead: m of
    * road ahead of a police car alongside him.
    */
-  onboarding: { quietStart: 4, blockedLead: 2.2, gearAfter: 14, audienceBelow: 12, kiteAhead: 30, gap: 7, hold: 4.5 },
+  onboarding: { quietStart: 4, blockedLead: 2.2, audienceBelow: 12, kiteAhead: 30, gap: 7, hold: 4.5 },
 
   /**
    * Outfits (Awards, Mike 2026-11-17: "recolors for now"): the Meshy texture's plum cloth takes `hue` (deg) with
@@ -878,7 +904,7 @@ export const TUNING = {
     popTime: 1.8,
   },
 
-  /** Passives v2 (2026-11-17). Thick Skin: gear-costing hits shrugged off per segment. Second Wind: tier-up time × this while below the gear he had. Crowd Pleaser: audience drain × this at Rampage. Slipstream: police crash Ratings and points × this. */
+  /** Passives v2 (2026-11-17). Thick Skin: meter-costing hits shrugged off per segment. Second Wind: unused since the Rampage loop (see rampage.secondWindKeep). Crowd Pleaser: audience drain × this at Rampage. Slipstream: police crash Ratings and points × this. */
   passives: { thickSkinHits: 1, secondWindTierUp: 0.6, crowdPleaserDecay: 0.6, slipstreamMult: 2 },
 
   /** Phase 0c traffic reactions (presentation): cars ahead brake, swerve and honk as he approaches. */

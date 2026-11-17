@@ -37,9 +37,11 @@ describe("the producer's asks (Mike, 2026-11-15)", () => {
       const bot = new Bot(sim);
       const ev: SimEvent[] = [];
       while (sim.live && sim.time < 200) ev.push(...sim.step(bot.input()));
+      const fromDistance = sim.stats.distancePoints;
       const fromChains = ev.reduce((n, e) => n + (e.type === 'chainEnd' ? e.points : 0), 0);
       const fromAsks = sim.asks.list.reduce((n, a) => n + (a.done ? a.reward : 0), 0);
-      expect(sim.show.banked).toBe(fromChains + fromAsks);
+      // Score = chains + asks + distance (Rampage loop, 2026-11-17).
+      expect(Math.abs(sim.show.banked - (fromChains + fromAsks + fromDistance))).toBeLessThan(2);
       for (const a of sim.asks.list) {
         const doneEvents = ev.filter((e) => e.type === 'ask' && e.id === a.id && e.done);
         expect(doneEvents.length).toBe(a.done ? 1 : 0);

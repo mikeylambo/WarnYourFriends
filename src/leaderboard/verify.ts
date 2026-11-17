@@ -94,6 +94,8 @@ export function verify(sub: Submission): VerifyResult {
     run.finishSegment(sim.show);
     if ((run.phase as string) === 'meeting') {
       const b = buys[i] ?? null;
+      // The meeting always shows its pitches (drawing them moves the run's RNG), bought from or not.
+      run.offers();
       if (b !== null && !run.buy(b)) return { ok: false, error: 'buy' };
       if (b === null) run.nextSegment();
     }

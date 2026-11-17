@@ -8,9 +8,10 @@ import type { SimEvent } from './sim/types';
  * instructions with the button on them, never a voice or a quote (the producer notes were cut on 2026-11-16).
  * At most one on screen, `gap` s apart. Presentation only: reads the sim, never writes it.
  */
-export type PromptId = 'blocked' | 'gear' | 'ram' | 'rampage' | 'audience' | 'kite' | 'boxed' | 'caught' | 'exit' | 'ability';
+export type PromptId = 'blocked' | 'meter' | 'ready' | 'hit' | 'ram' | 'rampage' | 'audience' | 'kite' | 'boxed' | 'caught' | 'exit' | 'ability';
 
-const STORE = 'wyf.prompts.v1';
+/** v2: the Rampage loop (2026-11-17) teaches new lessons, so everyone sees them once. */
+const STORE = 'wyf.prompts.v2';
 
 /** Builds the prompt text with the current device's buttons (HTML: <kbd> for keys). */
 export type PromptText = (id: PromptId) => string;
@@ -56,13 +57,16 @@ export class Onboarding {
   observe(e: SimEvent, sim: Sim) {
     if (e.type === 'tell' && e.kind === 'cruiser') this.want('ram');
     else if (e.type === 'tell' && e.kind === 'net') this.want('boxed');
-    else if (e.type === 'tierUp' && e.tier === TUNING.tiers.length - 1) this.want('rampage');
+    else if (e.type === 'meterFull') this.want('ready');
+    else if (e.type === 'rampageStart') {
+      // Fired it without being told: the "ready" lesson is learned; now what Rampage does.
+      if (!this.seen.has('ready')) {
+        this.seen.add('ready');
+        this.save();
+      }
+      this.want('rampage');
+    } else if (e.type === 'meterLoss') this.want('hit');
     else if (e.type === 'exitOpen') this.want('exit');
-    // Geared up without being told: that lesson is learned.
-    else if (e.type === 'tierUp' && e.tier === 1 && !this.seen.has('gear')) {
-      this.seen.add('gear');
-      this.save();
-    }
     void sim;
   }
 
@@ -82,8 +86,8 @@ export class Onboarding {
       const ahead = sim.track.propsBetween(g.s + g.speed * 0.8, g.s + g.speed * O.blockedLead);
       if (ahead.some((p) => p.alive && CLASS_RANK[p.cls] > rank && Math.abs(p.d - c) < p.hw + 1)) this.want('blocked');
     }
-    // Still at Jog a while in: how gearing up works.
-    if (!this.seen.has('gear') && g.tier === 0 && sim.time > O.gearAfter) this.want('gear');
+    // The meter's first fill: what it is (once he's smashed something, so the bar is moving when he looks).
+    if (!this.seen.has('meter') && g.meter > 0 && sim.time > O.quietStart) this.want('meter');
     // The audience draining with nothing happening.
     if (sim.show.ratings < O.audienceBelow && sim.time > TUNING.show.decayGrace) this.want('audience');
     // A police car alongside him with something solid ahead in its lane: kite it.

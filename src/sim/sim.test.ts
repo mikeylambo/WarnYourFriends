@@ -35,6 +35,8 @@ function setTier(sim: Sim, tier: number) {
   sim.giant.tier = tier;
   sim.giant.speed = TUNING.tiers[tier].topSpeed;
   sim.giant.tierTimer = -1e9; // hold the tier
+  // Rampage is a timed burst now: hold it for the test.
+  sim.giant.rampT = tier === TUNING.tiers.length - 1 ? 1e9 : 0;
 }
 
 describe('track (v0.3 highway)', () => {
@@ -290,14 +292,30 @@ describe('lanes', () => {
     expect(sim.stats.minSpeed).toBeGreaterThanOrEqual(TUNING.giant.speedFloor);
   });
 
-  it('tiers up Jog → Stride → Rampage on schedule; braking > 0.4s drops a tier', () => {
+  it('Rampage loop: starts in Stride, never gears up on its own; a full meter fires Rampage, smashes extend it (capped), then back to Stride', () => {
+    const R = TUNING.rampage;
     const sim = emptySim();
-    run(sim, 2.35);
     expect(sim.giant.tier).toBe(1);
-    run(sim, 3.8);
+    run(sim, 10);
+    expect(sim.giant.tier).toBe(1);
+    // The button does nothing until the meter is full.
+    run(sim, 0.1, { ...NO_INPUT, shoulder: true });
+    expect(sim.inRampage).toBe(false);
+    sim.giant.meter = 100;
+    const ev = sim.step({ ...NO_INPUT, shoulder: true });
+    expect(ev.some((e) => e.type === 'rampageStart')).toBe(true);
     expect(sim.giant.tier).toBe(2);
-    const ev = run(sim, 0.45, { ...NO_INPUT, brake: true });
-    expect(ev.some((e) => e.type === 'tierDown' && e.reason === 'brake')).toBe(true);
+    expect(sim.giant.meter).toBe(0);
+    // Braking never costs a gear.
+    expect(run(sim, 0.6, { ...NO_INPUT, brake: true }).some((e) => e.type === 'tierDown')).toBe(false);
+    // Smashes add time, never past the cap.
+    for (let i = 0; i < 40; i++) placeProp(sim, 'car', 'heavy', sim.giant.s + 4 + i * 6, sim.giant.lane);
+    const all = run(sim, R.maxDuration + 1);
+    const end = all.findIndex((e) => e.type === 'rampageEnd');
+    expect(end).toBeGreaterThan(-1);
+    expect(sim.giant.rampElapsed).toBeGreaterThan(R.duration);
+    expect(sim.giant.rampElapsed).toBeLessThanOrEqual(R.maxDuration + 0.02);
+    expect(sim.giant.tier).toBe(1);
   });
 });
 
@@ -313,9 +331,10 @@ describe('smash-across and unsmashable hits (v0.3)', () => {
     const ev = sim.step({ ...NO_INPUT, lane: 1 }).concat(run(sim, 0.6));
     return { sim, ev, from: target - 1 };
   };
+  // Rampage loop: Stride smashes all traffic; only Rampage goes through bulldozers.
   const table: [number, Prop['cls'], 'smash' | 'bounce'][] = [
-    [0, 'medium', 'bounce'], [1, 'medium', 'smash'], [2, 'medium', 'smash'],
-    [0, 'heavy', 'bounce'], [1, 'heavy', 'bounce'], [2, 'heavy', 'smash'],
+    [1, 'medium', 'smash'], [1, 'heavy', 'smash'], [1, 'immovable', 'bounce'],
+    [2, 'heavy', 'smash'], [2, 'immovable', 'smash'],
   ];
   for (const [tier, cls, expected] of table) {
     it(`lane change into ${cls} at ${TUNING.tiers[tier].name} → ${expected}`, () => {
@@ -325,20 +344,38 @@ describe('smash-across and unsmashable hits (v0.3)', () => {
     });
   }
 
-  it('an unsmashable hit: −1 tier, 0.3s stumble, knocked back to the previous lane, never stopped', () => {
-    const { ev, sim, from } = across(1, 'heavy');
+  it('an unsmashable hit: costs meter (not a gear), 0.3s stumble, knocked back to the previous lane, never stopped', () => {
+    const { ev, sim, from } = across(1, 'immovable');
     const b = ev.find((e) => e.type === 'bounce');
     expect(b && b.type === 'bounce' && b.toLane).toBe(from);
-    expect(ev.some((e) => e.type === 'tierDown' && e.reason === 'impact')).toBe(true);
+    expect(ev.some((e) => e.type === 'tierDown')).toBe(false);
+    expect(sim.giant.tier).toBe(1);
     expect(sim.giant.lane).toBe(from);
     expect(sim.stats.minSpeed).toBeGreaterThanOrEqual(TUNING.giant.speedFloor);
+  });
+
+  it('a hit in Stride costs Rampage meter; in Rampage he goes straight through', () => {
+    const sim = emptySim();
+    setTier(sim, 1);
+    sim.giant.meter = 60;
+    placeProp(sim, 'car', 'immovable', sim.giant.s + 8, sim.giant.lane);
+    const ev = run(sim, 1.2);
+    const loss = ev.find((e) => e.type === 'meterLoss');
+    expect(loss && loss.type === 'meterLoss' && loss.amount).toBe(TUNING.rampage.bounceCost);
+    expect(sim.giant.meter).toBe(60 - TUNING.rampage.bounceCost);
+    const sim2 = emptySim();
+    setTier(sim2, 2);
+    placeProp(sim2, 'car', 'immovable', sim2.giant.s + 8, sim2.giant.lane);
+    const ev2 = run(sim2, 1.2);
+    expect(ev2.some((e) => e.type === 'bounce')).toBe(false);
+    expect(ev2.some((e) => e.type === 'smash' && e.cls === 'immovable')).toBe(true);
   });
 
   it('head-on into something unsmashable knocks you into a clear lane', () => {
     const sim = emptySim();
     setTier(sim, 1);
     const lane = sim.giant.lane;
-    placeProp(sim, 'car', 'heavy', sim.giant.s + 8, lane);
+    placeProp(sim, 'car', 'immovable', sim.giant.s + 8, lane);
     const ev = run(sim, 1.2);
     expect(ev.some((e) => e.type === 'bounce')).toBe(true);
     expect(sim.giant.lane).not.toBe(lane);
@@ -391,7 +428,8 @@ describe('run cycle (v0.3)', () => {
         }
       }
     }
-    for (let t = 0; t < 3; t++) {
+    // Rampage loop: Jog (tier 0) is gone; Stride and Rampage carry the run.
+    for (let t = 1; t < 3; t++) {
       expect(byTier[t].length, `tier ${t} sampled`).toBeGreaterThan(50);
       expect(Math.min(...byTier[t])).toBeGreaterThanOrEqual(TUNING.gait.cadenceMin - 1e-6);
       expect(Math.max(...byTier[t])).toBeLessThanOrEqual(TUNING.gait.cadenceMax + 1e-6);

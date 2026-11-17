@@ -22,6 +22,8 @@ export interface Settings {
   hudSize: number;
   /** Game speed (1, 0.9, 0.8, 0.7). Below 1 the leaderboard is off (it's an assist). */
   gameSpeed: number;
+  /** Rampage loop (2026-11-17): fire Rampage the moment the meter is full (default on for touch screens). */
+  autoRampage: boolean;
   /** Rebound keyboard keys, one per action; null = the defaults. */
   keys: Record<KeyAction, string> | null;
 }
@@ -43,12 +45,14 @@ function readKeys(v: unknown): Record<KeyAction, string> | null {
 }
 
 const KEY = 'wyf.settings.v1';
-const DEFAULTS: Settings = { reducedMotion: false, reduceFlashes: false, debug: false, cameraCuts: true, liveTime: false, hudColors: 'wyf', giantSize: 'growth', brakeToggle: false, hudSize: 1, gameSpeed: 1, keys: null };
+const DEFAULTS: Settings = { reducedMotion: false, reduceFlashes: false, debug: false, cameraCuts: true, liveTime: false, hudColors: 'wyf', giantSize: 'growth', brakeToggle: false, hudSize: 1, gameSpeed: 1, autoRampage: false, keys: null };
+/** Touch screens default to Auto Rampage (one less thing to reach for). */
+const coarse = () => typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches;
 
 export function loadSettings(): Settings {
   try {
     const raw = localStorage.getItem(KEY);
-    if (!raw) return { ...DEFAULTS };
+    if (!raw) return { ...DEFAULTS, autoRampage: coarse() };
     const parsed = JSON.parse(raw) as Partial<Settings>;
     return {
       reducedMotion: typeof parsed.reducedMotion === 'boolean' ? parsed.reducedMotion : DEFAULTS.reducedMotion,
@@ -63,6 +67,7 @@ export function loadSettings(): Settings {
       brakeToggle: parsed.brakeToggle === true,
       hudSize: HUD_SIZES.includes(parsed.hudSize as number) ? (parsed.hudSize as number) : 1,
       gameSpeed: GAME_SPEEDS.includes(parsed.gameSpeed as number) ? (parsed.gameSpeed as number) : 1,
+      autoRampage: typeof parsed.autoRampage === 'boolean' ? parsed.autoRampage : coarse(),
       keys: readKeys(parsed.keys),
     };
   } catch {
@@ -72,7 +77,7 @@ export function loadSettings(): Settings {
     } catch {
       /* storage unavailable */
     }
-    return { ...DEFAULTS };
+    return { ...DEFAULTS, autoRampage: coarse() };
   }
 }
 

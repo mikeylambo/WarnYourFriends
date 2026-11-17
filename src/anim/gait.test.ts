@@ -53,7 +53,8 @@ describe('gait: feet locked to distance', () => {
           if (r.liftedEarly) early++;
         }
       }
-      for (let t = 0; t < 3; t++) {
+      // Rampage loop: Jog (tier 0) is gone; Stride and Rampage carry the run.
+      for (let t = 1; t < 3; t++) {
         expect(count[t], `plants at tier ${t}`).toBeGreaterThan(30);
         expect(worst[t], `worst slide at tier ${t}`).toBeLessThan(TUNING.gait.maxFootSlide);
       }

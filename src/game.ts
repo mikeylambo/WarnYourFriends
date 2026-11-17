@@ -243,14 +243,17 @@ applyControls();
 const onboarding = new Onboarding($('prompt'), (id: PromptId) => {
   const k = (a: GlyphAction) => (glyph(a) ? `<kbd>${esc(glyph(a))}</kbd>` : '');
   const ab = sim.ability ? TUNING.upgrades[sim.ability] : null;
+  const fire = settings.autoRampage ? 'it fires by itself' : `press ${k('shoulder')}`;
   const lines: Record<PromptId, string> = {
-    blocked: `Too big to smash at this gear. Change lanes ${k('lanes')}`,
-    gear: `Run clean to gear up. Hits and ${k('brake')} cost a gear`,
-    ram: `Police swerving in: dodge ${k('lanes')} or ${k('shoulder')} into it`,
-    rampage: `<b>RAMPAGE</b> Smash anything but bulldozers and armored trucks`,
+    blocked: `Bulldozers and armored trucks don't break. Change lanes ${k('lanes')}`,
+    meter: `Smash and dodge to fill the <b>RAMPAGE</b> meter`,
+    ready: `<b>RAMPAGE READY</b> ${settings.autoRampage ? 'Here it goes' : `Press ${k('shoulder')}`}`,
+    hit: `Hits cost Rampage meter`,
+    ram: `Police swerving in: dodge ${k('lanes')}`,
+    rampage: `<b>RAMPAGE</b> Run through anything. Keep smashing to make it last`,
     audience: `Audience dropping: smash something`,
     kite: `Steer the police car beside you into what's ahead of it`,
-    boxed: `Boxed in: ${k('shoulder')} a car beside you, or ${k('brake')} and drop out the back`,
+    boxed: `Boxed in: ${k('brake')} and drop out the back, or Rampage through (${fire})`,
     caught: `Police on your tail: let go of ${k('brake')} and run`,
     exit: `Exit open: get to the far-right lane`,
     ability: ab ? `<b>${esc(ab.label.toUpperCase())}</b> ${k('ability')} ${esc(ab.blurb)}` : '',
@@ -560,10 +563,10 @@ function openBriefing(goLive: boolean): Promise<void> {
     <div class="kicker">HOW TO PLAY</div>
     <ol class="steps">
       <li><b>Run.</b> He never stops. ${k('lanes')} change lanes, ${k('brake')} brake.</li>
-      <li><b>Gear up.</b> Hold top speed to shift: Jog, Stride, Rampage. Each gear is bigger and smashes bigger things. Bulldozers and armored trucks never break: go round.</li>
-      <li><b>Keep Rampage.</b> A police car swerving in, a spike strip or anything too big to smash knocks you down a gear. Dodge the swerve, or ${k('shoulder')} shoulder-check into it.</li>
+      <li><b>Smash.</b> He flattens cars, carts and police cars. Bulldozers, armored trucks and a police car swerving into you don't break: go round. Hitting one costs Rampage meter.</li>
+      <li><b>Rampage.</b> Smashes, close calls and combos fill the Rampage meter. When it's full, ${settings.autoRampage ? 'Rampage fires by itself' : `press ${k('shoulder')}`}: for 8 seconds he runs through everything, at double score. Keep smashing to make it last.</li>
       <li><b>Keep them watching.</b> Smashes, close calls and combos fill the audience bar. Empty, they cut to commercial.</li>
-      <li><b>Lose the police.</b> Run a car beside you into whatever is in its lane. Slow down and they catch you: busted. Boxed in by the armored truck, ${k('shoulder')} a car beside you or brake out the back; the second box-in is the end.</li>
+      <li><b>Lose the police.</b> Run a car beside you into whatever is in its lane. Slow down and they catch you: busted. Boxed in by the armored truck, brake out the back or Rampage through it.</li>
       <li><b>Take the exit.</b> At ${clock} a ramp opens on the right. Be in the far-right lane when you reach it; miss it and coverage ends.</li>
     </ol>
     <div class="row"><button class="go" id="brief-go">${goLive ? 'Go live' : 'Back'}</button></div>
@@ -637,7 +640,7 @@ function openAwards(): Promise<void> {
 
 /** Settings → Controls: rebind the keyboard (accessibility, 2026-11-17). One key per action; a key taken by another action swaps. */
 function openControls(): Promise<void> {
-  const NAMES: Record<KeyAction, string> = { left: 'Lane left', right: 'Lane right', brake: 'Brake', shoulder: 'Shoulder Check', ability: 'Ability' };
+  const NAMES: Record<KeyAction, string> = { left: 'Lane left', right: 'Lane right', brake: 'Brake', shoulder: 'Rampage', ability: 'Ability' };
   const current = (): Record<KeyAction, string> => settings.keys ?? (Object.fromEntries(KEY_ACTIONS.map((a) => [a, DEFAULT_KEYS[a][0]])) as Record<KeyAction, string>);
   let waiting: KeyAction | null = null;
   const draw = () => {
@@ -1224,6 +1227,14 @@ function present(e: SimEvent) {
         gearsEl.classList.add('lost');
       }
       break;
+    case 'meterFull':
+      audio.tierUp(1);
+      break;
+    case 'meterLoss':
+      gearsEl.classList.remove('lost');
+      void gearsEl.offsetWidth;
+      gearsEl.classList.add('lost');
+      break;
     case 'shoulder': {
       giant.onShoulder();
       audio.shoulder();
@@ -1633,6 +1644,7 @@ app = await createGameApp({
         { id: 'wyf-tips', label: 'Replay Tips', description: 'Show the in-game control tips again' },
         { id: 'wyf-brake', label: `Brake: ${settings.brakeToggle ? 'Toggle' : 'Hold'}`, description: 'Toggle: press once to brake, again to let go' },
         { id: 'wyf-hudsize', label: `HUD Size: ${Math.round(settings.hudSize * 100)}%` },
+        { id: 'wyf-auto', label: `Auto Rampage: ${onOff(settings.autoRampage)}`, description: 'Rampage fires by itself the moment the meter is full' },
         { id: 'wyf-speed', label: `Game Speed: ${Math.round(settings.gameSpeed * 100)}%`, description: 'Slower gives more time to react. Below 100% scores stay off the leaderboard' },
         { id: 'wyf-cuts', label: `Camera Cuts: ${onOff(settings.cameraCuts)}`, description: 'Off holds the Chase High shot' },
         { id: 'wyf-livetime', label: `LIVE TIME: ${onOff(settings.liveTime)}`, description: 'Lighting follows your clock; off is always night' },
@@ -1662,7 +1674,8 @@ app = await createGameApp({
           settings.hudSize = next(HUD_SIZES, settings.hudSize);
           resize();
         } else if (id === 'wyf-speed') settings.gameSpeed = next(GAME_SPEEDS, settings.gameSpeed);
-        if (id === 'wyf-brake' || id === 'wyf-hudsize' || id === 'wyf-speed') {
+        else if (id === 'wyf-auto') settings.autoRampage = !settings.autoRampage;
+        if (id === 'wyf-brake' || id === 'wyf-hudsize' || id === 'wyf-speed' || id === 'wyf-auto') {
           saveSettings(settings);
           return true;
         }
@@ -1762,6 +1775,8 @@ function frame(now: number) {
       // Lane input follows the screen: when travel points down (Head-On, or past halfway through
       // the swoop), his left is screen-right, so mirror it.
       if (!replay && !bot && rig.info.travelDown && inp.lane) inp = { ...inp, lane: -inp.lane };
+      // Auto Rampage: a full meter fires itself (an input like any press, so recorded runs replay the same).
+      if (!replay && !bot && settings.autoRampage && sim.giant.meter >= 100 && !sim.inRampage) inp = { ...inp, shoulder: true };
       if (menuGuard > 0) {
         menuGuard--;
         inp = { ...inp, shoulder: false, lane: 0 };
@@ -1914,8 +1929,10 @@ function frame(now: number) {
   const info = rig.info;
   if (started && !paused) {
     measure.frames++;
+    // The opening hero shot is a cinematic like the swoop (no cut yet, still on the opening angle).
+    const opening = cutLog.length === 0 && director.current === TUNING.camera.openingAngle;
     if (info.transition) measure.swoopFrames++;
-    else {
+    else if (!opening) {
       // Camera rules hold on every frame outside a swoop (its length is bounded and soak-checked).
       measure.maxScreenUp = Math.max(measure.maxScreenUp, Math.abs(info.screenUpDeg));
       measure.maxGiantY = Math.max(measure.maxGiantY, info.giantScreenY);
@@ -1972,7 +1989,7 @@ function updateGlyphs() {
     const key = (a: GlyphAction, what: string) => `<span><kbd>${esc(glyph(a))}</kbd>${what}</span>`;
     controlsEl.innerHTML = fam === 'touch'
       ? `<span>Swipe to change lanes · hold down to brake</span>`
-      : key('lanes', 'Lane') + key('brake', 'Brake') + key('shoulder', 'Shoulder') + key('pause', 'Pause');
+      : key('lanes', 'Lane') + key('brake', 'Brake') + key('shoulder', 'Rampage') + key('pause', 'Pause');
     recapEl.dataset.fam = '';
   }
   controlsEl.hidden = attract || !sim.live || sim.time > TUNING.input.controlsHintTime;
@@ -2124,7 +2141,7 @@ function updateBoxed() {
   if (boxedFam !== `${glyphFamily}:${kind}`) {
     boxedFam = `${glyphFamily}:${kind}`;
     if (kind === 'caught') boxedHow.innerHTML = glyphFamily === 'touch' ? 'Let go of ▼ · Run' : `Let go of <kbd>${esc(glyph('brake'))}</kbd> · Run`;
-    else boxedHow.innerHTML = glyphFamily === 'touch' ? 'Tap ● Shoulder · hold ▼ Brake' : `<kbd>${esc(glyph('shoulder'))}</kbd>Shoulder · <kbd>${esc(glyph('brake'))}</kbd>Brake`;
+    else boxedHow.innerHTML = glyphFamily === 'touch' ? 'Tap ● Rampage · hold ▼ Brake' : `<kbd>${esc(glyph('shoulder'))}</kbd>Rampage · <kbd>${esc(glyph('brake'))}</kbd>Brake`;
   }
 }
 
@@ -2154,15 +2171,14 @@ function updateHud(dt: number) {
   const seg = sim.track.segmentAt(g.s);
   const place = `${seg.zoneName} · ${compass(sim.track.headingAt(g.s))}bound`.toUpperCase();
   if (chyPlace.textContent !== place) chyPlace.textContent = place;
-  // Gear pips: filled per gear; the next one fills as he holds top speed (the build, made visible).
-  const prog = sim.tierUpProgress;
-  gearPips.forEach((p, i) => {
-    p.style.setProperty('--fill', i <= g.tier ? '1' : i === g.tier + 1 ? prog.toFixed(3) : '0');
-    p.classList.toggle('filling', i === g.tier + 1);
-    p.classList.toggle('next', i === g.tier + 1 && sim.tierUpIn <= TUNING.gear.buildUp);
-  });
+  // Rampage meter (2026-11-17): fills in Stride; full, it shows the button; in Rampage it's the clock running down.
+  const ramp = sim.inRampage;
+  const ready = !ramp && g.meter >= 100;
+  gearPips[0].style.setProperty('--fill', (ramp ? Math.min(1, g.rampT / TUNING.rampage.duration) : g.meter / 100).toFixed(3));
+  gearsEl.classList.toggle('ready', ready);
   gearsEl.dataset.tier = String(g.tier);
-  gearName.textContent = TUNING.tiers[g.tier].name.toUpperCase();
+  const nm = ramp ? 'RAMPAGE' : ready ? (settings.autoRampage ? 'READY' : `<kbd>${esc(glyph('shoulder'))}</kbd> GO`) : 'STRIDE';
+  if (gearName.innerHTML !== nm) gearName.innerHTML = nm;
   gearMultEl.textContent = `×${TUNING.show.bankMult[g.tier]}`;
   heatStars.forEach((el, i) => el.classList.toggle('on', i < sh.heat));
   // The asks: at the top of a segment and when one lands, then out of the way (HUD triage, 2026-11-17).

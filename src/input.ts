@@ -31,7 +31,7 @@ export function keyLabel(code: string): string {
  * v0.3 controls, folded into one SimInput per tick.
  *   Lane left/right: A/D, ←/→ · stick flick or d-pad · swipe left/right
  *   Brake:           S / Space · LT (L2) · swipe down and hold
- *   Shoulder Check:  Shift / W / LMB · RB (R1) · tap the right button
+ *   Rampage (was Shoulder Check):  Shift / W / LMB · RB (R1) · tap the right button
  *   Ability (§17):   E / Q · LB or Y (L1 or △) · the ability button
  *   Pause:           Esc · Start (Options) · II
  * Labels on screen follow the pad's family: src/glyphs.ts.
