@@ -1472,6 +1472,8 @@ function setPaused(p: boolean) {
   if (!started || p === paused) return;
   paused = p;
   audio.setPaused(p);
+  // Paused: the producer's asks come back up beside the pause menu (Mike, 2026-11-17).
+  document.documentElement.classList.toggle('paused', p && !attract);
   if (!p) menuGuard = 10; // §8 10f menu guard after any screen transition
 }
 

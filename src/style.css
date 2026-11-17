@@ -674,6 +674,8 @@ html.touch #ticker { right: 128px; }
 #chain.dropped .stunt { color: #ff6b6b; }
 #chain.dropped .pts { opacity: 0.45; text-decoration: line-through; }
 #abil { bottom: calc((var(--d-lt) + var(--d-tick) + 60px + env(safe-area-inset-bottom)) / var(--hs, 1)); background: var(--c-panel); border-left-color: var(--c-red); }
+/* The callout sits one row above the chip, on the same scale (it used a fixed 156px and drifted onto the chip's label). */
+#abilpop { zoom: var(--hs, 1); bottom: calc((var(--d-lt) + var(--d-tick) + 60px + 54px + env(safe-area-inset-bottom)) / var(--hs, 1)); }
 
 #replay b { background: var(--c-replay); color: var(--c-text); font: italic 900 22px/1 var(--f-head); letter-spacing: 0.08em; }
 #replay span { background: var(--c-ink); color: var(--c-text); font: italic 800 12px/1 var(--f-head); }
@@ -900,3 +902,6 @@ html.title #hud::after, html.attract #hud::after { display: none; }
 #recap .rc-award small { font: italic 900 12px/1 var(--f-head); letter-spacing: 0.2em; color: #f2b632; }
 #recap .rc-award b { font: italic 900 20px/1.1 var(--f-head); color: var(--c-text); }
 #recap .rc-award span { font: 600 14px/1.3 var(--f-head); color: var(--c-mute); flex-basis: 100%; }
+
+/* Pause: the producer's asks show beside the pause menu. */
+html.paused #asks { opacity: 1; transform: none; transition: none; }
