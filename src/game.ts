@@ -18,7 +18,7 @@ import { Newsroom, compass, type Headline } from './broadcast/headlines';
 import type { PropKind } from './sim/types';
 import { Gait } from './anim/gait';
 import { Audio } from './audio';
-import { Input } from './input';
+import { DEFAULT_KEYS, Input, KEY_ACTIONS, RESERVED_KEYS, keyLabel, type KeyAction } from './input';
 import { registerGlyphs, padFamily, type GlyphAction } from './glyphs';
 import coverUrl from './assets/title-cover.webp';
 import { UPGRADE_ART } from './upgradeArt';
@@ -26,7 +26,8 @@ import { PlayLog, appendLog, exportLog, type PlayEntry } from './playlog';
 import { readFlags } from './debug';
 import { encodeInputs, type Submission } from './leaderboard/verify';
 import { mountBoard } from './leaderboardClient';
-import { loadSettings, saveSettings } from './settings';
+import { Onboarding, type PromptId } from './onboarding';
+import { GAME_SPEEDS, HUD_SIZES, loadSettings, saveSettings } from './settings';
 import { applyStoredTuning, mountTuningPanel, tuningChanged } from './tuningPanel';
 import { createGameApp, type InputDeviceFamily, type CoreSettings, type FrameAssembly, type GenreFrame, type RendererAdapter, type SLUWebShell } from '@slu/web-shell';
 
@@ -52,6 +53,8 @@ const tierbar = $('tierbar');
 const chyPlace = document.querySelector('#chyron .place') as HTMLElement;
 const gearsEl = $('gears');
 const asksEl = $('asks');
+/** Sim time the asks panel shows until (set when an ask lands; the segment intro shows it too). */
+let asksUntil = 0;
 const asksList = asksEl.querySelector('ol') as HTMLElement;
 /** Draw the producer's asks (on a new broadcast and whenever one moves). */
 function renderAsks() {
@@ -222,6 +225,31 @@ const triggerLog: { t: number; kind: string }[] = [];
 let bot: Bot | null = null;
 const audio = new Audio();
 const input = new Input(canvas, $('btn-shoulder'), $('btn-pause'), $('btn-ability'));
+/** Accessibility settings into the input layer: rebound keys and the brake toggle. */
+function applyControls() {
+  input.keymap = settings.keys ? (Object.fromEntries(KEY_ACTIONS.map((a) => [a, [settings.keys![a]]])) as Record<KeyAction, string[]>) : { ...DEFAULT_KEYS };
+  input.brakeToggle = settings.brakeToggle;
+  glyphFamily = null; // redraw the on-screen key labels
+}
+applyControls();
+/** One-time control prompts at the moment they matter (onboarding, 2026-11-17). */
+const onboarding = new Onboarding($('prompt'), (id: PromptId) => {
+  const k = (a: GlyphAction) => (glyph(a) ? `<kbd>${esc(glyph(a))}</kbd>` : '');
+  const ab = sim.ability ? TUNING.upgrades[sim.ability] : null;
+  const lines: Record<PromptId, string> = {
+    blocked: `Too big to smash at this gear. Change lanes ${k('lanes')}`,
+    gear: `Run clean to gear up. Hits and ${k('brake')} cost a gear`,
+    ram: `Police swerving in: dodge ${k('lanes')} or ${k('shoulder')} into it`,
+    rampage: `<b>RAMPAGE</b> Smash anything but bulldozers and armored trucks`,
+    audience: `Audience dropping: smash something`,
+    kite: `Steer the police car beside you into what's ahead of it`,
+    boxed: `Boxed in: ${k('shoulder')} a car beside you, or ${k('brake')} and drop out the back`,
+    caught: `Police on your tail: let go of ${k('brake')} and run`,
+    exit: `Exit open: get to the far-right lane`,
+    ability: ab ? `<b>${esc(ab.label.toUpperCase())}</b> ${k('ability')} ${esc(ab.blurb)}` : '',
+  };
+  return lines[id];
+});
 /** Phase 3: the five-segment run (null in a single broadcast or the attract loop). */
 let run: RunState | null = null;
 /** Phase 3: the hijacked car under the giant while he rides it. */
@@ -251,7 +279,9 @@ let lb: { mode: 'run' | 'broadcast'; seed: number; segments: string[]; buys: (Up
 const lbBlocked = () =>
   flags.bot || flags.seg !== null || flags.ability || flags.heat !== null || flags.nodecay || flags.god || (flags.size !== null && flags.size !== 'growth') || tuningChanged()
     ? 'Debug or tuning settings are on, so this score stays off the board.'
-    : null;
+    : settings.gameSpeed < 1
+      ? 'Game Speed is below 100%, so this score stays off the board.'
+      : null;
 let moment: { t: number; score: number; kind: string; event: SimEvent; headline: Headline | null } | null = null;
 let replayRate = 1;
 const replayEl = $('replay');
@@ -321,6 +351,7 @@ function newRun(seed: number, segment = 0, upgrades: UpgradeId[] = []) {
   rig.giantScale = gScale;
   playLog.reset();
   inputLog.length = 0;
+  input.resetLatches();
   audio.setGear(0, true);
   moment = null;
   recapShot = null;
@@ -343,6 +374,7 @@ function newRun(seed: number, segment = 0, upgrades: UpgradeId[] = []) {
   chyKicker.textContent = 'SPOTTED';
   chyText.innerHTML = '<span>&nbsp;</span>';
   renderAsks();
+  asksUntil = 0;
   scene.add(highway.group, cruisers.group, units.group);
   giantSpace.add(...giant.objects);
   giant.reset();
@@ -544,6 +576,81 @@ function openBriefing(goLive: boolean): Promise<void> {
   });
 }
 
+/** Settings → Controls: rebind the keyboard (accessibility, 2026-11-17). One key per action; a key taken by another action swaps. */
+function openControls(): Promise<void> {
+  const NAMES: Record<KeyAction, string> = { left: 'Lane left', right: 'Lane right', brake: 'Brake', shoulder: 'Shoulder Check', ability: 'Ability' };
+  const current = (): Record<KeyAction, string> => settings.keys ?? (Object.fromEntries(KEY_ACTIONS.map((a) => [a, DEFAULT_KEYS[a][0]])) as Record<KeyAction, string>);
+  let waiting: KeyAction | null = null;
+  const draw = () => {
+    const K = current();
+    recapEl.innerHTML = `<div class="card briefing controls">
+      <div class="kicker">CONTROLS · KEYBOARD</div>
+      <ul class="binds">${KEY_ACTIONS.map((a) => `<li><span>${NAMES[a]}</span><button class="go alt bind" data-a="${a}">${waiting === a ? 'Press a key…' : `<kbd>${esc(keyLabel(K[a]))}</kbd>`}</button></li>`).join('')}</ul>
+      <p class="how">${settings.keys ? 'Arrow keys no longer double as lanes once you rebind.' : 'Defaults also take the arrow keys, S / Space for Brake, W for Shoulder Check and Q for Ability.'} Pause stays on Esc or P. Pads and touch keep their own controls.</p>
+      <div class="row"><button class="go" id="ctl-back">Back</button><button class="go alt" id="ctl-reset">Reset</button></div>
+    </div>`;
+    for (const b of recapEl.querySelectorAll<HTMLButtonElement>('.bind'))
+      b.onclick = () => {
+        waiting = b.dataset.a as KeyAction;
+        input.capturing = true;
+        draw();
+        recapEl.querySelector<HTMLButtonElement>(`.bind[data-a="${waiting}"]`)?.focus();
+      };
+    $<HTMLButtonElement>('ctl-reset').onclick = () => {
+      settings.keys = null;
+      saveSettings(settings);
+      applyControls();
+      draw();
+      $<HTMLButtonElement>('ctl-reset').focus();
+    };
+    $<HTMLButtonElement>('ctl-back').onclick = () => close?.();
+  };
+  // Capture before the shell and the game see the key (window, capture phase).
+  const onKey = (e: KeyboardEvent) => {
+    if (!waiting) return;
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    if (e.code === 'Escape') {
+      waiting = null;
+    } else if (!RESERVED_KEYS.includes(e.code)) {
+      const K = { ...current() };
+      const other = KEY_ACTIONS.find((a) => a !== waiting && K[a] === e.code);
+      if (other) K[other] = K[waiting]; // the key was taken: they swap
+      K[waiting] = e.code;
+      settings.keys = K;
+      saveSettings(settings);
+      applyControls();
+      const was = waiting;
+      waiting = null;
+      draw();
+      recapEl.querySelector<HTMLButtonElement>(`.bind[data-a="${was}"]`)?.focus();
+      setTimeout(() => (input.capturing = false), 0);
+      return;
+    } else return; // reserved: keep waiting
+    setTimeout(() => (input.capturing = false), 0);
+    draw();
+  };
+  window.addEventListener('keydown', onKey, { capture: true });
+  app?.ui.show('gameplay-placeholder');
+  recapEl.hidden = false;
+  recapArmedAt = performance.now() + 250;
+  document.documentElement.classList.add('briefing');
+  let close: (() => void) | null = null;
+  draw();
+  $<HTMLButtonElement>('ctl-back').focus();
+  return new Promise((resolve) => {
+    close = briefingClose = () => {
+      briefingClose = null;
+      waiting = null;
+      input.capturing = false;
+      window.removeEventListener('keydown', onKey, { capture: true });
+      document.documentElement.classList.remove('briefing');
+      hideRecap();
+      resolve();
+    };
+  });
+}
+
 function showMeeting() {
   if (!run) return;
   const r = run;
@@ -737,6 +844,7 @@ function present(e: SimEvent) {
   news.observe(e, sim.time);
   noteMoment(e);
   if (!replay && !attract) playLog.observe(e);
+  if (!replay && !attract && !bot) onboarding.observe(e, sim);
   const trig = cutTriggerFor(e);
   if (trig) {
     triggerLog.push({ t: sim.time, kind: trig });
@@ -963,6 +1071,7 @@ function present(e: SimEvent) {
     case 'ask': {
       renderAsks();
       if (e.done) {
+        asksUntil = sim.time + TUNING.hud.asksFlash; // the panel comes back to show it landing
         audio.chainEnd(4, false);
         asksList.querySelector(`[data-id="${e.id}"]`)?.classList.add('flash');
       }
@@ -1433,7 +1542,8 @@ let app: Awaited<ReturnType<typeof createGameApp>> | null = null;
 // --- Resize -------------------------------------------------------------------
 function resize() {
   // HUD scale (Direction B): the top-of-screen pieces are drawn for 1280×720 and zoomed by this.
-  const hs = Math.max(TUNING.hud.minScale, Math.min(TUNING.hud.maxScale, Math.min(window.innerWidth / 1280, window.innerHeight / 720)));
+  // Accessibility: HUD Size scales it up (Settings), within what still fits beside the road.
+  const hs = Math.max(TUNING.hud.minScale, Math.min(TUNING.hud.maxScale, Math.min(window.innerWidth / 1280, window.innerHeight / 720))) * settings.hudSize;
   document.documentElement.style.setProperty('--hs', hs.toFixed(3));
   const w = window.innerWidth;
   const h = window.innerHeight;
@@ -1458,16 +1568,42 @@ app = await createGameApp({
     settingsExtension: {
       choices: () => [
         { id: 'wyf-howto', label: 'How to Play' },
+        { id: 'wyf-controls', label: 'Controls', description: 'Rebind the keyboard' },
+        { id: 'wyf-tips', label: 'Replay Tips', description: 'Show the in-game control tips again' },
+        { id: 'wyf-brake', label: `Brake: ${settings.brakeToggle ? 'Toggle' : 'Hold'}`, description: 'Toggle: press once to brake, again to let go' },
+        { id: 'wyf-hudsize', label: `HUD Size: ${Math.round(settings.hudSize * 100)}%` },
+        { id: 'wyf-speed', label: `Game Speed: ${Math.round(settings.gameSpeed * 100)}%`, description: 'Slower gives more time to react. Below 100% scores stay off the leaderboard' },
         { id: 'wyf-cuts', label: `Camera Cuts: ${onOff(settings.cameraCuts)}`, description: 'Off holds the Chase High shot' },
         { id: 'wyf-livetime', label: `LIVE TIME: ${onOff(settings.liveTime)}`, description: 'Lighting follows your clock; off is always night' },
         { id: 'wyf-flashes', label: `Reduce Flashes: ${onOff(settings.reduceFlashes)}` },
         { id: 'wyf-colors', label: `HUD Colours: ${settings.hudColors === 'network' ? 'Network' : 'WYF 6'}`, description: 'The station\'s purple and cream, or network red, blue and white' },
-        { id: 'wyf-debug', label: `Debug Overlay: ${onOff(settings.debug)}` },
+        // Dev only: the overlay's switch shows with ?debug (or for a player who already turned it on).
+        ...(flags.debug !== null || settings.debugChosen ? [{ id: 'wyf-debug', label: `Debug Overlay: ${onOff(settings.debug)}` }] : []),
       ],
       handle: async (id) => {
         if (id === 'wyf-howto') {
           await openBriefing(false);
           return true; // the shell shows Settings again
+        }
+        if (id === 'wyf-tips') {
+          onboarding.reset();
+          return true;
+        }
+        if (id === 'wyf-controls') {
+          await openControls();
+          return true;
+        }
+        const next = <T,>(list: T[], v: T) => list[(list.indexOf(v) + 1) % list.length];
+        if (id === 'wyf-brake') {
+          settings.brakeToggle = !settings.brakeToggle;
+          applyControls();
+        } else if (id === 'wyf-hudsize') {
+          settings.hudSize = next(HUD_SIZES, settings.hudSize);
+          resize();
+        } else if (id === 'wyf-speed') settings.gameSpeed = next(GAME_SPEEDS, settings.gameSpeed);
+        if (id === 'wyf-brake' || id === 'wyf-hudsize' || id === 'wyf-speed') {
+          saveSettings(settings);
+          return true;
         }
         if (id === 'wyf-cuts') settings.cameraCuts = director.enabled = !settings.cameraCuts;
         else if (id === 'wyf-livetime') {
@@ -1549,7 +1685,7 @@ function frame(now: number) {
 
   let frozen = false;
   if (started && !paused && !flags.stepMode) {
-    acc += realDt * flags.timescale * replayRate;
+    acc += realDt * flags.timescale * replayRate * settings.gameSpeed;
     let steps = 0;
     while (acc >= SIM_DT && steps < 8) {
       acc -= SIM_DT;
@@ -1596,7 +1732,7 @@ function frame(now: number) {
   const heading = t.travel + Math.atan2(lateralVel, Math.max(4, g.speed)) * 0.5;
 
   if (replay) updateReplay();
-  const animDt = paused || frozen ? 0 : realDt * flags.timescale * replayRate;
+  const animDt = paused || frozen ? 0 : realDt * flags.timescale * replayRate * settings.gameSpeed;
   audio.setRotor(g.tier / 2);
 
   if (animDt > 0) {
@@ -1687,9 +1823,9 @@ function frame(now: number) {
     }
   }
   // Back (Esc / B / Circle) closes How to Play.
-  if (briefingClose && app?.shell.input.wasPressed('ui_back') && recapArmed()) briefingClose();
+  if (briefingClose && !input.capturing && app?.shell.input.wasPressed('ui_back') && recapArmed()) briefingClose();
   // Controller parity on the recap: left/right to move, A to choose.
-  if (!recapEl.hidden && app && !(document.activeElement instanceof HTMLInputElement)) {
+  if (!recapEl.hidden && app && !input.capturing && !(document.activeElement instanceof HTMLInputElement)) {
     const btns = ([...recapEl.querySelectorAll('button')] as HTMLButtonElement[]).filter((b) => !b.disabled && b.id !== 'playdata');
     const i = Math.max(0, btns.indexOf(document.activeElement as HTMLButtonElement));
     if (app.shell.input.wasPressed('ui_right') || app.shell.input.wasPressed('ui_down')) btns[(i + 1) % btns.length].focus();
@@ -1740,6 +1876,7 @@ function frame(now: number) {
   pip.render(renderer, scene);
   updateHud(realDt);
   updateGlyphs();
+  onboarding.update(sim, performance.now() / 1000, sim.live && started && !paused && !attract && !replay && !bot);
 }
 
 /**
@@ -1748,6 +1885,12 @@ function frame(now: number) {
  */
 let glyphFamily: InputDeviceFamily | null = null;
 function glyph(action: GlyphAction): string {
+  // Rebound keyboard keys (Settings → Controls) label themselves.
+  if (settings.keys && (glyphFamily ?? 'keyboard-mouse') === 'keyboard-mouse') {
+    const K = settings.keys;
+    if (action === 'lanes') return `${keyLabel(K.left)} / ${keyLabel(K.right)}`;
+    if (action === 'brake' || action === 'shoulder' || action === 'ability') return keyLabel(K[action]);
+  }
   return app?.shell.production.glyphs.resolve(action, glyphFamily ?? 'keyboard-mouse')?.label ?? '';
 }
 function updateGlyphs() {
@@ -1951,6 +2094,8 @@ function updateHud(dt: number) {
   gearName.textContent = TUNING.tiers[g.tier].name.toUpperCase();
   gearMultEl.textContent = `×${TUNING.show.bankMult[g.tier]}`;
   heatStars.forEach((el, i) => el.classList.toggle('on', i < sh.heat));
+  // The asks: at the top of a segment and when one lands, then out of the way (HUD triage, 2026-11-17).
+  asksEl.classList.toggle('show', sim.live && sim.time < Math.max(asksUntil, TUNING.hud.asksIntro));
   // Phase 3: segment number and the ability chip (cooldown fills back up).
   segEl.hidden = !run;
   if (run) segEl.textContent = `${run.segment + 1}/${TUNING.run.segments}`;

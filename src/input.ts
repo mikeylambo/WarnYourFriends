@@ -3,6 +3,30 @@ import type { SimInput } from './sim/types';
 
 export type Device = 'keyboard' | 'mouse' | 'gamepad' | 'touch';
 
+/** Keyboard actions the player can rebind (Settings → Controls). Pause stays on Esc / P. */
+export type KeyAction = 'left' | 'right' | 'brake' | 'shoulder' | 'ability';
+export const KEY_ACTIONS: KeyAction[] = ['left', 'right', 'brake', 'shoulder', 'ability'];
+/** Default keys per action (the first is the one shown on screen). */
+export const DEFAULT_KEYS: Record<KeyAction, string[]> = {
+  left: ['KeyA', 'ArrowLeft'],
+  right: ['KeyD', 'ArrowRight'],
+  brake: ['Space', 'KeyS', 'ArrowDown'],
+  shoulder: ['ShiftLeft', 'ShiftRight', 'KeyW'],
+  ability: ['KeyE', 'KeyQ'],
+};
+/** Keys that can't be bound (pause and menu keys). */
+export const RESERVED_KEYS = ['Escape', 'KeyP', 'Enter', 'Tab'];
+
+/** A key code as a short label ("KeyJ" → "J", "ArrowLeft" → "←", "ShiftLeft" → "Shift"). */
+export function keyLabel(code: string): string {
+  if (code.startsWith('Key')) return code.slice(3);
+  if (code.startsWith('Digit')) return code.slice(5);
+  if (code.startsWith('Numpad')) return `Num ${code.slice(6)}`;
+  const arrows: Record<string, string> = { ArrowLeft: '←', ArrowRight: '→', ArrowUp: '↑', ArrowDown: '↓' };
+  if (arrows[code]) return arrows[code];
+  return code.replace(/(Left|Right)$/, '').replace('Control', 'Ctrl').replace('Bracket', '').replace('Semicolon', ';').replace('Quote', "'").replace('Comma', ',').replace('Period', '.').replace('Slash', '/');
+}
+
 /**
  * v0.3 controls, folded into one SimInput per tick.
  *   Lane left/right: A/D, ←/→ · stick flick or d-pad · swipe left/right
@@ -18,6 +42,13 @@ export class Input {
   /** id of the pad last used (for its button labels). */
   padId = '';
   private keys = new Set<string>();
+  /** Effective keys per action: the defaults, or the player's one key per action (Settings → Controls). */
+  keymap: Record<KeyAction, string[]> = { ...DEFAULT_KEYS };
+  /** Accessibility: Brake toggles on a press instead of holding (keyboard, pad, swipe). */
+  brakeToggle = false;
+  private brakeLatch = false;
+  /** While rebinding a key, gameplay input is ignored. */
+  capturing = false;
   private laneEdge = 0;
   private shoulderEdge = false;
   private abilityEdge = false;
@@ -29,13 +60,15 @@ export class Input {
 
   constructor(el: HTMLElement, shoulderBtn: HTMLElement, pauseBtn: HTMLElement, abilityBtn: HTMLElement) {
     window.addEventListener('keydown', (e) => {
-      if (e.repeat) return;
+      if (e.repeat || this.capturing) return;
       this.keys.add(e.code);
-      if (e.code === 'KeyA' || e.code === 'ArrowLeft') this.laneEdge = -1;
-      if (e.code === 'KeyD' || e.code === 'ArrowRight') this.laneEdge = 1;
-      if (e.code === 'ShiftLeft' || e.code === 'ShiftRight' || e.code === 'KeyW') this.shoulderEdge = true;
+      const K = this.keymap;
+      if (K.left.includes(e.code)) this.laneEdge = -1;
+      if (K.right.includes(e.code)) this.laneEdge = 1;
+      if (K.shoulder.includes(e.code)) this.shoulderEdge = true;
       if (e.code === 'Escape' || e.code === 'KeyP') this.pauseEdge = true;
-      if (e.code === 'KeyE' || e.code === 'KeyQ') this.abilityEdge = true;
+      if (K.ability.includes(e.code)) this.abilityEdge = true;
+      if (K.brake.includes(e.code)) this.toggleBrake();
       if (e.code === 'Space' || e.code.startsWith('Arrow')) e.preventDefault();
       this.device = 'keyboard';
       this.onAnyInput?.();
@@ -112,7 +145,10 @@ export class Input {
   }
 
   private onTouchEnd(e: TouchEvent) {
-    for (const t of Array.from(e.changedTouches)) if (this.touch && t.identifier === this.touch.id) this.touch = null;
+    for (const t of Array.from(e.changedTouches)) if (this.touch && t.identifier === this.touch.id) {
+      this.touch = null;
+      this.touchToggled = false;
+    }
   }
 
   /** Swipe-down-and-hold brake is active. */
@@ -121,7 +157,24 @@ export class Input {
     if (!s) return false;
     const dx = s.x - s.sx;
     const dy = s.y - s.sy;
-    return dy >= TUNING.input.swipeDownBrakePx && dy > Math.abs(dx);
+    const down = dy >= TUNING.input.swipeDownBrakePx && dy > Math.abs(dx);
+    // Brake toggle: a swipe down flips it once per touch.
+    if (down && this.brakeToggle && !this.touchToggled) {
+      this.touchToggled = true;
+      this.toggleBrake();
+    }
+    return down;
+  }
+  private touchToggled = false;
+
+  /** A brake press in toggle mode flips the latch (hold mode ignores it). */
+  private toggleBrake() {
+    if (this.brakeToggle) this.brakeLatch = !this.brakeLatch;
+  }
+
+  /** A new broadcast: no brake left latched on from the last one. */
+  resetLatches() {
+    this.brakeLatch = false;
   }
 
   get touchState() {
@@ -169,7 +222,9 @@ export class Input {
     if (right && !P.right) this.laneEdge = 1;
     P.left = left;
     P.right = right;
-    P.brake = (gp.buttons[6]?.value ?? 0) > 0.3;
+    const padBrake = (gp.buttons[6]?.value ?? 0) > 0.3;
+    if (padBrake && !P.brake) this.toggleBrake();
+    P.brake = padBrake;
     if (Math.abs(lx) > 0.3 || P.brake || rb || lb || left || right || gp.buttons.some((b) => b.pressed)) {
       this.device = 'gamepad';
       this.padId = gp.id;
@@ -179,7 +234,9 @@ export class Input {
 
   sample(): SimInput {
     this.pollPad();
-    const brake = this.keys.has('Space') || this.keys.has('KeyS') || this.keys.has('ArrowDown') || this.pad.brake || this.touchBrake;
+    const held = this.keymap.brake.some((k) => this.keys.has(k)) || this.pad.brake || this.touchBrake;
+    const brake = this.capturing ? false : this.brakeToggle ? this.brakeLatch : held;
+    if (this.capturing) this.laneEdge = 0;
     const lane = this.laneEdge;
     const shoulder = this.shoulderEdge;
     const ability = this.abilityEdge;

@@ -28,7 +28,8 @@ src/anim/gait.ts     run cycle: pinned feet, two-bone IK, phase locked to distan
 src/render/          three.js views: highway (zones, ramp), units (police), giant (greybox pose rig) + giantModel (Meshy skin, assets/giant/giant.glb), cruisers, pip (viewer video), camera rig + director, lighting (night/dusk/day), glow, silhouette test, palette, toon
 src/broadcast/       headline generator (§21) + headlines.json word bank (pure TS, tested); coverage.ts (escalation ladder), viewers.json
 src/audio.ts         Web Audio, music/sfx/voice buses: authored SFX (assets/sfx, ElevenLabs) with synth fallback
-src/input.ts         KBM, gamepad, touch → SimInput
+src/input.ts         KBM, gamepad, touch → SimInput; rebindable keys, brake toggle
+src/onboarding.ts    one-time control prompts at the moment they matter
 src/glyphs.ts        button labels per device family (PS4: L1/R1/L2/✕), via the shell's glyph registry
 src/leaderboard/     submission encode + server-side re-simulation (pure, shared with the API)
 src/leaderboardClient.ts  the recap's board: post, top 10, your rank
@@ -62,6 +63,7 @@ tools/shots-hud.mjs     HUD (Direction D) in both palettes: desktop, phone lands
 tools/shots-landmarks.mjs  Landmarks: toll plaza, night market, roadworks, rush hour on approach (ONLY=, SEED_FROM=)
 tools/shots-size.mjs    Giant size: growth at each gear, fixed and big at Rampage
 tools/shots-vehicles.mjs  Vehicle sheet: every prop and police body from the chopper and side-on (dev page tools/modelsheet/vehicles.html)
+tools/shots-a11y.mjs    HUD in play, a control prompt, Settings → Controls, HUD Size 130%
 tools/shots-bridge.mjs  Bridge furniture: a merge sign and lamps on the parapet, not over the water
 tools/shots-events.mjs  Traffic events: Police Net closing (BOXED IN meter), Rolling Blockade with the armored truck, Car Carrier dropping cars (ONLY=)
 ```
