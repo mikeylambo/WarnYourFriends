@@ -793,10 +793,6 @@ export const TUNING = {
   },
 
   /**
-   * Rampage on air (Mike, 2026-11-16: "embellish it"). Placeholder synth until the Suno stems land; the API
-   * (Audio.setGear) stays. A music layer drops in at Rampage and cuts on losing it, with a power-down sweep.
-   */
-  /**
    * Onboarding prompts (Mike, 2026-11-17). Each once per browser, one at a time, `gap` s apart, held `hold` s.
    * quietStart: nothing in the first seconds (the cold open). blockedLead: an unsmashable thing within this many
    * seconds of him. gearAfter: still at Jog this long in. audienceBelow: audience bar under this. kiteAhead: m of
@@ -807,6 +803,10 @@ export const TUNING = {
   /** Smash sample levels by class: the light/medium takes are ~16 dB quieter than heavy, so they play hotter. */
   sfxLevels: { light: 1.1, medium: 1.6, heavy: 1 },
 
+  /**
+   * Rampage on air (Mike, 2026-11-16: "embellish it"). Placeholder synth until the Suno stems land; the API
+   * (Audio.setGear) stays. A music layer drops in at Rampage and cuts on losing it, with a power-down sweep.
+   */
   rampageAudio: {
     /** Layer level on the music bus, fade in (s), fade out on loss (s). */
     layer: 0.9,

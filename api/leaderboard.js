@@ -369,7 +369,11 @@ var TUNING = {
    */
   forks: { at: [30, 58, 86], lastAt: 108, distance: [150, 330], clearOfExit: 320, propsAfter: 35 },
   /** HUD scale (Direction B): pieces are laid out for 1280×720 and zoomed by min(w/1280, h/720), clamped. */
-  hud: { minScale: 0.5, maxScale: 1.3 },
+  /**
+   * HUD triage (Mike, 2026-11-17): the producer's asks show for `asksIntro` s at the top of a segment and
+   * `asksFlash` s when one lands, then get out of the way (the recap lists them). Heat stars are off the HUD.
+   */
+  hud: { minScale: 0.5, maxScale: 1.3, asksIntro: 8, asksFlash: 3 },
   /** Footfall presentation (v0.3). */
   footfall: {
     /** 2px camera pulse on every plant. */
@@ -706,11 +710,18 @@ var TUNING = {
     blocked: ["fuck", "shit", "cunt", "nigg", "fag", "rape", "nazi", "hitler", "retard", "whore", "slut", "bitch", "cock", "pussy", "kike", "chink", "spic", "tranny"]
   },
   /**
+   * Onboarding prompts (Mike, 2026-11-17). Each once per browser, one at a time, `gap` s apart, held `hold` s.
+   * quietStart: nothing in the first seconds (the cold open). blockedLead: an unsmashable thing within this many
+   * seconds of him. gearAfter: still at Jog this long in. audienceBelow: audience bar under this. kiteAhead: m of
+   * road ahead of a police car alongside him.
+   */
+  onboarding: { quietStart: 4, blockedLead: 2.2, gearAfter: 14, audienceBelow: 12, kiteAhead: 30, gap: 7, hold: 4.5 },
+  /** Smash sample levels by class: the light/medium takes are ~16 dB quieter than heavy, so they play hotter. */
+  sfxLevels: { light: 1.1, medium: 1.6, heavy: 1 },
+  /**
    * Rampage on air (Mike, 2026-11-16: "embellish it"). Placeholder synth until the Suno stems land; the API
    * (Audio.setGear) stays. A music layer drops in at Rampage and cuts on losing it, with a power-down sweep.
    */
-  /** Smash sample levels by class: the light/medium takes are ~16 dB quieter than heavy, so they play hotter. */
-  sfxLevels: { light: 1.1, medium: 1.6, heavy: 1 },
   rampageAudio: {
     /** Layer level on the music bus, fade in (s), fade out on loss (s). */
     layer: 0.9,
