@@ -364,6 +364,17 @@ export class Track {
 
   /** World position (x, z) of track point (s, d). */
   posAt(s: number, d: number, out: { x: number; z: number } = { x: 0, z: 0 }) {
+    const first = this.segments[0];
+    if (first.index === 0 && s < first.s0) {
+      // Before the start line (the renderer's lead-in road, seen in the opening head-on shot): straight back
+      // along the opening heading. The sim never stands here.
+      const h = first.hs[0];
+      const x = first.xs[0] + Math.cos(h) * (s - first.s0);
+      const z = first.zs[0] + Math.sin(h) * (s - first.s0);
+      out.x = x - Math.sin(h) * d;
+      out.z = z + Math.cos(h) * d;
+      return out;
+    }
     const seg = this.segmentAt(s);
     const u = clamp(s - seg.s0, 0, seg.length);
     const i = Math.min(Math.floor(u), seg.length - 1);

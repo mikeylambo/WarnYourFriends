@@ -305,6 +305,19 @@ export class HighwayView {
     // Hold back the last two segments: a segment's merge warning needs the next two to exist.
     const ready = track.segments.slice(0, Math.max(0, track.segments.length - 2));
     for (const seg of track.segments) live.add(seg.index);
+    // Lead-in road behind the start line while the first segment is still around (the opening High Head-On shot
+    // looks back past him; without it the road began in a void). Render-only, negative indexes.
+    if (track.segments[0]?.index === 0) {
+      for (let k = 1; k <= TUNING.track.leadInSegments; k++) {
+        live.add(-k);
+        if (!this.segViews.has(-k)) {
+          const g = this.buildSegment(this.leadIn(k));
+          this.segViews.set(-k, g);
+          this.group.add(g);
+          this.lampsDirty = true;
+        }
+      }
+    }
     for (const seg of ready) {
       if (!this.segViews.has(seg.index)) {
         const g = this.buildSegment(seg);
@@ -397,6 +410,23 @@ export class HighwayView {
     g.setIndex(idx);
     g.computeVertexNormals();
     return g;
+  }
+
+  /** A straight segment `k` back from the start line, continuing the first one's heading and lanes. */
+  private leadIn(k: number): Segment {
+    const first = this.sim.track.segments[0];
+    const L = TUNING.track.segmentLength;
+    const s0 = first.s0 - k * L;
+    const h = first.hs[0];
+    const xs = new Float64Array(L + 1);
+    const zs = new Float64Array(L + 1);
+    const hs = new Float64Array(L + 1).fill(h);
+    for (let i = 0; i <= L; i++) {
+      const back = s0 + i - first.s0;
+      xs[i] = first.xs[0] + Math.cos(h) * back;
+      zs[i] = first.zs[0] + Math.sin(h) * back;
+    }
+    return { ...first, index: -k, s0, length: L, h0: h, h1: h, xs, zs, hs, lanes0: first.lanes0, lanes1: first.lanes0, kind: 'straight', zoneStart: false, overpass: false, landmark: undefined, landmarkName: undefined, exit: false, fork: undefined };
   }
 
   private buildSegment(seg: Segment): THREE.Group {

@@ -230,7 +230,8 @@ export const TUNING = {
    * throb), a hot vignette at the screen edges (CSS), plus the size swell (growth.scale), the pose, the music layer
    * and the meter's countdown. All under 3 Hz; Reduce Flashes holds the throb still.
    */
-  rampageFx: { rimColor: 0xff5a1f, rimBoost: 2.4, rimFloor: 1.4, ease: 0.25, pulseHz: 1.6, pulseAmp: 0.25 },
+  /** Activation: hit-pause frames, a one-frame flash (off under Reduce Flashes), a camera jolt (px) and a rumble (ms). */
+  rampageFx: { rimColor: 0xff5a1f, rimBoost: 2.4, rimFloor: 1.4, ease: 0.25, pulseHz: 1.6, pulseAmp: 0.25, slamHitstop: 6, slamFlash: 2, slamShake: 7, slamHaptic: 220 },
 
   shoulderCheck: {
     /** §7 0.25s burst that smashes one mass class up (unchanged in v0.3). */
@@ -327,6 +328,8 @@ export const TUNING = {
     runwaySegments: 3,
     /** Generate this far ahead of the giant; drop segments this far behind. */
     aheadDistance: 480,
+    /** Render-only road behind the start line (segments), so the opening head-on shot has road behind him. */
+    leadInSegments: 6,
     keepBehind: 120,
     /** Concrete edge walls. */
     wallHeight: 1.0,
@@ -443,7 +446,7 @@ export const TUNING = {
    * (wider FOV, off under Reduced Motion), traffic ahead brakes early, and a tag rides the chyron.
    * Stride and Rampage kick dust back off every step (particles per footfall by tier).
    */
-  gear: { buildUp: 1.0, buildRingScale: 0.9, fovPunch: 0.14, fovPunchTime: 0.5, shockRadius: 10, trafficAlarm: 1.6, trafficAlarmBrakeAt: 85, dustKick: [0, 3, 8] },
+  gear: { buildUp: 1.0, buildRingScale: 0.9, fovPunch: 0.14, fovPunchTime: 0.5, shockRadius: 10, trafficAlarm: 1.6, trafficAlarmBrakeAt: 85, dustKick: [0, 3, 8], /** Rampage loop: the build-up plays over the meter's last stretch, from this %. */ meterBuildFrom: 85 },
 
   /**
    * Recap REPLAY (presentation): the night's top moment, re-simulated from the recorded inputs and

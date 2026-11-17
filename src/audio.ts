@@ -165,11 +165,15 @@ export class Audio {
   private applyVolumes() {
     if (!this.ctx) return;
     this.master.gain.value = this.vol.master;
-    this.buses.music.gain.value = 0.55 * this.vol.music;
-    this.buses.sfx.gain.setTargetAtTime(this.hushed ? 0 : this.vol.sfx, this.ctx.currentTime, 0.12);
+    // Hushed (the cover art is up): every game bus is silent, the theme bed and the station's voice too (Mike, 2026-11-17:
+    // nothing plays behind the main menu until the game starts or the attract broadcast shows).
+    const on = this.hushed ? 0 : 1;
+    this.buses.music.gain.setTargetAtTime(0.55 * this.vol.music * on, this.ctx.currentTime, 0.12);
+    this.buses.sfx.gain.setTargetAtTime(this.vol.sfx * on, this.ctx.currentTime, 0.12);
+    this.buses.voice.gain.setTargetAtTime(on, this.ctx.currentTime, 0.12);
   }
 
-  /** The title's cover art hides the attract broadcast: its sounds (steps, sirens, rotor) wait for the main menu. */
+  /** The cover art hides the attract broadcast: all its sound (steps, sirens, rotor, theme, voice) waits until it shows or a broadcast starts. */
   private hushed = false;
   setHushed(h: boolean) {
     if (h === this.hushed) return;

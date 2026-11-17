@@ -934,3 +934,26 @@ html.rampage.title #rampfx, html.replay #rampfx { opacity: 0; animation: none; }
 @keyframes rampthrob { 50% { opacity: 0.6; } }
 @media (prefers-reduced-motion: reduce) { html.rampage #rampfx { animation: none; } }
 html.reduceflashes.rampage #rampfx { animation: none; }
+
+/* --- Rampage meter, readability pass (2026-11-17): bigger bar, quarter ticks, a number --- */
+#gears { padding: 8px 22px 8px 16px; }
+#gears .lbl { color: var(--c-text); opacity: 0.85; font-size: 12px; }
+#gears i.meter { width: 230px; height: 20px; background: rgba(255, 255, 255, 0.14); position: relative; }
+#gears i.meter::after { background: linear-gradient(90deg, #ff9a3c, #ff4a1f) !important; }
+#gears i.meter::before { content: ''; position: absolute; inset: 0; z-index: 1; background: repeating-linear-gradient(90deg, transparent 0 calc(25% - 2px), rgba(20, 12, 26, 0.85) calc(25% - 2px) 25%); pointer-events: none; }
+#gears .nm { font: 900 24px/1 var(--f-num); min-width: 5ch; margin-left: 12px; color: var(--c-text); }
+#gears.ready { background: var(--c-red); box-shadow: 0 0 24px rgba(255, 90, 30, 0.75); }
+#gears.ready .nm { color: #fff; font-size: 22px; }
+#gears.ready .nm kbd { background: #fff; color: var(--c-red); border-color: #fff; font-size: 15px; padding: 3px 7px; }
+#gears.ramp { background: linear-gradient(90deg, #5a1208, var(--c-panel)); }
+#gears.ramp i.meter::after { background: linear-gradient(90deg, #ffd23c, #ff6a1f) !important; }
+#gears.ramp .nm { color: #ffd23c; }
+
+/* Rampage activation slam: across the middle, in and gone in 1.1s (no strobe; Reduced Motion: a plain fade). */
+#rampslam { position: absolute; left: 0; right: 0; top: 34%; display: flex; flex-direction: column; align-items: center; gap: 6px; pointer-events: none; opacity: 0; z-index: 5; }
+#rampslam b { font: italic 900 clamp(48px, 9vw, 120px)/0.9 var(--f-head); color: #fff; letter-spacing: 0.02em; text-shadow: 0 0 30px rgba(255, 90, 30, 0.9), 0 6px 0 #a3200f; background: linear-gradient(90deg, transparent, rgba(171, 37, 48, 0.85) 15%, rgba(171, 37, 48, 0.85) 85%, transparent); padding: 6px 12vw 10px; }
+#rampslam span { font: italic 800 clamp(13px, 1.6vw, 18px)/1 var(--f-head); letter-spacing: 0.2em; text-transform: uppercase; color: #ffd23c; text-shadow: 0 2px 6px rgba(0, 0, 0, 0.8); }
+#rampslam.in { animation: rampslam 1.1s cubic-bezier(.2, 1.3, .4, 1) both; }
+@keyframes rampslam { 0% { opacity: 0; transform: scale(1.6); } 14% { opacity: 1; transform: scale(1); } 75% { opacity: 1; transform: scale(1.02); } 100% { opacity: 0; transform: scale(1.04) translateY(-8px); } }
+@media (prefers-reduced-motion: reduce) { #rampslam.in { animation: rampfade 1.1s both; } @keyframes rampfade { 15%, 75% { opacity: 1; } 100% { opacity: 0; } } }
+html.replay #rampslam, html.title #rampslam { display: none; }

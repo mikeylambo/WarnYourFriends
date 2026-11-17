@@ -36,6 +36,9 @@ export interface PlayEntry {
   forks: { opened: number; taken: number };
   police: { crashes: number; smashed: number; shaken: number; rams: number; ramHits: number; spiked: number };
   abilityUses: number;
+  /** Rampage loop (2026-11-17): Rampages fired, and hits that cost meter. */
+  rampages?: number;
+  meterLosses?: number;
   /** Ticks per input device (keyboard / gamepad / touch). */
   input: Record<string, number>;
 }
@@ -47,6 +50,8 @@ export class PlayLog {
   private forks = { opened: 0, taken: 0 };
   private police = { crashes: 0, smashed: 0, shaken: 0, rams: 0, ramHits: 0, spiked: 0 };
   private abilityUses = 0;
+  private rampages = 0;
+  private meterLosses = 0;
   private capTicks = 0;
   private liveTicks = 0;
   private input: Record<string, number> = {};
@@ -57,6 +62,8 @@ export class PlayLog {
     this.forks = { opened: 0, taken: 0 };
     this.police = { crashes: 0, smashed: 0, shaken: 0, rams: 0, ramHits: 0, spiked: 0 };
     this.abilityUses = 0;
+    this.rampages = 0;
+    this.meterLosses = 0;
     this.capTicks = 0;
     this.liveTicks = 0;
     this.input = {};
@@ -74,6 +81,8 @@ export class PlayLog {
       case 'ram': this.police.rams++; if (e.hit) this.police.ramHits++; break;
       case 'spiked': this.police.spiked++; break;
       case 'ability': if (e.ok) this.abilityUses++; break;
+      case 'rampageStart': this.rampages++; break;
+      case 'meterLoss': this.meterLosses++; break;
     }
   }
 
@@ -111,6 +120,8 @@ export class PlayLog {
       forks: this.forks,
       police: this.police,
       abilityUses: this.abilityUses,
+      rampages: this.rampages,
+      meterLosses: this.meterLosses,
       input: this.input,
     };
   }

@@ -135,7 +135,8 @@ var TUNING = {
    * throb), a hot vignette at the screen edges (CSS), plus the size swell (growth.scale), the pose, the music layer
    * and the meter's countdown. All under 3 Hz; Reduce Flashes holds the throb still.
    */
-  rampageFx: { rimColor: 16734751, rimBoost: 2.4, rimFloor: 1.4, ease: 0.25, pulseHz: 1.6, pulseAmp: 0.25 },
+  /** Activation: hit-pause frames, a one-frame flash (off under Reduce Flashes), a camera jolt (px) and a rumble (ms). */
+  rampageFx: { rimColor: 16734751, rimBoost: 2.4, rimFloor: 1.4, ease: 0.25, pulseHz: 1.6, pulseAmp: 0.25, slamHitstop: 6, slamFlash: 2, slamShake: 7, slamHaptic: 220 },
   shoulderCheck: {
     /** §7 0.25s burst that smashes one mass class up (unchanged in v0.3). */
     duration: 0.25,
@@ -228,6 +229,8 @@ var TUNING = {
     runwaySegments: 3,
     /** Generate this far ahead of the giant; drop segments this far behind. */
     aheadDistance: 480,
+    /** Render-only road behind the start line (segments), so the opening head-on shot has road behind him. */
+    leadInSegments: 6,
     keepBehind: 120,
     /** Concrete edge walls. */
     wallHeight: 1
@@ -338,7 +341,18 @@ var TUNING = {
    * (wider FOV, off under Reduced Motion), traffic ahead brakes early, and a tag rides the chyron.
    * Stride and Rampage kick dust back off every step (particles per footfall by tier).
    */
-  gear: { buildUp: 1, buildRingScale: 0.9, fovPunch: 0.14, fovPunchTime: 0.5, shockRadius: 10, trafficAlarm: 1.6, trafficAlarmBrakeAt: 85, dustKick: [0, 3, 8] },
+  gear: {
+    buildUp: 1,
+    buildRingScale: 0.9,
+    fovPunch: 0.14,
+    fovPunchTime: 0.5,
+    shockRadius: 10,
+    trafficAlarm: 1.6,
+    trafficAlarmBrakeAt: 85,
+    dustKick: [0, 3, 8],
+    /** Rampage loop: the build-up plays over the meter's last stretch, from this %. */
+    meterBuildFrom: 85
+  },
   /**
    * Recap REPLAY (presentation): the night's top moment, re-simulated from the recorded inputs and
    * played back before the recap card. Starts `lead` s before the moment at full speed, slows to `slow`×
@@ -1253,6 +1267,15 @@ var Track = class {
   }
   /** World position (x, z) of track point (s, d). */
   posAt(s, d, out = { x: 0, z: 0 }) {
+    const first = this.segments[0];
+    if (first.index === 0 && s < first.s0) {
+      const h2 = first.hs[0];
+      const x2 = first.xs[0] + Math.cos(h2) * (s - first.s0);
+      const z2 = first.zs[0] + Math.sin(h2) * (s - first.s0);
+      out.x = x2 - Math.sin(h2) * d;
+      out.z = z2 + Math.cos(h2) * d;
+      return out;
+    }
     const seg = this.segmentAt(s);
     const u = clamp(s - seg.s0, 0, seg.length);
     const i = Math.min(Math.floor(u), seg.length - 1);

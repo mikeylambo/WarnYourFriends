@@ -50,6 +50,7 @@ if (flags.cuts !== null) settings.cameraCuts = flags.cuts;
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const canvas = $<HTMLCanvasElement>('view');
 const flashEl = $('flash');
+const rampSlam = $('rampslam');
 /** Rampage tells (TUNING.rampageFx): the rim light heats, the screen edges glow. `rampK` eases 0..1. */
 let rampK = 0;
 let rimBaseStrength = RIM.strength.value;
@@ -1160,7 +1161,7 @@ function present(e: SimEvent) {
       gearsEl.classList.remove('skin');
       void gearsEl.offsetWidth;
       gearsEl.classList.add('skin');
-      abilityPop('Thick Skin · no gear lost');
+      abilityPop('Thick Skin · no meter lost');
       break;
     case 'ask': {
       renderAsks();
@@ -1252,6 +1253,21 @@ function present(e: SimEvent) {
     case 'meterFull':
       audio.tierUp(1);
       break;
+    case 'rampageStart': {
+      // Activation (Mike, 2026-11-17: "a bit more prominence"): a beat of hit-pause, a slam across the screen, a
+      // flash, a jolt and a rumble, on top of the gear-up's shockwave, punch and stinger.
+      const R = TUNING.rampageFx;
+      if (!attract && !replay) {
+        hitstop = Math.max(hitstop, R.slamHitstop);
+        rampSlam.classList.remove('in');
+        void rampSlam.offsetWidth;
+        rampSlam.classList.add('in');
+        flash(R.slamFlash);
+        haptic(R.slamHaptic, 0.9);
+      }
+      rig.jolt(R.slamShake, 0.25);
+      break;
+    }
     case 'meterLoss':
       gearsEl.classList.remove('lost');
       void gearsEl.offsetWidth;
@@ -1521,7 +1537,10 @@ function start() {
   paused = false;
   document.documentElement.classList.add('playing');
   try {
-    audio.unlock(); // audio must never block the run from starting
+    // Only after a real gesture: the attract broadcast starts at page load, and an AudioContext made then is
+    // refused (and nags the console on every resume). The first key, click or tap unlocks it (input.onAnyInput).
+    const nav = navigator as Navigator & { userActivation?: { hasBeenActive: boolean } };
+    if (nav.userActivation ? nav.userActivation.hasBeenActive : !attract) audio.unlock(); // audio must never block the run from starting
   } catch (e) {
     console.warn('Audio unavailable:', e);
   }
@@ -1854,9 +1873,9 @@ function frame(now: number) {
       // v0.3 footfall: dust ring, 2px camera pulse, bass thump; Rampage adds a crack decal.
       const lf = gf.legs[gf.plantedNow as 0 | 1].foot;
       const f = fromGiant(lf.x, lf.z);
-      // Gear build-up: the last second before a gear-up, steps swell and tick upward.
       const G = TUNING.gear;
-      const build = sim.live && sim.tierUpIn <= G.buildUp && sim.tierUpProgress > 0 ? 1 - sim.tierUpIn / G.buildUp : 0;
+      // Rampage loop: the build-up rides the last stretch of the meter (the steps swell and tick toward READY).
+      const build = sim.live && !sim.inRampage && g.meter >= G.meterBuildFrom && g.meter < 100 ? (g.meter - G.meterBuildFrom) / (100 - G.meterBuildFrom) : 0;
       highway.ring(f.x, f.z, (1.6 + g.tier * 0.7) * gScale * (1 + build * G.buildRingScale), build > 0 ? 0xfff1d6 : PALETTE.dust, 0.5 + build * 0.3, 0.55);
       if (build > 0) audio.gearTick(build);
       if (gearShockPending) {
@@ -2209,8 +2228,10 @@ function updateHud(dt: number) {
   gearPips[0].style.setProperty('--fill', (ramp ? Math.min(1, g.rampT / TUNING.rampage.duration) : g.meter / 100).toFixed(3));
   gearsEl.classList.toggle('ready', ready);
   gearsEl.dataset.tier = String(g.tier);
-  const nm = ramp ? 'RAMPAGE' : ready ? (settings.autoRampage ? 'READY' : `<kbd>${esc(glyph('shoulder'))}</kbd> GO`) : 'STRIDE';
+  // Readability pass (Mike, 2026-11-17): the number says where it is; full, the button; in Rampage, the seconds left.
+  const nm = ramp ? `${g.rampT.toFixed(1)}s` : ready ? (settings.autoRampage ? 'READY!' : `<kbd>${esc(glyph('shoulder'))}</kbd> GO!`) : `${Math.floor(g.meter)}%`;
   if (gearName.innerHTML !== nm) gearName.innerHTML = nm;
+  gearsEl.classList.toggle('ramp', ramp);
   gearMultEl.textContent = `×${TUNING.show.bankMult[g.tier]}`;
   heatStars.forEach((el, i) => el.classList.toggle('on', i < sh.heat));
   // The asks: at the top of a segment and when one lands, then out of the way (HUD triage, 2026-11-17).
