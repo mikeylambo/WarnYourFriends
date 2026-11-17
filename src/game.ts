@@ -28,7 +28,7 @@ import { readFlags } from './debug';
 import { encodeInputs, type Submission } from './leaderboard/verify';
 import { mountBoard } from './leaderboardClient';
 import { Onboarding, type PromptId } from './onboarding';
-import { AWARDS, loadProfile, outfitUnlocked, record, rewardLine, saveProfile, upgradePool, type Award } from './awards';
+import { AWARDS, loadProfile, outfitUnlocked, record, rewardLine, saveProfile, unlockEdition, upgradePool, type Award } from './awards';
 import { GAME_SPEEDS, HUD_SIZES, loadSettings, saveSettings } from './settings';
 import { applyStoredTuning, mountTuningPanel, tuningChanged } from './tuningPanel';
 import { createGameApp, type InputDeviceFamily, type CoreSettings, type FrameAssembly, type GenreFrame, type RendererAdapter, type SLUWebShell } from '@slu/web-shell';
@@ -107,7 +107,7 @@ const chainClock = chainEl.querySelector('.clock i') as HTMLElement;
 /** Spectacle stunt names on the combo counter (what just counted, so the player learns the menu). */
 /** Ability levels on cards and the chip. */
 const ROMAN = ['', 'I', 'II', 'III'];
-const STUNT_LABEL: Record<string, string> = { medium: 'SMASH', heavy: 'HEAVY SMASH', unit: 'POLICE CAR', policeCrash: 'POLICE CRASH', collateral: 'COLLATERAL', nearMiss: 'NEAR MISS', ramDodge: 'DODGED', lostTrack: 'SHOOK ONE', chopperShaken: 'LOST THE CHOPPER', leapLand: 'LANDING', breakawayLand: 'BREAKAWAY' };
+const STUNT_LABEL: Record<string, string> = { rival: 'RIVAL NEWS VAN', medium: 'SMASH', heavy: 'HEAVY SMASH', unit: 'POLICE CAR', policeCrash: 'POLICE CRASH', collateral: 'COLLATERAL', nearMiss: 'NEAR MISS', ramDodge: 'DODGED', lostTrack: 'SHOOK ONE', chopperShaken: 'LOST THE CHOPPER', leapLand: 'LANDING', breakawayLand: 'BREAKAWAY' };
 let chainResultT = 0;
 const gearPips = [...gearsEl.querySelectorAll('i')] as HTMLElement[];
 const gearName = gearsEl.querySelector('.nm') as HTMLElement;
@@ -140,6 +140,9 @@ const abilIcon = abilEl.querySelector('.ic') as HTMLImageElement;
 const abilKey = abilEl.querySelector('.key') as HTMLElement;
 const abilCd = abilEl.querySelector('.cd i') as HTMLElement;
 const abilBtn = $<HTMLButtonElement>('btn-ability');
+/** Abilities stack (2026-11-17): slot 2's chip and touch button. */
+const abil2El = $('abil2');
+const chip2 = { el: abil2El, name: abil2El.querySelector('.nm') as HTMLElement, icon: abil2El.querySelector('.ic') as HTMLImageElement, key: abil2El.querySelector('.key') as HTMLElement, cd: abil2El.querySelector('.cd i') as HTMLElement, btn: $<HTMLButtonElement>('btn-ability2') };
 const controlsEl = $('controls');
 
 // --- Renderer ---------------------------------------------------------------
@@ -227,6 +230,8 @@ let units: UnitViews;
 /** Seconds of (unpaused, time-scaled) play since the broadcast ended; -1 while it's on. */
 let endedFor = -1;
 let recapShown = false;
+/** Editions: the edition a won run just unlocked (-1: none). */
+let editionUnlocked = -1;
 /**
  * Sign-off outro (Mike, 2026-11-16: he ran "through the grass, not on the road"): after the exit the sim runs him
  * straight on, so he's drawn along the ramp's centreline instead (presentation only), while the chopper swivels into
@@ -256,7 +261,7 @@ const cutLog: { t: number; reason: CutDecision['reason']; index: number; laneBus
 const triggerLog: { t: number; kind: string }[] = [];
 let bot: Bot | null = null;
 const audio = new Audio();
-const input = new Input(canvas, $('btn-shoulder'), $('btn-pause'), $('btn-ability'));
+const input = new Input(canvas, $('btn-shoulder'), $('btn-pause'), $('btn-ability'), document.getElementById('btn-ability2'));
 /** Accessibility settings into the input layer: rebound keys and the brake toggle. */
 function applyControls() {
   input.keymap = settings.keys ? (Object.fromEntries(KEY_ACTIONS.map((a) => [a, [settings.keys![a]]])) as Record<KeyAction, string[]>) : { ...DEFAULT_KEYS };
@@ -268,6 +273,7 @@ applyControls();
 const onboarding = new Onboarding($('prompt'), (id: PromptId) => {
   const k = (a: GlyphAction) => (glyph(a) ? `<kbd>${esc(glyph(a))}</kbd>` : '');
   const ab = sim.ability ? TUNING.upgrades[sim.ability] : null;
+  const ab2 = sim.ability2 ? TUNING.upgrades[sim.ability2] : null;
   const fire = settings.autoRampage ? 'it fires by itself' : `press ${k('shoulder')}`;
   const lines: Record<PromptId, string> = {
     lanes: `Change lanes ${k('lanes')} and smash the traffic`,
@@ -284,6 +290,7 @@ const onboarding = new Onboarding($('prompt'), (id: PromptId) => {
     caught: `Police on your tail: let go of ${k('brake')} and run`,
     exit: `Exit open: get to the far-right lane`,
     ability: ab ? `<b>${esc(ab.label.toUpperCase())}</b> ${k('ability')} ${esc(ab.blurb)}` : '',
+    ability2: ab2 ? `<b>${esc(ab2.label.toUpperCase())}</b> ${k('ability2')} ${esc(ab2.blurb)}` : '',
   };
   return lines[id];
 });
@@ -305,10 +312,10 @@ const recentEvents: SimEvent[] = [];
 const playLog = new PlayLog();
 let lastEntry: PlayEntry | null = null;
 // Recap REPLAY state (declared up here: newRun runs at boot). See startReplay below.
-let simOpts: { seed: number; segment: number; upgrades: UpgradeId[]; levels: Partial<Record<AbilityId, number>>; growth: boolean; guided?: boolean } = { seed: 0, segment: 0, upgrades: [], levels: {}, growth: false };
+let simOpts: { seed: number; segment: number; upgrades: UpgradeId[]; levels: Partial<Record<AbilityId, number>>; growth: boolean; guided?: boolean; edition?: number } = { seed: 0, segment: 0, upgrades: [], levels: {}, growth: false };
 const inputLog: SimInput[] = [];
 /** Leaderboard: this broadcast's (or run's) seed, each segment's inputs and the meeting buys, for the server to re-play. */
-let lb: { mode: 'run' | 'broadcast'; seed: number; segments: string[]; buys: (UpgradeId | null)[]; pool: UpgradeId[]; guided?: boolean } = { mode: 'broadcast', seed: 0, segments: [], buys: [], pool: [] };
+let lb: { mode: 'run' | 'broadcast'; seed: number; segments: string[]; buys: UpgradeId[][]; pool: UpgradeId[]; guided?: boolean; edition?: number } = { mode: 'broadcast', seed: 0, segments: [], buys: [], pool: [] };
 /** Why this browser's scores can't go on the board (a setting that changes the sim), or null. */
 const lbBlocked = () =>
   flags.bot || flags.seg !== null || flags.ability || flags.heat !== null || flags.nodecay || flags.god || (flags.size !== null && flags.size !== 'growth') || tuningChanged()
@@ -374,8 +381,9 @@ function newRun(seed: number, segment = 0, upgrades: UpgradeId[] = [], levels: P
   $('coldts').textContent = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
   runSize = sizeMode();
   const growth = runSize === 'growth';
-  sim = new Sim({ seed, segment, upgrades, levels, growth, guided });
-  simOpts = { seed, segment, upgrades: [...upgrades], levels: { ...levels }, growth, guided };
+  const edition = run?.edition ?? 0;
+  sim = new Sim({ seed, segment, upgrades, levels, growth, guided, edition });
+  simOpts = { seed, segment, upgrades: [...upgrades], levels: { ...levels }, growth, guided, edition };
   // A fresh giant space for the new road: no anchor carried over, his starting size outright.
   gScale = sizeFor(0);
   gAnchor.x = gAnchor.z = 0;
@@ -488,18 +496,9 @@ function hideRecap() {
   recapEl.hidden = true;
 }
 
-/** What an ability just did, beside its chip: the payoff has to read even when the chopper is far out. */
+/** The ability callouts ("Stuck the landing") are gone (Mike, 2026-11-17: excess copy); #abilpop stays hidden. */
 const abilPop = $('abilpop');
 let abilPopT = 0;
-function abilityPop(text: string, dud = false) {
-  if (attract) return;
-  abilPop.textContent = text;
-  abilPop.classList.toggle('dud', dud);
-  abilPop.classList.remove('show');
-  void abilPop.offsetWidth;
-  abilPop.classList.add('show');
-  abilPopT = TUNING.abilities.popTime;
-}
 
 /** One primary number (2026-11-16): Ratings gains no longer pop as "+K"; the audience bar flashes instead. */
 function gainFlash() {
@@ -681,7 +680,7 @@ function openAwards(): Promise<void> {
 
 /** Settings → Controls: rebind the keyboard (accessibility, 2026-11-17). One key per action; a key taken by another action swaps. */
 function openControls(): Promise<void> {
-  const NAMES: Record<KeyAction, string> = { left: 'Lane left', right: 'Lane right', brake: 'Brake', shoulder: 'Rampage', ability: 'Ability' };
+  const NAMES: Record<KeyAction, string> = { left: 'Lane left', right: 'Lane right', brake: 'Brake', shoulder: 'Rampage', ability: 'Ability', ability2: 'Ability 2' };
   const current = (): Record<KeyAction, string> => settings.keys ?? (Object.fromEntries(KEY_ACTIONS.map((a) => [a, DEFAULT_KEYS[a][0]])) as Record<KeyAction, string>);
   let waiting: KeyAction | null = null;
   const draw = () => {
@@ -754,37 +753,50 @@ function openControls(): Promise<void> {
   });
 }
 
-function showMeeting() {
+function showMeeting(focusId?: string) {
   if (!run) return;
   const r = run;
   const offers = r.offers();
-  const held = r.ability;
+  const held = r.abilities;
+  const slots = TUNING.run.abilitySlots;
+  // Mike (2026-11-17): the meeting stays open: buy what the budget allows (each pitch once), then go live.
   recapEl.innerHTML = `<div class="card meeting">
     <div class="kicker">PRODUCER'S MEETING · BEFORE SEGMENT ${r.segment + 2} OF ${TUNING.run.segments}</div>
     <div class="purse">Budget <b>${r.purse.toLocaleString()}</b></div>
-    <p class="how">Your stunts pay for these. Spending never lowers your score.</p>
+    <p class="how">Your stunts pay for these. Buy as many as you can afford; spending never lowers your score. Abilities stack: up to ${slots}, each on its own button.</p>
     <div class="pitches">${offers
       .map((id) => {
         const u = TUNING.upgrades[id];
-        // The ability you hold comes back as its next level; another one replaces it.
+        const bought = r.bought.includes(id);
+        // An ability you hold comes back as its next level.
         const lv = u.kind === 'ability' ? r.levelOf(id as AbilityId) : 0;
-        const next = lv ? lv + 1 : 0;
-        const swap = u.kind === 'ability' && held && !lv ? `<small class="swap">Replaces ${esc(TUNING.upgrades[held].label)}${r.levelOf(held) > 1 ? ` ${ROMAN[r.levelOf(held)]}` : ''}</small>` : '';
+        const next = bought ? lv : lv ? lv + 1 : 0;
+        const slot = u.kind === 'ability' && !lv && !bought ? `<small class="swap">Ability slot ${held.length + 1} of ${slots}</small>` : '';
         const price = r.priceOf(id);
-        const title = next ? `${u.label} ${ROMAN[next]}` : u.label;
-        const blurb = next && u.levels ? u.levels[next - 1] : u.blurb;
-        return `<button class="pitch ${u.kind}${next ? ' levelup' : ''}" data-id="${id}" ${r.canAfford(id) ? '' : 'disabled'}>
-          <span class="art"><img src="${UPGRADE_ART[id]}" alt="" /><span class="tag">${next ? `LEVEL ${ROMAN[next]}` : u.kind === 'ability' ? 'ABILITY' : 'PASSIVE'}</span></span>
-          <b>${esc(title)}</b><q class="said">${esc(u.pitch)}</q><span class="blurb">${esc(blurb)}</span>${swap}<span class="price">${price.toLocaleString()}</span>${r.canAfford(id) ? '' : `<small class="need">Need ${(price - r.purse).toLocaleString()} more</small>`}</button>`;
+        const title = next > 1 ? `${u.label} ${ROMAN[next]}` : u.label;
+        const blurb = next > 1 && u.levels ? u.levels[next - 1] : u.blurb;
+        const can = !bought && r.canAfford(id);
+        return `<button class="pitch ${u.kind}${next > 1 ? ' levelup' : ''}${bought ? ' bought' : ''}" data-id="${id}" ${can ? '' : 'disabled'}>
+          <span class="art"><img src="${UPGRADE_ART[id]}" alt="" /><span class="tag">${bought ? 'BOUGHT' : next > 1 ? `LEVEL ${ROMAN[next]}` : u.kind === 'ability' ? 'ABILITY' : 'PASSIVE'}</span></span>
+          <b>${esc(title)}</b><q class="said">${esc(u.pitch)}</q><span class="blurb">${esc(blurb)}</span>${slot}${bought ? '<span class="price">Bought ✓</span>' : `<span class="price">${price.toLocaleString()}</span>${can ? '' : `<small class="need">Need ${(price - r.purse).toLocaleString()} more</small>`}`}</button>`;
       })
       .join('')}</div>
-    <div class="row"><button class="go alt" id="skip">Skip</button></div>
+    <div class="row"><button class="go" id="skip">Go live</button></div>
     <div class="padhint"></div>
   </div>`;
   recapArmedAt = performance.now() + 250;
-  for (const b of recapEl.querySelectorAll<HTMLButtonElement>('.pitch')) b.onclick = () => r.buy(b.dataset.id as UpgradeId) && (lb.buys.push(b.dataset.id as UpgradeId), nextSegment());
-  ($('skip') as HTMLButtonElement).onclick = () => r.nextSegment() && (lb.buys.push(null), nextSegment());
-  (recapEl.querySelector<HTMLButtonElement>('.pitch:not([disabled])') ?? $<HTMLButtonElement>('skip')).focus();
+  const got = (lb.buys[r.segment] ??= []);
+  for (const b of recapEl.querySelectorAll<HTMLButtonElement>('.pitch'))
+    b.onclick = () => {
+      const id = b.dataset.id as UpgradeId;
+      if (!r.buy(id)) return;
+      got.push(id);
+      audio.tierUp(1);
+      showMeeting(id);
+    };
+  ($('skip') as HTMLButtonElement).onclick = () => r.nextSegment() && nextSegment();
+  const keep = focusId ? recapEl.querySelector<HTMLButtonElement>(`.pitch[data-id="${focusId}"]:not([disabled])`) : null;
+  (keep ?? recapEl.querySelector<HTMLButtonElement>('.pitch:not([disabled])') ?? $<HTMLButtonElement>('skip')).focus();
 }
 
 /** The next segment of the run: a new road, Heat starts higher, the upgrades come along. */
@@ -793,6 +805,16 @@ function nextSegment() {
   newRun(run.segmentSeed(), run.segment, run.owned, run.levels);
   bot = flags.bot ? new Bot(sim) : null;
   menuGuard = 10;
+}
+
+/** Always a next goal (Mike, 2026-11-17: "no reason to play more"): the closest award not yet won, with progress. */
+function nextAwardLine(): string {
+  if (bot) return '';
+  const left = AWARDS.filter((a) => !profile.won.includes(a.id)).map((a) => ({ a, have: Math.min(profile.counts[a.stat], a.n) })).sort((x, y) => y.have / y.a.n - x.have / x.a.n);
+  const next = left[0];
+  if (!next) return '';
+  const reward = rewardLine(next.a);
+  return `<div class="rc-next"><small>NEXT AWARD</small><b>${esc(next.a.title)}</b><span>${esc(next.a.how)} · ${next.have.toLocaleString()}/${next.a.n.toLocaleString()}${reward ? ` · ${esc(reward)}` : ''}</span><i style="--p:${((next.have / next.a.n) * 100).toFixed(0)}%"></i></div>`;
 }
 
 /** The 11 O'Clock Recap (§20: results as the evening news). */
@@ -846,6 +868,8 @@ function showRecap() {
       <div class="rc-hero">${hero.map(([k, v, c]) => `<div class="${c}"><small>${k}</small><b>${v}</b></div>`).join('')}</div>
       <div class="rc-tiles">${tiles.map(([k, v]) => `<div><b>${v}</b><small>${k}</small></div>`).join('')}</div>
       ${newAwards.map((a) => `<div class="rc-award"><small>AWARD</small><b>${esc(a.title)}</b>${rewardLine(a) ? `<span>${esc(rewardLine(a))}</span>` : ''}</div>`).join('')}
+      ${editionUnlocked > 0 ? `<div class="rc-award"><small>NEW EDITION</small><b>${esc(TUNING.editions[editionUnlocked].name)}</b><span>Harder, score ×${TUNING.editions[editionUnlocked].score}. Pick it on the main menu.</span></div>` : ''}
+      ${nextAwardLine()}
     </section>
     <aside class="rc-side">
       ${shot}
@@ -874,7 +898,7 @@ function showRecap() {
     const blocked = lbBlocked();
     const sub: Submission | null = blocked || lb.segments.length === 0
       ? null
-      : { mode: lb.mode, seed: lb.seed, growth: simOpts.growth, segments: lb.segments, buys: lb.buys, pool: lb.pool, ...(lb.guided ? { guided: true } : {}), claimed: Math.round(run ? run.earned : sim.show.banked) };
+      : { mode: lb.mode, seed: lb.seed, growth: simOpts.growth, segments: lb.segments, buys: lb.buys, pool: lb.pool, ...(lb.guided ? { guided: true } : {}), ...(lb.edition ? { edition: lb.edition } : {}), claimed: Math.round(run ? run.earned : sim.show.banked) };
     mountBoard(boardEl, lb.mode, sub, blocked ?? undefined);
   }
   // Playtest export: log this broadcast once, then copy everything logged so far.
@@ -1117,12 +1141,19 @@ function present(e: SimEvent) {
       else if (e.id === 'leap' || e.id === 'breakaway') {
         if (e.id === 'leap') audio.leap();
         else audio.breakaway();
+        // Takeoff: a ring and a burst of dust off the road where he left it.
+        sim.track.posAt(g.s, g.d, pos);
+        highway.ring(pos.x, pos.z, 7, PALETTE.dust, 0.5, 0.8);
+        highway.spawnDebris(pos.x, pos.z, Math.cos(h), Math.sin(h), 3, 16, [PALETTE.dust, 0x8d8579], [0.15, 0.4], 1.2);
         rig.jolt(1.5, 0.1);
         rig.tierUpPulse(); // the chopper pulls out so the arc reads
       }
-      abilEl.classList.remove('fire');
-      void abilEl.offsetWidth;
-      abilEl.classList.add('fire');
+      {
+        const chip = e.slot === 2 ? abil2El : abilEl;
+        chip.classList.remove('fire');
+        void chip.offsetWidth;
+        chip.classList.add('fire');
+      }
       break;
     case 'groundZero': {
       // Ground Zero (passive): the blast as Rampage fires, twelve metres round.
@@ -1132,7 +1163,6 @@ function present(e: SimEvent) {
       highway.ring(pos.x, pos.z, R * 0.6, 0xffffff, 0.5, 0.8);
       highway.crack(pos.x, pos.z, h);
       audio.land();
-      if (!attract) abilityPop(e.smashed ? `Ground Zero · flattened ×${e.smashed}` : 'Ground Zero');
       break;
     }
     case 'leapLand': {
@@ -1147,7 +1177,6 @@ function present(e: SimEvent) {
       flash(TUNING.impact.heavy.flashFrames);
       haptic(160, 0.9);
       if (e.smashed) pip.trigger(sim, sim.show.tier);
-      abilityPop(e.smashed ? `Flattened ×${e.smashed}` : 'Stuck the landing');
       break;
     }
     case 'stare': {
@@ -1159,7 +1188,6 @@ function present(e: SimEvent) {
       hitstop = Math.max(hitstop, TUNING.impact.heavy.hitstop);
       rig.jolt(2, 0.15);
       haptic(80, 0.5);
-      abilityPop([e.moved.length ? `Road clears ×${e.moved.length}` : 'Road already clear', e.backedOff ? `Police back off ×${e.backedOff}` : ''].filter(Boolean).join(' · '));
       break;
     }
     case 'breakawayLand': {
@@ -1174,7 +1202,6 @@ function present(e: SimEvent) {
       flash(TUNING.impact.heavy.flashFrames);
       haptic(170, 0.9);
       pip.trigger(sim, sim.show.tier);
-      abilityPop([e.shaken ? `Police shaken ×${e.shaken}` : 'Clean getaway', e.smashed ? `Flattened ×${e.smashed}` : ''].filter(Boolean).join(' · '));
       break;
     }
     case 'primeTime':
@@ -1182,7 +1209,6 @@ function present(e: SimEvent) {
       if (e.on) {
         audio.primeTime();
         pip.trigger(sim, sim.show.tier, true);
-        abilityPop(`Prime time · ${Math.round(e.time)}s · smashes ×${TUNING.abilities.primeTime.mult}`);
       }
       break;
     case 'thickSkin':
@@ -1190,7 +1216,6 @@ function present(e: SimEvent) {
       gearsEl.classList.remove('skin');
       void gearsEl.offsetWidth;
       gearsEl.classList.add('skin');
-      abilityPop('Thick Skin · no meter lost');
       break;
     case 'ask': {
       renderAsks();
@@ -1584,9 +1609,10 @@ function beginBroadcast(mode = 'broadcast') {
   nextSeed = null;
   // The very first broadcast a player goes live in is the guided one (TUNING.guided): its first segment opens calm.
   const guided = !flags.bot && !flags.autostart && !briefingSeen();
-  lb = { mode: mode === 'run' ? 'run' : 'broadcast', seed, segments: [], buys: [], pool: upgradePool(profile), ...(guided ? { guided } : {}) };
+  const edition = mode === 'run' ? profile.chosenEdition : 0;
+  lb = { mode: mode === 'run' ? 'run' : 'broadcast', seed, segments: [], buys: [], pool: upgradePool(profile), ...(guided ? { guided } : {}), ...(edition ? { edition } : {}) };
   if (mode === 'run') {
-    run = new RunState(seed, lb.pool); // Awards unlock the rest of the pool
+    run = new RunState(seed, lb.pool, edition); // Awards unlock the rest of the pool
     newRun(run.segmentSeed(), 0, [], {}, guided);
   } else {
     run = null;
@@ -1714,6 +1740,8 @@ app = await createGameApp({
         { id: 'wyf-howto', label: 'How to Play' },
         { id: 'wyf-controls', label: 'Controls', description: 'Rebind the keyboard' },
         { id: 'wyf-tips', label: 'Replay Tips', description: 'Show the in-game control tips again' },
+        // Playtest (Mike, 2026-11-17: "missed copying the run data"): every broadcast's numbers, any time. Hide before release.
+        { id: 'wyf-playdata', label: 'Copy Play Data', description: 'Copies every broadcast you have played (or saves a file)' },
         { id: 'wyf-brake', label: `Brake: ${settings.brakeToggle ? 'Toggle' : 'Hold'}`, description: 'Toggle: press once to brake, again to let go' },
         { id: 'wyf-hudsize', label: `HUD Size: ${Math.round(settings.hudSize * 100)}%` },
         { id: 'wyf-auto', label: `Auto Rampage: ${onOff(settings.autoRampage)}`, description: 'Rampage fires by itself the moment the meter is full' },
@@ -1732,6 +1760,10 @@ app = await createGameApp({
         }
         if (id === 'wyf-tips') {
           onboarding.reset();
+          return true;
+        }
+        if (id === 'wyf-playdata') {
+          await exportLog();
           return true;
         }
         if (id === 'wyf-controls') {
@@ -1776,23 +1808,35 @@ registerGlyphs(app.shell.production.glyphs);
 app.ui.updateScreen('title', { title: 'Giant\nat Large', subtitle: 'Warn your friends.', choices: [{ id: 'start', label: 'Press Start' }] });
 // One menu (Mike: "clean up main menu/UX flow"): the two modes sit on it directly, so there's no
 // separate mode screen between Start and the broadcast.
-app.ui.updateScreen('main-menu', {
-  title: 'Giant\nat Large',
-  choices: [
-    // One mode on the menu (Mike, 2026-11-17: Single Segment adds no challenge; maybe a daily mode later).
-    // 'broadcast' (one segment) stays reachable by ?mode=broadcast for tests and evidence tools.
-    { id: 'run', label: 'Go Live', description: 'Five segments, upgrades between them' },
-    { id: 'awards', label: 'Awards', description: 'Milestones, unlocks and outfits' },
-    { id: 'howto', label: 'How to Play' },
-    { id: 'settings', label: 'Settings' },
-  ],
-});
+function refreshMainMenu() {
+  const E = TUNING.editions[profile.chosenEdition];
+  app!.ui.updateScreen('main-menu', {
+    title: 'Giant\nat Large',
+    choices: [
+      // One mode on the menu (Mike, 2026-11-17: Single Segment adds no challenge; maybe a daily mode later).
+      // 'broadcast' (one segment) stays reachable by ?mode=broadcast for tests and evidence tools.
+      { id: 'run', label: 'Go Live', description: profile.chosenEdition ? `${E.name}: five segments, score ×${E.score}` : 'Five segments, upgrades between them' },
+      // Editions (2026-11-17): shown once a full run has unlocked the next one.
+      ...(profile.edition > 0 ? [{ id: 'edition', label: `Edition: ${E.name}`, description: profile.chosenEdition ? `Harder, score ×${E.score}. Win a full run to unlock the next` : 'Win a full run to unlock the next edition' }] : []),
+      { id: 'awards', label: 'Awards', description: 'Milestones, unlocks and outfits' },
+      { id: 'howto', label: 'How to Play' },
+      { id: 'settings', label: 'Settings' },
+    ],
+  });
+}
+refreshMainMenu();
 // The shell's main menu knows neither the modes nor How to Play: catch them before the flow does.
 {
   const flowActivate = app.flow.onActivate.bind(app.flow);
   app.flow.onActivate = (screen: string, choice: string) => {
     if (screen === 'main-menu' && choice === 'howto') void openBriefing(false).then(() => app!.ui.show('main-menu'));
     else if (screen === 'main-menu' && choice === 'awards') void openAwards().then(() => app!.ui.show('main-menu'));
+    else if (screen === 'main-menu' && choice === 'edition') {
+      profile.chosenEdition = (profile.chosenEdition + 1) % (profile.edition + 1);
+      saveProfile(profile);
+      refreshMainMenu();
+      app!.ui.show('main-menu');
+    }
     else if (screen === 'main-menu' && (choice === 'run' || choice === 'broadcast')) flowActivate('mode-select', choice);
     else flowActivate(screen, choice);
   };
@@ -1895,7 +1939,9 @@ function frame(now: number) {
 
   if (animDt > 0) {
     // Giant size: ease toward this gear's size, then run the gait in his space.
-    const want = sizeFor(g.tier);
+    // A Leap or a Breakaway dive looms toward the chopper at its apex (height reads from straight above).
+    const airU = g.airDur > 0 && g.air > 0 ? 1 - g.air / g.airDur : 0;
+    const want = sizeFor(g.tier) * (1 + TUNING.abilities.leap.loom * Math.sin(Math.PI * airU));
     setGiantScale(Math.abs(want - gScale) < 1e-3 ? want : gScale + (want - gScale) * Math.min(1, animDt / TUNING.growth.ease), t.x, t.z);
     rig.giantScale = gScale;
     const lt = toGiant(t.x, t.z);
@@ -1968,6 +2014,9 @@ function frame(now: number) {
       newAwards = bot
         ? []
         : record(profile, { signedOff: sim.show.state === 'cleared', policeWrecked: runStats.crashes, objects: sim.stats.smashes + runStats.crashes, segment: run ? run.segment + 1 : 1, runWon: run?.phase === 'won' });
+      // Editions: a full run won at the newest edition unlocks the next.
+      editionUnlocked = !bot && run?.phase === 'won' ? unlockEdition(profile) : -1;
+      if (editionUnlocked > 0) refreshMainMenu();
       saveProfile(profile);
       if (run?.phase !== 'meeting') {
         app?.shell.session.setPhase('results');
@@ -2048,7 +2097,7 @@ function glyph(action: GlyphAction): string {
   if (settings.keys && (glyphFamily ?? 'keyboard-mouse') === 'keyboard-mouse') {
     const K = settings.keys;
     if (action === 'lanes') return `${keyLabel(K.left)} / ${keyLabel(K.right)}`;
-    if (action === 'brake' || action === 'shoulder' || action === 'ability') return keyLabel(K[action]);
+    if (action === 'brake' || action === 'shoulder' || action === 'ability' || action === 'ability2') return keyLabel(K[action]);
   }
   return app?.shell.production.glyphs.resolve(action, glyphFamily ?? 'keyboard-mouse')?.label ?? '';
 }
@@ -2059,6 +2108,7 @@ function updateGlyphs() {
     glyphFamily = fam;
     app.shell.production.glyphs.setFamily(fam);
     abilKey.textContent = glyph('ability');
+    chip2.key.textContent = glyph('ability2');
     const key = (a: GlyphAction, what: string) => `<span><kbd>${esc(glyph(a))}</kbd>${what}</span>`;
     controlsEl.innerHTML = fam === 'touch'
       ? `<span>Swipe to change lanes · hold down to brake</span>`
@@ -2287,6 +2337,25 @@ function updateHud(dt: number) {
     abilCd.style.width = `${((1 - g.abilityCd / A.cooldown) * 100).toFixed(1)}%`;
     abilEl.classList.toggle('ready', ready);
     abilBtn.classList.toggle('ready', ready);
+  }
+  const ab2 = sim.ability2;
+  chip2.el.hidden = !ab2 || attract;
+  chip2.btn.disabled = !ab2;
+  if (ab2) {
+    const A2 = TUNING.abilities[ab2];
+    const lv = sim.levelOf(ab2);
+    const label = TUNING.upgrades[ab2].label + (lv > 1 ? ` ${ROMAN[lv]}` : '');
+    if (chip2.name.textContent !== label) {
+      chip2.name.textContent = label;
+      chip2.icon.src = UPGRADE_ART[ab2];
+      chip2.btn.style.backgroundImage = `url(${UPGRADE_ART[ab2]})`;
+      chip2.btn.textContent = label.split(' ')[0].toUpperCase().slice(0, 5);
+      chip2.btn.setAttribute('aria-label', label);
+    }
+    const ready = g.ability2Cd <= 0;
+    chip2.cd.style.width = `${((1 - g.ability2Cd / A2.cooldown) * 100).toFixed(1)}%`;
+    chip2.el.classList.toggle('ready', ready);
+    chip2.btn.classList.toggle('ready', ready);
   }
   updateSignOff();
   const T = TUNING.tiers[g.tier];

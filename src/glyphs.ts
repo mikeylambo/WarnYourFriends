@@ -6,13 +6,15 @@ import { gamepadFamily, type InputDeviceFamily, type InputGlyph, type InputGlyph
  * The pad's family comes from its id (the shell's own detector), checked whenever
  * a pad is the active device.
  */
-export type GlyphAction = 'lanes' | 'brake' | 'shoulder' | 'ability' | 'pause' | 'accept' | 'move';
+export type GlyphAction = 'lanes' | 'brake' | 'shoulder' | 'ability' | 'ability2' | 'pause' | 'accept' | 'move';
 
 const TABLE: Record<GlyphAction, Partial<Record<InputDeviceFamily, string>>> = {
   lanes: { 'keyboard-mouse': 'A / D', xbox: '◀ ▶', playstation: '◀ ▶', nintendo: '◀ ▶', 'generic-gamepad': '◀ ▶', touch: 'Swipe' },
   brake: { 'keyboard-mouse': 'Space', xbox: 'LT', playstation: 'L2', nintendo: 'ZL', 'generic-gamepad': 'LT', touch: 'Swipe ▼ hold' },
   shoulder: { 'keyboard-mouse': 'Shift', xbox: 'RB', playstation: 'R1', nintendo: 'R', 'generic-gamepad': 'RB', touch: 'Tap ●' },
   ability: { 'keyboard-mouse': 'E', xbox: 'LB', playstation: 'L1', nintendo: 'L', 'generic-gamepad': 'LB', touch: '' },
+  /** Abilities stack (2026-11-17): the second slot. */
+  ability2: { 'keyboard-mouse': 'Q', xbox: 'Y', playstation: '△', nintendo: 'X', 'generic-gamepad': 'Y', touch: '' },
   pause: { 'keyboard-mouse': 'Esc', xbox: 'Menu', playstation: 'Options', nintendo: '+', 'generic-gamepad': 'Start', touch: 'II' },
   accept: { 'keyboard-mouse': 'Enter', xbox: 'A', playstation: '✕', nintendo: 'B', 'generic-gamepad': 'A', touch: 'Tap' },
   move: { 'keyboard-mouse': '← →', xbox: '◀ ▶', playstation: '◀ ▶', nintendo: '◀ ▶', 'generic-gamepad': '◀ ▶', touch: '' },

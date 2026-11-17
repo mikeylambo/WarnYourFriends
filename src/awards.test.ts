@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { AWARDS, LOCKED_UPGRADES, outfitUnlocked, record, upgradePool, type Profile } from './awards';
+import { AWARDS, LOCKED_UPGRADES, outfitUnlocked, record, unlockEdition, upgradePool, type Profile } from './awards';
 import { ALL_UPGRADES } from './sim/run';
 
-const fresh = (): Profile => ({ counts: { signOffs: 0, policeWrecked: 0, objects: 0, bestSegment: 0, runsWon: 0 }, won: [], outfit: 'classic' });
+const fresh = (): Profile => ({ counts: { signOffs: 0, policeWrecked: 0, objects: 0, bestSegment: 0, runsWon: 0 }, won: [], outfit: 'classic', edition: 0, chosenEdition: 0 });
 const seg = (o: Partial<Parameters<typeof record>[1]> = {}) => ({ signedOff: false, policeWrecked: 0, objects: 0, segment: 1, runWon: false, ...o });
 
 describe('Local News Awards', () => {
@@ -35,5 +35,17 @@ describe('Local News Awards', () => {
     expect(record(p, seg({ runWon: true })).map((a) => a.id)).toContain('seasonFinale');
     expect(outfitUnlocked(p, 'gold')).toBe(true);
     expect(AWARDS.length).toBe(7);
+  });
+});
+
+describe('editions (2026-11-17)', () => {
+  it('a run won at the newest edition unlocks the next; an older one does not', () => {
+    const p = fresh();
+    expect(unlockEdition(p)).toBe(1);
+    expect(p.chosenEdition).toBe(1);
+    p.chosenEdition = 0;
+    expect(unlockEdition(p)).toBe(-1);
+    p.chosenEdition = 1;
+    expect(unlockEdition(p)).toBe(2);
   });
 });

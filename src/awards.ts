@@ -37,10 +37,13 @@ export interface Profile {
   counts: Record<Stat, number>;
   won: AwardId[];
   outfit: OutfitId;
+  /** Editions (2026-11-17): the hardest unlocked (0 = Evening News), and the one picked on the menu. */
+  edition: number;
+  chosenEdition: number;
 }
 
 const KEY = 'wyf.awards.v1';
-const fresh = (): Profile => ({ counts: { signOffs: 0, policeWrecked: 0, objects: 0, bestSegment: 0, runsWon: 0 }, won: [], outfit: 'classic' });
+const fresh = (): Profile => ({ counts: { signOffs: 0, policeWrecked: 0, objects: 0, bestSegment: 0, runsWon: 0 }, won: [], outfit: 'classic', edition: 0, chosenEdition: 0 });
 
 export function loadProfile(): Profile {
   try {
@@ -53,6 +56,9 @@ export function loadProfile(): Profile {
     }
     p.won = Array.isArray(raw.won) ? raw.won.filter((id): id is AwardId => AWARDS.some((a) => a.id === id)) : [];
     p.outfit = raw.outfit && raw.outfit in TUNING.outfits && outfitUnlocked(p, raw.outfit) ? raw.outfit : 'classic';
+    const ed = (v: unknown) => (typeof v === 'number' && Number.isInteger(v) ? Math.max(0, Math.min(TUNING.editions.length - 1, v)) : 0);
+    p.edition = ed(raw.edition);
+    p.chosenEdition = Math.min(p.edition, ed(raw.chosenEdition));
     return p;
   } catch {
     return fresh();
@@ -93,6 +99,14 @@ export function record(p: Profile, t: SegmentTally): Award[] {
     }
   }
   return now;
+}
+
+/** A full run won at the edition he chose: the next edition unlocks (returns its index, or -1). */
+export function unlockEdition(p: Profile): number {
+  if (p.chosenEdition < p.edition || p.edition >= TUNING.editions.length - 1) return -1;
+  p.edition++;
+  p.chosenEdition = p.edition; // straight onto the new one (the menu can step back)
+  return p.edition;
 }
 
 /** The meeting's pool for this player: everything but the upgrades still locked. */

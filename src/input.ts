@@ -4,15 +4,17 @@ import type { SimInput } from './sim/types';
 export type Device = 'keyboard' | 'mouse' | 'gamepad' | 'touch';
 
 /** Keyboard actions the player can rebind (Settings → Controls). Pause stays on Esc / P. */
-export type KeyAction = 'left' | 'right' | 'brake' | 'shoulder' | 'ability';
-export const KEY_ACTIONS: KeyAction[] = ['left', 'right', 'brake', 'shoulder', 'ability'];
+export type KeyAction = 'left' | 'right' | 'brake' | 'shoulder' | 'ability' | 'ability2';
+export const KEY_ACTIONS: KeyAction[] = ['left', 'right', 'brake', 'shoulder', 'ability', 'ability2'];
 /** Default keys per action (the first is the one shown on screen). */
 export const DEFAULT_KEYS: Record<KeyAction, string[]> = {
   left: ['KeyA', 'ArrowLeft'],
   right: ['KeyD', 'ArrowRight'],
   brake: ['Space', 'KeyS', 'ArrowDown'],
   shoulder: ['ShiftLeft', 'ShiftRight', 'KeyW'],
-  ability: ['KeyE', 'KeyQ'],
+  ability: ['KeyE'],
+  /** Abilities stack (2026-11-17): the second slot. */
+  ability2: ['KeyQ'],
 };
 /** Keys that can't be bound (pause and menu keys). */
 export const RESERVED_KEYS = ['Escape', 'KeyP', 'Enter', 'Tab'];
@@ -52,13 +54,14 @@ export class Input {
   private laneEdge = 0;
   private shoulderEdge = false;
   private abilityEdge = false;
+  private ability2Edge = false;
   private pauseEdge = false;
   private touch: { id: number; sx: number; sy: number; x: number; y: number; t0: number; fired: boolean } | null = null;
-  private pad = { flickArmed: true, left: false, right: false, rb: false, lb: false, start: false, brake: false };
+  private pad = { flickArmed: true, left: false, right: false, rb: false, lb: false, y: false, start: false, brake: false };
   onPadDisconnect: (() => void) | null = null;
   onAnyInput: (() => void) | null = null;
 
-  constructor(el: HTMLElement, shoulderBtn: HTMLElement, pauseBtn: HTMLElement, abilityBtn: HTMLElement) {
+  constructor(el: HTMLElement, shoulderBtn: HTMLElement, pauseBtn: HTMLElement, abilityBtn: HTMLElement, ability2Btn?: HTMLElement | null) {
     window.addEventListener('keydown', (e) => {
       if (e.repeat || this.capturing) return;
       this.keys.add(e.code);
@@ -68,6 +71,7 @@ export class Input {
       if (K.shoulder.includes(e.code)) this.shoulderEdge = true;
       if (e.code === 'Escape' || e.code === 'KeyP') this.pauseEdge = true;
       if (K.ability.includes(e.code)) this.abilityEdge = true;
+      if (K.ability2.includes(e.code)) this.ability2Edge = true;
       if (K.brake.includes(e.code)) this.toggleBrake();
       if (e.code === 'Space' || e.code.startsWith('Arrow')) e.preventDefault();
       this.device = 'keyboard';
@@ -102,6 +106,16 @@ export class Input {
       (e) => {
         e.preventDefault();
         this.abilityEdge = true;
+        this.device = 'touch';
+        this.onAnyInput?.();
+      },
+      { passive: false },
+    );
+    ability2Btn?.addEventListener(
+      'touchstart',
+      (e) => {
+        e.preventDefault();
+        this.ability2Edge = true;
         this.device = 'touch';
         this.onAnyInput?.();
       },
@@ -205,9 +219,13 @@ export class Input {
     const rb = pressed(5);
     if (rb && !P.rb) this.shoulderEdge = true;
     P.rb = rb;
-    const lb = pressed(4) || pressed(3);
+    const lb = pressed(4);
     if (lb && !P.lb) this.abilityEdge = true;
     P.lb = lb;
+    // The second ability slot: Y (Triangle).
+    const y = pressed(3);
+    if (y && !P.y) this.ability2Edge = true;
+    P.y = y;
     // Stick flick: one lane per flick; re-arms when the stick comes back.
     const lx = gp.axes[0] ?? 0;
     if (P.flickArmed && Math.abs(lx) >= I.flickThreshold) {
@@ -240,9 +258,11 @@ export class Input {
     const lane = this.laneEdge;
     const shoulder = this.shoulderEdge;
     const ability = this.abilityEdge;
+    const ability2 = this.ability2Edge;
     this.laneEdge = 0;
     this.shoulderEdge = false;
     this.abilityEdge = false;
-    return { lane, brake, shoulder, ability };
+    this.ability2Edge = false;
+    return { lane, brake, shoulder, ability, ...(ability2 ? { ability2 } : {}) };
   }
 }

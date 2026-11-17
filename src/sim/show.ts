@@ -21,6 +21,8 @@ export class Show {
   peak: number = TUNING.show.startRatings;
   /** No drain before this (s): TUNING.show.decayGrace, longer in the guided first broadcast. */
   decayGrace: number = TUNING.show.decayGrace;
+  /** Edition (TUNING.editions): × the drain. */
+  decayMult = 1;
   /** Segment index (0-based): sets the decay rate (§12) and the starting Heat (§19). */
   segment = 0;
   /** Phase 3 passives: Showman's fresh-type multiplier, Second Wind's Pin drain multiplier. */
@@ -105,7 +107,7 @@ export class Show {
     } else this.rampageAcc = 0;
     if (!this.prime && time > this.decayGrace && time - Math.max(this.lastGain, this.decayGrace - S.decayAfter) > S.decayAfter) {
       const atRampage = tier === TUNING.tiers.length - 1;
-      this.ratings = Math.max(0, this.ratings - S.decayRate[Math.min(this.segment, S.decayRate.length - 1)] * (atRampage ? this.rampageDecayMult : 1) * dt);
+      this.ratings = Math.max(0, this.ratings - this.decayMult * S.decayRate[Math.min(this.segment, S.decayRate.length - 1)] * (atRampage ? this.rampageDecayMult : 1) * dt);
     }
     if (this.chain.count > 0 && time - this.chain.last > TUNING.spectacle.window) this.endChain(false, out);
     if (time >= this.nextHeatT) {

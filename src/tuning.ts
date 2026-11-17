@@ -213,7 +213,7 @@ export const TUNING = {
    */
   rampage: {
     /** At 15 m/s (2026-11-17) Stride meets more per second: gains ×0.8 keep Rampage about a quarter of the run. */
-    gain: { medium: 7, heavy: 10, unit: 13, policeCrash: 16, collateral: 5, nearMiss: 8, ramDodge: 10, lostTrack: 10, chopperShaken: 12, leapLand: 8, breakawayLand: 10 } as Record<string, number>,
+    gain: { rival: 25, medium: 7, heavy: 10, unit: 13, policeCrash: 16, collateral: 5, nearMiss: 8, ramDodge: 10, lostTrack: 10, chopperShaken: 12, leapLand: 8, breakawayLand: 10 } as Record<string, number>,
     duration: 8,
     perSmash: 0.3,
     maxDuration: 12,
@@ -420,6 +420,30 @@ export const TUNING = {
    */
   guided: { calmFor: 25, clearFor: 400 },
 
+  /**
+   * Things worth aiming for (Mike, 2026-11-17: "not enough to do during the runs, especially during Rampage").
+   * - Rival news vans (a rival station's van, dish on the roof): `newsvanChance` of Heavy traffic slots. Flattening one
+   *   pays big (spectacle `rival`, Ratings, Rampage meter).
+   * - Rampage surge: firing Rampage packs the road `ahead`…`ahead + length` m out (past the frame, so nothing pops in)
+   *   with rows of traffic every `rowGap` m, `fill` lanes a row (always one open), rival vans at `surgeVanChance`:
+   *   Rampage is a spree to steer, not an empty road.
+   */
+  targets: { newsvanChance: 0.05, ahead: 70, length: 120, rowGap: [12, 16] as [number, number], fill: [1, 1] as [number, number], surgeVanChance: 0.15 },
+
+  /**
+   * Editions (Mike, 2026-11-17: "after one five-segment run I felt no reason to play more"; the design pillar: never a
+   * waste of time). Winning a full run unlocks the next edition of the news; each is harder (cumulative) and pays
+   * more: `decay` × the audience drain, `heat` police start this much hotter, `meter` × Rampage meter gains,
+   * `hard` × bulldozer/concrete chances; `score` × the run's score. Picked on the main menu.
+   */
+  editions: [
+    { name: 'Evening News', decay: 1, heat: 0, meter: 1, hard: 1, score: 1 },
+    { name: 'Late Edition', decay: 1.1, heat: 0, meter: 1, hard: 1, score: 1.25 },
+    { name: 'Night Owl', decay: 1.1, heat: 1, meter: 1, hard: 1, score: 1.5 },
+    { name: 'Breaking Coverage', decay: 1.1, heat: 1, meter: 0.85, hard: 1, score: 1.75 },
+    { name: '24-Hour News', decay: 1.1, heat: 1, meter: 0.85, hard: 1.5, score: 2 },
+  ] as { name: string; decay: number; heat: number; meter: number; hard: number; score: number }[],
+
   /** v0.3 props in lanes: Medium and Heavy only, densities tunable. */
   props: {
     /** No props before this distance (runway). */
@@ -502,7 +526,7 @@ export const TUNING = {
    * → it drops: the points bank at ×1, the multiplier is lost. Smash-across pays `acrossBonus`×.
    */
   spectacle: {
-    points: { medium: 100, heavy: 250, unit: 500, policeCrash: 750, collateral: 100, nearMiss: 200, ramDodge: 200, lostTrack: 250, chopperShaken: 300, leapLand: 150, breakawayLand: 250 },
+    points: { rival: 800, medium: 100, heavy: 250, unit: 500, policeCrash: 750, collateral: 100, nearMiss: 200, ramDodge: 200, lostTrack: 250, chopperShaken: 300, leapLand: 150, breakawayLand: 250 },
     acrossBonus: 1.5,
     audienceMult: [1, 1.25, 1.5, 2],
     window: 2.5,
@@ -521,7 +545,7 @@ export const TUNING = {
     perSegment: 3,
     zoneLookahead: 1500,
     pool: [
-      { id: 'units', text: 'Flatten {n} police cars', n: 6, reward: 30000 },
+      { id: 'units', text: 'Flatten {n} police cars', n: 3, reward: 30000 },
       { id: 'crash', text: 'Get a police car to crash', n: 1, reward: 30000 },
       { id: 'roadblock', text: 'Smash through a roadblock', n: 1, reward: 25000 },
       { id: 'chain', text: 'Combo {n} stunts', n: 12, reward: 35000 },
@@ -530,10 +554,11 @@ export const TUNING = {
       { id: 'bridge', text: 'Smash {n} things on the bridge', n: 4, reward: 25000, zone: 'bridge' },
       { id: 'tunnel', text: 'Smash {n} things in the tunnel', n: 4, reward: 25000, zone: 'tunnel' },
       { id: 'chopper', text: 'Shake the police chopper', n: 1, reward: 25000, fromSegment: 1 },
-      { id: 'dodge', text: "Dodge a cruiser's swerve", n: 1, reward: 20000 },
+      // 'dodge' (dodge a cruiser's swerve) is out of the pool (2026-11-17): on the busier road a ram rarely gets to swerve (soak: 0 of 48).
       { id: 'clean', text: 'Sign off without a bounce', n: 1, reward: 35000 },
       { id: 'rampage', text: 'Go Rampage {n} times', n: 4, reward: 25000 },
       { id: 'rampsmash', text: 'Smash {n} things in one Rampage', n: 10, reward: 30000 },
+      { id: 'rivals', text: 'Flatten {n} rival news vans', n: 2, reward: 30000 },
     ] as { id: string; text: string; n: number; reward: number; zone?: 'bridge' | 'tunnel' | 'avenue'; fromSegment?: number }[],
   },
 
@@ -712,13 +737,13 @@ export const TUNING = {
     /** Police crash (a cruiser he led into something Heavy): the best TV of the chase, above lost track. Collateral: police plough through something Medium. */
     /** Rampage 0 (Mike, 2026-11-16, deviation from §12's +1/s): the trickle was invisible and half of all gains; the audience now moves only for what he does. */
     /** Difficulty pass (2026-11-17): Medium 1.5, Heavy 3.5 (were 2 / 5): at 15 m/s smashing alone held the audience at 100. */
-    gain: { medium: 1.5, heavy: 3.5, nearMiss: 3, lostTrack: 6, rampage: 0, policeCrash: 8, collateral: 2 },
+    gain: { rival: 4, medium: 1.5, heavy: 3.5, nearMiss: 3, lostTrack: 6, rampage: 0, policeCrash: 8, collateral: 2 },
     /** HUD: viewers shown per Ratings point ("370K WATCHING" at the starting 20). */
     viewersPerPoint: 18_500,
     /** §12 decay: after 3s with no gain; segment 1 rate (2.0/2.75/3.5/4.25/5.0 by segment). */
     decayAfter: 3,
     /** Difficulty pass (2026-11-17, human-ish balance harness): segment clears ~98/94/89/67/53%, a full run ~29%. */
-    decayRate: [2.6, 3.4, 4.2, 5.0, 5.8],
+    decayRate: [3.6, 4.7, 5.8, 6.9, 8.0],
     /** No decay in a segment's opening seconds (cold open, the prop-free run-up, Jog can't score): balance 2026-11-16, later segments otherwise bust at ~9s before he can reach anything. */
     decayGrace: 12,
     /** §12 variety: repeats within 10s pay ×0.5 then ×0.25; a type unseen this segment pays ×1.5. */
@@ -730,7 +755,7 @@ export const TUNING = {
     outnumberedMult: 1.25,
     /** Gear multiplier on spectacle points (was §12's per-second banking multiplier). */
     /** Rampage loop: Rampage pays double Stride. */
-    bankMult: [1, 1, 2],
+    bankMult: [1, 1, 1.5],
     /** §12 Heat: rises at these Ratings, and +1 every 45s; never falls in a segment. */
     heatAt: [30, 50, 70, 90],
     heatEvery: 45,
@@ -769,6 +794,8 @@ export const TUNING = {
       closeSpeed: 7, tell: 0.6, drift: 0.6, swerve: 0.35, fallBack: 6, sideSpeed: 5,
       /** Alongside him it holds its lane whatever is ahead (Mike, 2026-11-17: kiting works anywhere, not just at the road edge). */
       fixated: true,
+      /** Kiting window (Mike, 2026-11-17: "still not able to kite cops into bulldozers"): alongside him it rides beside him this long before winding up a ram (it used to wind up at once). */
+      holdAlongside: 3,
       /** A ram that connects costs a gear even at Rampage (Mike, 2026-11-16: Rampage is defended, not kept); a Shoulder Check into it still flattens it. */
       ramBeatsRampage: true,
       /**
@@ -782,7 +809,8 @@ export const TUNING = {
     /** Tells start inside the visible road (the frame shows ≥2s ahead; capped at 28m for the faster Hijack ride), or nobody sees them. */
     rolling: { cruiseFactor: 0.55, tellAhead: 1.9, tellMin: 25, tellMax: 28, tell: 1.5, decel: 6, crawl: 3, actMax: 12 },
     /** Spike strip (v0.3: officer kneels, 1.2s, covers one lane). Crossing it: −1 tier, keep 70% speed, stumble. */
-    spike: { aheadTime: 4.5, aheadMin: 60, tellAhead: 1.9, tellMax: 28, tell: 1.2, speedKeep: 0.7 },
+    /** aheadTime 5.5, aheadMin 75 (were 4.5 / 60): with the Rampage swell the chopper pulls out, and the soak caught one spawning in view. */
+    spike: { aheadTime: 5.5, aheadMin: 75, tellAhead: 1.9, tellMax: 28, tell: 1.2, speedKeep: 0.7 },
     /** Static roadblock (v0.3: cars slide in 2.0s, all lanes but one; the gap glows). */
     roadblock: { aheadTime: 7.5, slideAhead: 1.9, slideMax: 28, tell: 2.0 },
     /**
@@ -851,6 +879,8 @@ export const TUNING = {
     segments: 5,
     /** Offers per meeting (§17: pick 1 of 3). */
     offers: 3,
+    /** Abilities stack (Mike, 2026-11-17): hold up to this many, each on its own button. */
+    abilitySlots: 2,
   },
 
   /**
@@ -859,21 +889,21 @@ export const TUNING = {
    * a different one replaces it. Passives stack. Prices are paid from banked spectacle points (spending never lowers
    * the score). Breakaway and Slipstream start locked (Awards unlock them, src/awards.ts).
    */
-  /** Prices: back to the v2 values (2026-11-17 difficulty pass: a cleared segment banks ~150k p50 for a human-ish player). */
+  /** Prices (Mike's playtest, 2026-11-17: "couldn't buy an upgrade after round 1"; his segments banked ~110k median): 70–125k, so an average segment buys one and a good one two or three (the meeting stays open). */
   upgrades: {
-    leap: { kind: 'ability', price: 195000, label: 'Leap', blurb: 'Hop lanes of trouble. The landing flattens what you land on.', pitch: 'Get a clean shot of him clearing the spike strip.', levels: ['', 'Longer jump, bigger landing.', 'The landing flattens anything, armored trucks too.'] },
-    stare: { kind: 'ability', price: 160000, label: 'The Stare', blurb: 'Traffic and police ahead pull out of your lane.', pitch: 'Stay tight on the eyes. We have time.', levels: ['', 'Reaches half again as far.', 'Police that pull over crash out.'] },
-    breakaway: { kind: 'ability', price: 210000, label: 'Breakaway', blurb: 'Dive over everything ahead. The police behind lose you.', pitch: 'Get the long lens on him. He’s about to leave them all behind.', levels: ['', 'Longer dive, bigger slam.', 'Lands straight into Rampage.'] },
-    primeTime: { kind: 'ability', price: 180000, label: 'Prime Time', blurb: 'For a few seconds the audience can’t drop and every smash counts double.', pitch: 'Every station is taking our feed. Make it count.', levels: ['', 'Lasts 8 seconds.', 'Lasts 10 seconds.'] },
-    thickSkin: { kind: 'passive', price: 140000, label: 'Thick Skin', blurb: 'Shrug off the first hit each segment: no meter lost.', pitch: 'He walked through that like a turnstile.' },
-    secondWind: { kind: 'passive', price: 125000, label: 'Second Wind', blurb: 'Each Rampage ends with the meter a third full.', pitch: 'He’s catching his breath. Stay on him, he’s coming back.' },
-    crowdPleaser: { kind: 'passive', price: 150000, label: 'Crowd Pleaser', blurb: 'At Rampage the audience drains 40% slower.', pitch: 'Keep rolling. Nobody can look away.' },
-    slipstream: { kind: 'passive', price: 160000, label: 'Slipstream', blurb: 'Police crashes pay double: Ratings and points.', pitch: 'Anyone chasing him ends up in the scenery. Keep it wide.' },
+    leap: { kind: 'ability', price: 110000, label: 'Leap', blurb: 'Hop lanes of trouble. The landing flattens what you land on.', pitch: 'Get a clean shot of him clearing the spike strip.', levels: ['', 'Longer jump, bigger landing.', 'The landing flattens anything, armored trucks too.'] },
+    stare: { kind: 'ability', price: 95000, label: 'The Stare', blurb: 'Traffic and police ahead pull out of your lane.', pitch: 'Stay tight on the eyes. We have time.', levels: ['', 'Reaches half again as far.', 'Police that pull over crash out.'] },
+    breakaway: { kind: 'ability', price: 125000, label: 'Breakaway', blurb: 'Dive over everything ahead. The police behind lose you.', pitch: 'Get the long lens on him. He’s about to leave them all behind.', levels: ['', 'Longer dive, bigger slam.', 'Lands straight into Rampage.'] },
+    primeTime: { kind: 'ability', price: 105000, label: 'Prime Time', blurb: 'For a few seconds the audience can’t drop and every smash counts double.', pitch: 'Every station is taking our feed. Make it count.', levels: ['', 'Lasts 8 seconds.', 'Lasts 10 seconds.'] },
+    thickSkin: { kind: 'passive', price: 80000, label: 'Thick Skin', blurb: 'Shrug off the first hit each segment: no meter lost.', pitch: 'He walked through that like a turnstile.' },
+    secondWind: { kind: 'passive', price: 70000, label: 'Second Wind', blurb: 'Each Rampage ends with the meter a third full.', pitch: 'He’s catching his breath. Stay on him, he’s coming back.' },
+    crowdPleaser: { kind: 'passive', price: 85000, label: 'Crowd Pleaser', blurb: 'At Rampage the audience drains 40% slower.', pitch: 'Keep rolling. Nobody can look away.' },
+    slipstream: { kind: 'passive', price: 90000, label: 'Slipstream', blurb: 'Police crashes pay double: Ratings and points.', pitch: 'Anyone chasing him ends up in the scenery. Keep it wide.' },
     // Rampage upgrades (Mike, 2026-11-17: "upgrades built around Rampage"). Card art: Mike's (2026-11-17), in the cards' flat low-poly style.
-    shoulder: { kind: 'ability', price: 150000, label: 'Shoulder Check', blurb: 'A short charge that breaks concrete and police lines without Rampage.', pitch: 'He’s dropping the shoulder. Stay wide, this one goes through the barrier.', levels: ['', 'Charges for longer.', 'Every smash in the charge fills the Rampage meter.'] },
-    overdrive: { kind: 'passive', price: 150000, label: 'Overdrive', blurb: 'Rampage lasts 3 seconds longer.', pitch: 'Don’t cut away. He’s not done yet.' },
-    shortFuse: { kind: 'passive', price: 140000, label: 'Short Fuse', blurb: 'The Rampage meter fills 25% faster.', pitch: 'He’s wound tight tonight. It won’t take much.' },
-    groundZero: { kind: 'passive', price: 170000, label: 'Ground Zero', blurb: 'Going Rampage flattens everything within 12m.', pitch: 'Get the wide shot ready for when he goes off.' },
+    shoulder: { kind: 'ability', price: 85000, label: 'Shoulder Check', blurb: 'A short charge that breaks concrete and police lines without Rampage.', pitch: 'He’s dropping the shoulder. Stay wide, this one goes through the barrier.', levels: ['', 'Charges for longer.', 'Every smash in the charge fills the Rampage meter.'] },
+    overdrive: { kind: 'passive', price: 85000, label: 'Overdrive', blurb: 'Rampage lasts 3 seconds longer.', pitch: 'Don’t cut away. He’s not done yet.' },
+    shortFuse: { kind: 'passive', price: 75000, label: 'Short Fuse', blurb: 'The Rampage meter fills 25% faster.', pitch: 'He’s wound tight tonight. It won’t take much.' },
+    groundZero: { kind: 'passive', price: 100000, label: 'Ground Zero', blurb: 'Going Rampage flattens everything within 12m.', pitch: 'Get the wide shot ready for when he goes off.' },
   } as Record<UpgradeId, { kind: 'ability' | 'passive'; price: number; label: string; blurb: string; /** The producer's line on the meeting card (flavour). */ pitch: string; /** Abilities: what levels II and III add ([0] unused). */ levels?: string[] }>,
   /** Ability level-up price, as a share of the ability's price; highest level. */
   levelPrice: 0.8,
@@ -945,7 +975,8 @@ export const TUNING = {
     /** Never land inside something unflattenable: the flight stretches up to this much longer (s) to clear it. */
     landExtendMax: 0.8,
     /** Per-level numbers are [I, II, III]. Leap: airborne this long (no collisions), apex height (m), landing shockwave radius (m) smashing up to Heavy (III: anything). Mike's playtest: 3.2m / 0.9s didn't read from the chopper. */
-    leap: { time: [1.1, 1.3, 1.3], height: 5.5, shockRadius: [6.5, 9, 9], cooldown: 6 },
+    /** height (presentation): 9m (was 5.5; Mike: "Leap doesn't have an animation", it didn't read from the chopper); loom: he swells this much at the apex (toward the lens). */
+    leap: { time: [1.1, 1.3, 1.3], height: 9, loom: 0.28, shockRadius: [6.5, 9, 9], cooldown: 6 },
     /** The Stare: the road parts this far ahead: his lane pulls over, the lanes either side move one further out; police winding up back off (III: they crash out). */
     stare: { reach: [90, 135, 135], lanesEitherSide: 1, time: 0.6, cooldown: 10, glareTime: 0.9 },
     /** Breakaway: a low forward dive, `boost` m/s over his speed, airborne (no collisions); a landing slam smashing up to Heavy; every police car behind him loses track. III lands in Rampage. */

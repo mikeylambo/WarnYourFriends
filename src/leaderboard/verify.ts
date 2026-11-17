@@ -19,28 +19,32 @@ export interface Submission {
   growth: boolean;
   /** Each segment's inputs, run-length encoded (encodeInputs). Single Segment: one. */
   segments: string[];
-  /** Full Broadcast: what was bought at each meeting (null = walked out). */
-  buys: (UpgradeId | null)[];
+  /** Full Broadcast: what was bought at each meeting, in order (null or [] = walked out; one id = the old single buy). */
+  buys: (UpgradeId[] | UpgradeId | null)[];
   /** The upgrades this player could be offered (Awards unlock the rest); absent = all. Must match the client's run. */
   pool?: UpgradeId[];
   /** The guided first broadcast (its first segment opens calm, TUNING.guided). */
   guided?: boolean;
+  /** Edition of the news (TUNING.editions). */
+  edition?: number;
   /** The score the client showed; only compared, never stored. */
   claimed: number;
 }
 
-/** 3 lane × 2 brake × 2 shoulder × 2 ability = 24 symbols, one letter each. */
+/** 3 lane × 2 brake × 2 shoulder × 2 ability = 24 symbols, one letter each; with the second ability pressed, the same in capitals. */
 const sym = (i: SimInput) => (Math.sign(i.lane) + 1) * 8 + (i.brake ? 4 : 0) + (i.shoulder ? 2 : 0) + (i.ability ? 1 : 0);
 const A = 'a'.charCodeAt(0);
+const CAP = 'A'.charCodeAt(0);
+const letter = (i: SimInput) => String.fromCharCode((i.ability2 ? CAP : A) + sym(i));
 
 /** Run-length encode an input log: a letter per input, then its repeat count when > 1 ("a3600e2a…"). */
 export function encodeInputs(log: readonly SimInput[]): string {
   let out = '';
   for (let i = 0; i < log.length; ) {
-    const s = sym(log[i]);
+    const s = letter(log[i]);
     let n = 1;
-    while (i + n < log.length && sym(log[i + n]) === s) n++;
-    out += String.fromCharCode(A + s) + (n > 1 ? n : '');
+    while (i + n < log.length && letter(log[i + n]) === s) n++;
+    out += s + (n > 1 ? n : '');
     i += n;
   }
   return out;
@@ -48,13 +52,14 @@ export function encodeInputs(log: readonly SimInput[]): string {
 
 /** Decode encodeInputs; null when malformed or longer than `max` inputs. */
 export function decodeInputs(str: string, max: number = TUNING.leaderboard.maxTicks): SimInput[] | null {
-  if (!/^([a-x]\d*)*$/.test(str)) return null;
+  if (!/^([a-xA-X]\d*)*$/.test(str)) return null;
   const out: SimInput[] = [];
-  for (const m of str.matchAll(/([a-x])(\d*)/g)) {
-    const s = m[1].charCodeAt(0) - A;
+  for (const m of str.matchAll(/([a-xA-X])(\d*)/g)) {
+    const upper = m[1] < 'a';
+    const s = m[1].charCodeAt(0) - (upper ? CAP : A);
     const n = m[2] ? Number(m[2]) : 1;
     if (!Number.isSafeInteger(n) || n < 1 || out.length + n > max) return null;
-    const inp: SimInput = { lane: Math.floor(s / 8) - 1, brake: !!(s & 4), shoulder: !!(s & 2), ability: !!(s & 1) };
+    const inp: SimInput = { lane: Math.floor(s / 8) - 1, brake: !!(s & 4), shoulder: !!(s & 2), ability: !!(s & 1), ...(upper ? { ability2: true } : {}) };
     for (let k = 0; k < n; k++) out.push(inp);
   }
   return out;
@@ -81,25 +86,27 @@ export function verify(sub: Submission): VerifyResult {
 
   if (sub.mode === 'broadcast') {
     if (logs.length !== 1) return { ok: false, error: 'segments' };
-    const sim = new Sim({ seed: sub.seed, segment: 0, upgrades: [], growth: !!sub.growth, guided: !!sub.guided });
+    const sim = new Sim({ seed: sub.seed, segment: 0, upgrades: [], growth: !!sub.growth, guided: !!sub.guided, edition: sub.edition ?? 0 });
     if (!playSegment(sim, logs[0]!)) return { ok: false, error: 'unfinished' };
     return { ok: true, score: Math.round(sim.show.banked), segments: 1, won: sim.show.state === 'cleared' };
   }
 
   const pool = Array.isArray(sub.pool) ? sub.pool.filter((u) => (ALL_UPGRADES as string[]).includes(u)) : ALL_UPGRADES;
-  const run = new RunState(sub.seed, pool);
+  const edition = Number.isSafeInteger(sub.edition) && sub.edition! >= 0 && sub.edition! < TUNING.editions.length ? sub.edition! : 0;
+  const run = new RunState(sub.seed, pool, edition);
   const buys = Array.isArray(sub.buys) ? sub.buys : [];
   for (let i = 0; i < logs.length; i++) {
     if (run.phase !== 'live') return { ok: false, error: 'segments' };
-    const sim = new Sim({ seed: run.segmentSeed(), segment: run.segment, upgrades: run.owned, levels: run.levels, growth: !!sub.growth, guided: !!sub.guided && i === 0 });
+    const sim = new Sim({ seed: run.segmentSeed(), segment: run.segment, upgrades: run.owned, levels: run.levels, growth: !!sub.growth, guided: !!sub.guided && i === 0, edition });
     if (!playSegment(sim, logs[i]!)) return { ok: false, error: 'unfinished' };
     run.finishSegment(sim.show);
     if ((run.phase as string) === 'meeting') {
       const b = buys[i] ?? null;
       // The meeting always shows its pitches (drawing them moves the run's RNG), bought from or not.
       run.offers();
-      if (b !== null && !run.buy(b)) return { ok: false, error: 'buy' };
-      if (b === null) run.nextSegment();
+      // Several buys per meeting (2026-11-17), then go live.
+      for (const id of b === null ? [] : Array.isArray(b) ? b : [b]) if (!run.buy(id)) return { ok: false, error: 'buy' };
+      run.nextSegment();
     }
   }
   // A run on the board is a finished one: won, or busted.

@@ -62,6 +62,8 @@ export interface SimOptions {
   growth?: boolean;
   /** First broadcast ever (2026-11-17 onboarding): a calm opening (TUNING.guided). Part of the leaderboard submission. */
   guided?: boolean;
+  /** Edition of the news (TUNING.editions, 0 = Evening News). Part of the leaderboard submission. */
+  edition?: number;
 }
 
 const smoothstep = (t: number) => t * t * (3 - 2 * t);
@@ -88,6 +90,14 @@ export class Sim {
   readonly ability: AbilityId | null;
   /** The equipped ability's level (1–3; 0 with none). */
   readonly abilityLevel: number;
+  /** Abilities stack (Mike, 2026-11-17): up to `run.abilitySlots`, in the order bought; slot 2 has its own button. */
+  readonly abilities: AbilityId[];
+  readonly ability2: AbilityId | null;
+  private readonly levels: Partial<Record<AbilityId, number>>;
+  /** An ability's level (1–3), 0 if not held. */
+  levelOf(id: AbilityId): number {
+    return this.abilities.includes(id) ? Math.max(1, Math.min(TUNING.maxLevel, this.levels[id] ?? 1)) : 0;
+  }
   /** Phase 2: the sign-off exit ramp, once open (v0.3 §4). */
   exit: { s: number; gore: number; segment: number; lane: number } | null = null;
   /** A fork's exit ramp, once open (Mike, 2026-11-15). */
@@ -104,6 +114,8 @@ export class Sim {
   /** Giant size grows with gear (SimOptions.growth). */
   readonly growth: boolean;
 
+  /** This broadcast's edition (TUNING.editions). */
+  readonly edition: (typeof TUNING.editions)[number];
   /** First broadcast ever: a calm opening (no drain or police for `guided.calmFor` s, nothing unbreakable for `guided.clearFor` m). */
   readonly guided: boolean;
 
@@ -112,14 +124,21 @@ export class Sim {
     this.growth = opts.growth ?? false;
     this.rng = new Rng(opts.seed ^ 0x51ed);
     this.guided = !!opts.guided;
-    this.track = new Track(opts.seed, opts.segment ?? 0, this.guided);
+    this.edition = TUNING.editions[Math.max(0, Math.min(TUNING.editions.length - 1, opts.edition ?? 0))];
+    this.track = new Track(opts.seed, opts.segment ?? 0, this.guided, this.edition.hard);
     this.escort = new Escort(opts.seed, this.track);
     this.pursuit = new Pursuit(opts.seed, this);
     this.upgrades = new Set(opts.upgrades ?? []);
-    this.ability = (['leap', 'stare', 'breakaway', 'primeTime', 'shoulder'] as AbilityId[]).find((a) => this.upgrades.has(a)) ?? null;
-    this.abilityLevel = this.ability ? Math.max(1, Math.min(TUNING.maxLevel, opts.levels?.[this.ability] ?? 1)) : 0;
+    // In the order bought (opts.upgrades keeps it), at most `abilitySlots`.
+    this.abilities = (opts.upgrades ?? []).filter((u): u is AbilityId => (['leap', 'stare', 'breakaway', 'primeTime', 'shoulder'] as string[]).includes(u)).slice(0, TUNING.run.abilitySlots);
+    this.levels = { ...(opts.levels ?? {}) };
+    this.ability = this.abilities[0] ?? null;
+    this.ability2 = this.abilities[1] ?? null;
+    this.abilityLevel = this.ability ? this.levelOf(this.ability) : 0;
     this.show.startSegment(opts.segment ?? 0);
     if (this.guided) this.show.decayGrace = TUNING.guided.calmFor;
+    this.show.decayMult = this.edition.decay;
+    if (this.edition.heat) this.show.heat = Math.min(5, this.show.heat + this.edition.heat);
     this.asks = new Asks(opts.seed, opts.segment ?? 0, this.track);
     const PV = TUNING.passives;
     if (this.upgrades.has('crowdPleaser')) this.show.rampageDecayMult = PV.crowdPleaserDecay;
@@ -159,6 +178,8 @@ export class Sim {
       odometer: 0,
       abilityCd: 0,
       abilityBuffer: 0,
+      ability2Cd: 0,
+      ability2Buffer: 0,
       air: 0,
       airDur: 0,
       airKind: 'leap',
@@ -520,11 +541,16 @@ export class Sim {
       case 'smash': {
         st.smashes++;
         if (e.across) st.smashesAcross++;
-        if (e.cls === 'medium' || e.cls === 'heavy') this.award(e.cls);
+        // A rival station's van: the big one (its own stunt, Ratings and meter, and an event for the asks and the HUD).
+        const rival = e.propId < 1_000_000 && this.track.props.find((x) => x.id === e.propId)?.kind === 'newsvan';
+        if (rival) {
+          this.award('rival');
+          this.emit({ type: 'rival', s: e.s, d: e.d });
+        } else if (e.cls === 'medium' || e.cls === 'heavy') this.award(e.cls);
         // Spectacle: a police car he flattened, else the class; smash-across pays a bonus.
         // Police units are ids ≥ 1,000,000; the car carrier is traffic, so it scores as a Heavy smash.
         const unit = e.propId >= 1_000_000 && this.pursuit.units.find((x) => x.id === e.propId)?.unit !== 'carrier';
-        const cause = unit ? 'unit' : e.cls === 'heavy' ? 'heavy' : e.cls === 'medium' ? 'medium' : null;
+        const cause = rival ? 'rival' : unit ? 'unit' : e.cls === 'heavy' ? 'heavy' : e.cls === 'medium' ? 'medium' : null;
         if (cause) this.stunt(cause, e.across ? TUNING.spectacle.points[cause] * TUNING.spectacle.acrossBonus : undefined);
         break;
       }
@@ -589,6 +615,10 @@ export class Sim {
     g.rampElapsed = 0;
     this.setTier(TUNING.tiers.length - 1);
     this.emit({ type: 'rampageStart', time: g.rampT });
+    // The surge: the road ahead (past the frame) fills up, rival vans and all.
+    const T = TUNING.targets;
+    this.track.ensure(g.s + T.ahead + T.length + 10);
+    this.track.surge(g.s + T.ahead, g.s + T.ahead + T.length);
     // Ground Zero: going Rampage flattens everything around him (bulldozers and police included).
     if (this.upgrades.has('groundZero')) this.emit({ type: 'groundZero', s: g.s, d: g.d, smashed: this.slam(TUNING.passives.groundZeroRadius, true) });
   }
@@ -612,9 +642,9 @@ export class Sim {
     }
     if (g.meter >= 100) return;
     const D = TUNING.difficulty;
-    let add = (R.gain[cause] ?? 0) * D.meterGain[Math.min(this.show.segment, D.meterGain.length - 1)] * (this.upgrades.has('shortFuse') ? TUNING.passives.shortFuseMult : 1);
+    let add = (R.gain[cause] ?? 0) * this.edition.meter * D.meterGain[Math.min(this.show.segment, D.meterGain.length - 1)] * (this.upgrades.has('shortFuse') ? TUNING.passives.shortFuseMult : 1);
     // Shoulder Check III: smashes in the charge fill the meter too.
-    if (g.shoulderT > 0 && this.ability === 'shoulder' && this.abilityLevel >= 3 && (cause === 'medium' || cause === 'heavy' || cause === 'unit')) add += TUNING.abilities.shoulder.meterPerSmash;
+    if (g.shoulderT > 0 && this.levelOf('shoulder') >= 3 && (cause === 'medium' || cause === 'heavy' || cause === 'unit')) add += TUNING.abilities.shoulder.meterPerSmash;
     g.meter = Math.min(100, g.meter + add);
     if (g.meter >= 100) this.emit({ type: 'meterFull' });
   }
@@ -752,8 +782,8 @@ export class Sim {
   private stepAbility(input: SimInput, dt: number) {
     const g = this.giant;
     const A = TUNING.abilities;
-    const L = this.abilityLevel - 1; // index into the per-level numbers
     g.abilityCd = Math.max(0, g.abilityCd - dt);
+    g.ability2Cd = Math.max(0, g.ability2Cd - dt);
     g.shoulderT = Math.max(0, g.shoulderT - dt);
     if (g.prime > 0) {
       g.prime = Math.max(0, g.prime - dt);
@@ -775,44 +805,60 @@ export class Sim {
       }
     }
     if (input.ability) g.abilityBuffer = A.bufferFrames;
-    if (g.abilityBuffer <= 0 || !this.ability) return;
-    if (g.abilityCd > 0 || g.stumble > 0 || g.air > 0) {
-      g.abilityBuffer--;
-      return;
+    if (input.ability2) g.ability2Buffer = A.bufferFrames;
+    // Slot 1 then slot 2, each with its own buffer and cooldown (an airborne ability blocks both until it lands).
+    if (g.abilityBuffer > 0 && this.ability) {
+      if (g.abilityCd > 0 || g.stumble > 0 || g.air > 0) g.abilityBuffer--;
+      else {
+        g.abilityBuffer = 0;
+        g.abilityCd = this.fire(this.ability);
+        this.emit({ type: 'ability', id: this.ability, ok: true, level: this.levelOf(this.ability), slot: 1 });
+      }
     }
-    g.abilityBuffer = 0;
-    const id = this.ability;
+    if (g.ability2Buffer > 0 && this.ability2) {
+      if (g.ability2Cd > 0 || g.stumble > 0 || g.air > 0) g.ability2Buffer--;
+      else {
+        g.ability2Buffer = 0;
+        g.ability2Cd = this.fire(this.ability2);
+        this.emit({ type: 'ability', id: this.ability2, ok: true, level: this.levelOf(this.ability2), slot: 2 });
+      }
+    }
+  }
+
+  /** Fire an ability; returns its cooldown. */
+  private fire(id: AbilityId): number {
+    const g = this.giant;
+    const A = TUNING.abilities;
+    const L = this.levelOf(id) - 1; // index into the per-level numbers
     if (id === 'leap') {
       g.air = g.airDur = A.leap.time[L];
       g.airKind = 'leap';
-      g.abilityCd = A.leap.cooldown;
+      return A.leap.cooldown;
     } else if (id === 'stare') {
       this.stare();
-      g.abilityCd = A.stare.cooldown;
+      return A.stare.cooldown;
     } else if (id === 'breakaway') {
       g.air = g.airDur = A.breakaway.time[L];
       g.airKind = 'breakaway';
-      g.abilityCd = A.breakaway.cooldown;
+      return A.breakaway.cooldown;
     } else if (id === 'primeTime') {
       g.prime = A.primeTime.time[L];
       this.show.prime = true;
-      g.abilityCd = A.primeTime.cooldown;
       this.emit({ type: 'primeTime', on: true, time: g.prime });
-    } else if (id === 'shoulder') {
-      // Shoulder Check (the ability): a short charge that breaks concrete and police lines (rankOf), never bulldozers.
-      g.shoulderT = A.shoulder.time[L];
-      g.speed += A.shoulder.burst;
-      g.abilityCd = A.shoulder.cooldown;
-      this.emit({ type: 'shoulder', s: g.s, d: g.d });
+      return A.primeTime.cooldown;
     }
-    this.emit({ type: 'ability', id, ok: true, level: this.abilityLevel });
+    // Shoulder Check (the ability): a short charge that breaks concrete and police lines (rankOf), never bulldozers.
+    g.shoulderT = A.shoulder.time[L];
+    g.speed += A.shoulder.burst;
+    this.emit({ type: 'shoulder', s: g.s, d: g.d });
+    return A.shoulder.cooldown;
   }
 
   /** Would he land inside something the landing can't flatten? */
   private landingBlocked(): boolean {
     const g = this.giant;
     const r = this.radius();
-    const all = g.airKind === 'leap' && this.abilityLevel >= 3;
+    const all = g.airKind === 'leap' && this.levelOf('leap') >= 3;
     const near: Prop[] = [...this.track.propsBetween(g.s - r - 4, g.s + r + 4), ...this.pursuit.solidBetween(g.s - r - 4, g.s + r + 4)];
     return near.some((p) => p.alive && (p.cls === 'immovable' || (p as Unit).ram) && !all && Math.abs(p.s - g.s) < p.hl + r && Math.abs(p.d - g.d) < p.hw + r);
   }
@@ -837,19 +883,19 @@ export class Sim {
   /** Leap landing: the shockwave (III flattens anything, armored trucks and bulldozers too). */
   private leapLand() {
     const g = this.giant;
-    const L = this.abilityLevel - 1;
-    const smashed = this.slam(TUNING.abilities.leap.shockRadius[L], this.abilityLevel >= 3);
+    const L = this.levelOf('leap') - 1;
+    const smashed = this.slam(TUNING.abilities.leap.shockRadius[L], L >= 2);
     this.emit({ type: 'leapLand', s: g.s, d: g.d, smashed });
   }
 
   /** Breakaway landing: a slam, every police car behind him loses track, and at III he lands in Rampage. */
   private breakawayLand() {
     const g = this.giant;
-    const L = this.abilityLevel - 1;
+    const L = this.levelOf('breakaway') - 1;
     const smashed = this.slam(TUNING.abilities.breakaway.shockRadius[L], false);
     g.speed = Math.min(g.speed, this.tierTuning.topSpeed); // the landing takes the dive's extra speed
     const shaken = this.pursuit.loseAllBehind();
-    if (this.abilityLevel >= 3) this.startRampage();
+    if (L >= 2) this.startRampage();
     this.emit({ type: 'breakawayLand', s: g.s, d: g.d, smashed, shaken });
   }
 
@@ -866,7 +912,7 @@ export class Sim {
     const myC = this.track.laneCenter(g.lane);
     const free = (p: Prop, c: number) => !this.track.propsBetween(p.s - p.hl - 3, p.s + p.hl + 3).some((q) => q !== p && Math.abs(q.d - c) < q.hw + p.hw + 0.4);
     // Nearest lanes first, so a car next to him can move out before one in his lane moves in beside it.
-    const props = this.track.propsBetween(g.s, g.s + A.reach[this.abilityLevel - 1]).filter((p) => p.alive && p.cls !== 'immovable' && Math.abs(p.d - myC) <= W * A.lanesEitherSide + p.hw);
+    const props = this.track.propsBetween(g.s, g.s + A.reach[this.levelOf('stare') - 1]).filter((p) => p.alive && p.cls !== 'immovable' && Math.abs(p.d - myC) <= W * A.lanesEitherSide + p.hw);
     props.sort((a, b) => Math.abs(b.d - myC) - Math.abs(a.d - myC));
     for (const p of props) {
       const lanes = this.track.lanesAt(p.s);
@@ -884,7 +930,7 @@ export class Sim {
     }
     const backedOff = this.pursuit.backOff();
     // III: the ones that lose their nerve lose the road too.
-    const crashed = this.abilityLevel >= 3 ? this.pursuit.crashBackedOff() : 0;
+    const crashed = this.levelOf('stare') >= 3 ? this.pursuit.crashBackedOff() : 0;
     this.emit({ type: 'stare', moved, backedOff, crashed });
   }
 

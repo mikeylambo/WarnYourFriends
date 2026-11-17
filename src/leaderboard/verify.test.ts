@@ -23,20 +23,30 @@ function playLogged(sim: Sim): SimInput[] {
 function botRun(seed: number, pool?: UpgradeId[]): Submission {
   const run = new RunState(seed, pool);
   const segments: string[] = [];
-  const buys: (UpgradeId | null)[] = [];
+  const buys: UpgradeId[][] = [];
   while (run.phase === 'live') {
     const sim = new Sim({ seed: run.segmentSeed(), segment: run.segment, upgrades: run.owned, levels: run.levels, growth: true });
     segments.push(encodeInputs(playLogged(sim)));
     run.finishSegment(sim.show);
     if ((run.phase as string) === 'meeting') {
-      const pick = run.offers().find((u) => run.canAfford(u)) ?? null;
-      buys.push(pick);
-      if (pick) run.buy(pick);
-      else run.nextSegment();
+      // Buy what the budget allows (the meeting stays open), then go live.
+      const got: UpgradeId[] = [];
+      for (const u of run.offers()) if (run.canAfford(u) && run.buy(u)) got.push(u);
+      buys.push(got);
+      run.nextSegment();
     }
   }
   return { mode: 'run', seed, growth: true, segments, buys, claimed: Math.round(run.earned), ...(pool ? { pool } : {}) };
 }
+
+describe('leaderboard: editions and the second ability (2026-11-17)', () => {
+  it('round-trips the second ability button', () => {
+    const log: SimInput[] = [{ lane: 0, brake: false, shoulder: false, ability2: true }, { lane: 1, brake: true, shoulder: true, ability: true, ability2: true }, { lane: 0, brake: false, shoulder: false }];
+    const back = decodeInputs(encodeInputs(log))!;
+    expect(back.map((b) => !!b.ability2)).toEqual([true, true, false]);
+    expect(back[1].lane).toBe(1);
+  });
+});
 
 describe('leaderboard inputs', () => {
   it('round-trips every input combination', () => {

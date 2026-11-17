@@ -83,9 +83,12 @@ html, body {
   border: 3px solid rgba(255,255,255,0.7); color: #fff; font-weight: 900; font-size: 12px;
 }
 #btn-shoulder { right: 24px; bottom: calc(28px + env(safe-area-inset-bottom)); width: 92px; height: 92px; background: rgba(215, 38, 61, 0.55); }
-#btn-ability { right: 124px; bottom: calc(110px + env(safe-area-inset-bottom)); width: 72px; height: 72px; background: rgba(20, 8, 36, 0.55); opacity: 0.55; font-size: 12px; }
-#btn-ability:disabled { display: none; }
-#btn-ability.ready { opacity: 1; background: rgba(242, 204, 143, 0.6); color: #140824; }
+#btn-ability ,
+#btn-ability2 { right: 124px; bottom: calc(110px + env(safe-area-inset-bottom)); width: 72px; height: 72px; background: rgba(20, 8, 36, 0.55); opacity: 0.55; font-size: 12px; }
+#btn-ability:disabled ,
+#btn-ability2:disabled { display: none; }
+#btn-ability.ready ,
+#btn-ability2.ready { opacity: 1; background: rgba(242, 204, 143, 0.6); color: #140824; }
 
 /* Phase 0 live tuning panel (T). */
 #tune {
@@ -325,16 +328,26 @@ html.attract #touch-ui { display: none; }
 
 /* Phase 3: segment number, ability chip, Producer's Meeting. */
 #live #segno { background: rgba(10, 8, 20, 0.7); padding: 5px 7px 4px; font-variant-numeric: tabular-nums; letter-spacing: 0.08em; }
-#abil { position: absolute; left: 16px; bottom: calc(118px + env(safe-area-inset-bottom)); display: flex; align-items: center; gap: 8px; padding: 6px 10px; background: rgba(10, 8, 20, 0.72); border-left: 3px solid #6b5a86; color: var(--bone); font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase; pointer-events: none; }
-#abil[hidden] { display: none; }
-#abil .key { border: 1px solid currentColor; padding: 1px 5px; font-size: 10px; opacity: 0.8; }
-#abil .key:empty { display: none; }
-#abil .cd { width: 54px; height: 5px; background: rgba(255, 255, 255, 0.15); position: relative; }
-#abil .cd i { position: absolute; inset: 0 auto 0 0; background: #6b5a86; }
-#abil.ready { border-left-color: #f2cc8f; }
-#abil.ready .cd i { background: #f2cc8f; }
-#abil.fire { animation: flick 0.35s steps(2) 1; }
-html.touch #abil { display: none; }
+#abil ,
+#abil2 { position: absolute; left: 16px; bottom: calc(118px + env(safe-area-inset-bottom)); display: flex; align-items: center; gap: 8px; padding: 6px 10px; background: rgba(10, 8, 20, 0.72); border-left: 3px solid #6b5a86; color: var(--bone); font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase; pointer-events: none; }
+#abil[hidden] ,
+#abil2[hidden] { display: none; }
+#abil .key ,
+#abil2 .key { border: 1px solid currentColor; padding: 1px 5px; font-size: 10px; opacity: 0.8; }
+#abil .key:empty ,
+#abil2 .key:empty { display: none; }
+#abil .cd ,
+#abil2 .cd { width: 54px; height: 5px; background: rgba(255, 255, 255, 0.15); position: relative; }
+#abil .cd i ,
+#abil2 .cd i { position: absolute; inset: 0 auto 0 0; background: #6b5a86; }
+#abil.ready ,
+#abil2.ready { border-left-color: #f2cc8f; }
+#abil.ready .cd i ,
+#abil2.ready .cd i { background: #f2cc8f; }
+#abil.fire ,
+#abil2.fire { animation: flick 0.35s steps(2) 1; }
+html.touch #abil ,
+html.touch #abil2 { display: none; }
 #recap .meeting { max-width: 760px; }
 #recap .purse { margin: 10px 0 14px; font-size: 14px; letter-spacing: 0.08em; text-transform: uppercase; opacity: 0.85; }
 #recap .purse b { font-size: 22px; margin-left: 6px; color: #8a4b0f; font-variant-numeric: tabular-nums; }
@@ -374,11 +387,11 @@ html.attract #abilpop { display: none; }
 html.title #ui .slu-screen:not([data-screen-id="title"]) { place-items: center start; padding: 0 0 0 clamp(16px, 7vw, 110px); background: linear-gradient(90deg, rgba(5, 3, 12, 0.85) 0%, rgba(5, 3, 12, 0.45) 40%, rgba(5, 3, 12, 0) 65%); }
 @media (max-width: 640px) { html.title #ui .slu-screen:not([data-screen-id="title"]) { place-items: center; padding: 16px; } }
 /* How to Play: on its own, nothing of the cold open or the controls strip behind it. */
-html.briefing #hud, html.briefing #controls, html.briefing #coldopen, html.briefing #camtag, html.briefing #btn-pause, html.briefing #abil { display: none !important; }
+html.briefing #hud, html.briefing #controls, html.briefing #coldopen, html.briefing #camtag, html.briefing #btn-pause, html.briefing #abil , html.briefing #abil2 { display: none !important; }
 html.briefing #recap { background: rgba(7, 5, 13, 0.92); }
 
 /* Title screen (Mike's chopper-feed direction): wordmark left, the live chase right, LIVE bug. */
-html.title #hud, html.title #abil, html.title #controls, html.title #camtag, html.title #btn-pause { display: none !important; }
+html.title #hud, html.title #abil, html.title #controls, html.title #camtag, html.title #btn-pause , html.title #abil2{ display: none !important; }
 #ui [data-screen-id="title"].slu-screen { place-items: center start; padding: 0 0 0 clamp(20px, 7vw, 110px); background: linear-gradient(90deg, rgba(5, 3, 12, 0.88) 0%, rgba(5, 3, 12, 0.55) 38%, rgba(5, 3, 12, 0) 62%); }
 #ui [data-screen-id="title"] .slu-panel { background: none; border: 0; box-shadow: none; padding: 0; width: auto; max-width: min(92vw, 1000px); overflow: visible; }
 #ui [data-screen-id="title"] .slu-header h1 { white-space: pre-line; font: italic 900 clamp(52px, 9vw, 140px)/0.86 'Arial Black', 'Helvetica Neue', Impact, system-ui, sans-serif; letter-spacing: -0.03em; color: #f4ead6; text-transform: uppercase; margin: 0; transform: skewX(-6deg); text-shadow: 0 6px 30px rgba(0, 0, 0, 0.5); }
@@ -460,11 +473,17 @@ html.cover #titlebug { display: none; }
 #recap .pitch .blurb { font-size: 12px; opacity: 0.7; }
 #recap .pitch:disabled .art img { filter: grayscale(0.7); }
 /* Ability chip and touch button carry the art. */
-#abil .ic { width: 34px; height: 34px; object-fit: cover; margin: -2px 0 -2px -4px; border: 1px solid rgba(236, 224, 200, 0.35); }
-#abil:not(.ready) .ic { filter: grayscale(0.8) brightness(0.7); }
-#btn-ability { background-size: cover; background-position: center; color: var(--wyf-cream); text-shadow: 0 1px 3px #000; display: grid; align-items: end; padding-bottom: 6px; }
-#btn-ability:not(.ready) { filter: grayscale(0.8); }
-#btn-ability.ready { background-color: transparent; color: var(--wyf-cream); box-shadow: 0 0 0 3px #f2cc8f; }
+#abil .ic ,
+/* Ability chip and touch button carry the art. */
+#abil2 .ic { width: 34px; height: 34px; object-fit: cover; margin: -2px 0 -2px -4px; border: 1px solid rgba(236, 224, 200, 0.35); }
+#abil:not(.ready) .ic ,
+#abil2:not(.ready) .ic { filter: grayscale(0.8) brightness(0.7); }
+#btn-ability ,
+#btn-ability2 { background-size: cover; background-position: center; color: var(--wyf-cream); text-shadow: 0 1px 3px #000; display: grid; align-items: end; padding-bottom: 6px; }
+#btn-ability:not(.ready) ,
+#btn-ability2:not(.ready) { filter: grayscale(0.8); }
+#btn-ability.ready ,
+#btn-ability2.ready { background-color: transparent; color: var(--wyf-cream); box-shadow: 0 0 0 3px #f2cc8f; }
 /* Small screens: the square art sits beside the text (still whole), so three pitches fit without scrolling. */
 @media (max-width: 640px), (max-height: 560px) {
   #recap .meeting { padding-top: 12px; padding-bottom: 12px; }
@@ -508,7 +527,8 @@ html.cover #titlebug { display: none; }
 #replay span { background: rgba(30, 24, 33, 0.82); color: var(--wyf-cream); font: italic 800 12px/1 ui-sans-serif, system-ui, sans-serif; letter-spacing: 0.16em; text-transform: uppercase; padding: 7px 16px; clip-path: polygon(8px 0, 100% 0, calc(100% - 8px) 100%, 0 100%); }
 #replay small { color: rgba(236, 224, 200, 0.7); font: 700 11px/1 ui-sans-serif, system-ui, sans-serif; letter-spacing: 0.1em; text-transform: uppercase; }
 html.replay #hud > :not(#chyron) { visibility: hidden; }
-html.replay #abil, html.replay #touch, html.replay #controls, html.replay #camtag { visibility: hidden; }
+html.replay #abil, html.replay #touch, html.replay #controls, html.replay #camtag ,
+html.replay #abil2{ visibility: hidden; }
 html.replay::before, html.replay::after { content: ''; position: fixed; left: 0; right: 0; height: 7vh; background: #000; z-index: 4; pointer-events: none; }
 html.replay::before { top: 0; }
 html.replay::after { bottom: 0; }
@@ -587,8 +607,8 @@ html[data-palette='network'] {
   --c-text: #ffffff; --c-on-paper: #0b1a3d; --c-mute: #b9c6e8; --c-accent: #ffffff; --c-six: #0b2a6f;
   --c-replay: #3d6fe0; --c-gear: #d6001c;
 }
-#hud, #chain, #gears, #asks, #recap, #replay, #abil, #abilpop, .card { font-family: var(--f-head); }
-#live, #ratings, #chain, #bug, #asks, #desk, #gears, #abil, #replay, #signoff { zoom: var(--hs, 1); }
+#hud, #chain, #gears, #asks, #recap, #replay, #abil, #abilpop, .card , #abil2{ font-family: var(--f-head); }
+#live, #ratings, #chain, #bug, #asks, #desk, #gears, #abil, #replay, #signoff , #abil2{ zoom: var(--hs, 1); }
 
 /* --- LIVE row: slanted plates (the dot rides inside the red one) --- */
 #live { left: 20px; top: calc(20px + env(safe-area-inset-top)); height: 48px; gap: 4px; align-items: stretch; }
@@ -678,7 +698,8 @@ html.touch #ticker { right: 128px; }
 #chain.banked .stunt { color: var(--c-accent); }
 #chain.dropped .stunt { color: #ff6b6b; }
 #chain.dropped .pts { opacity: 0.45; text-decoration: line-through; }
-#abil { bottom: calc((var(--d-lt) + var(--d-tick) + 60px + env(safe-area-inset-bottom)) / var(--hs, 1)); background: var(--c-panel); border-left-color: var(--c-red); }
+#abil ,
+#abil2 { bottom: calc((var(--d-lt) + var(--d-tick) + 60px + env(safe-area-inset-bottom)) / var(--hs, 1)); background: var(--c-panel); border-left-color: var(--c-red); }
 /* The callout sits one row above the chip, on the same scale (it used a fixed 156px and drifted onto the chip's label). */
 #abilpop { zoom: var(--hs, 1); bottom: calc((var(--d-lt) + var(--d-tick) + 60px + 54px + env(safe-area-inset-bottom)) / var(--hs, 1)); }
 
@@ -960,3 +981,18 @@ html.replay #rampslam, html.title #rampslam { display: none; }
 /* First-time card (2026-11-17): three essentials, then the guided broadcast teaches the rest. */
 #recap .briefing.first .steps li { font-size: 17px; }
 #recap .briefing.first .how { margin: 12px 0 0; font-size: 13px; opacity: 0.75; }
+
+/* Meeting stays open (2026-11-17): bought pitches stay on the table, marked. */
+#recap .pitch.bought { opacity: 0.7; outline: 2px solid var(--c-good, #3fbf7f); }
+#recap .pitch.bought .price { color: var(--c-good, #3fbf7f); }
+
+/* Abilities stack (2026-11-17): slot 2's chip sits above slot 1's; its touch button above the first. */
+#abil2 { translate: 0 calc(-46px * var(--hs, 1)); }
+#btn-ability2 { bottom: calc(190px + env(safe-area-inset-bottom)) !important; }
+
+/* Recap: the next award, always (2026-11-17). */
+#recap .rc-next { display: grid; grid-template-columns: auto 1fr; gap: 2px 10px; align-items: baseline; margin-top: 8px; padding: 8px 12px; background: rgba(255, 255, 255, 0.06); }
+#recap .rc-next small { font-weight: 800; letter-spacing: 0.2em; opacity: 0.7; font-size: 11px; }
+#recap .rc-next b { font-size: 15px; }
+#recap .rc-next span { grid-column: 1 / -1; font-size: 13px; opacity: 0.85; }
+#recap .rc-next i { grid-column: 1 / -1; display: block; height: 4px; background: linear-gradient(90deg, var(--c-accent, #f2cc8f) var(--p), rgba(255, 255, 255, 0.15) var(--p)); }

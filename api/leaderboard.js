@@ -119,7 +119,7 @@ var TUNING = {
    */
   rampage: {
     /** At 15 m/s (2026-11-17) Stride meets more per second: gains ×0.8 keep Rampage about a quarter of the run. */
-    gain: { medium: 7, heavy: 10, unit: 13, policeCrash: 16, collateral: 5, nearMiss: 8, ramDodge: 10, lostTrack: 10, chopperShaken: 12, leapLand: 8, breakawayLand: 10 },
+    gain: { rival: 25, medium: 7, heavy: 10, unit: 13, policeCrash: 16, collateral: 5, nearMiss: 8, ramDodge: 10, lostTrack: 10, chopperShaken: 12, leapLand: 8, breakawayLand: 10 },
     duration: 8,
     perSmash: 0.3,
     maxDuration: 12,
@@ -328,6 +328,28 @@ var TUNING = {
    * Landmarks keep their own patterns. The flag rides the leaderboard submission so the server replays it the same.
    */
   guided: { calmFor: 25, clearFor: 400 },
+  /**
+   * Things worth aiming for (Mike, 2026-11-17: "not enough to do during the runs, especially during Rampage").
+   * - Rival news vans (a rival station's van, dish on the roof): `newsvanChance` of Heavy traffic slots. Flattening one
+   *   pays big (spectacle `rival`, Ratings, Rampage meter).
+   * - Rampage surge: firing Rampage packs the road `ahead`…`ahead + length` m out (past the frame, so nothing pops in)
+   *   with rows of traffic every `rowGap` m, `fill` lanes a row (always one open), rival vans at `surgeVanChance`:
+   *   Rampage is a spree to steer, not an empty road.
+   */
+  targets: { newsvanChance: 0.05, ahead: 70, length: 120, rowGap: [12, 16], fill: [1, 1], surgeVanChance: 0.15 },
+  /**
+   * Editions (Mike, 2026-11-17: "after one five-segment run I felt no reason to play more"; the design pillar: never a
+   * waste of time). Winning a full run unlocks the next edition of the news; each is harder (cumulative) and pays
+   * more: `decay` × the audience drain, `heat` police start this much hotter, `meter` × Rampage meter gains,
+   * `hard` × bulldozer/concrete chances; `score` × the run's score. Picked on the main menu.
+   */
+  editions: [
+    { name: "Evening News", decay: 1, heat: 0, meter: 1, hard: 1, score: 1 },
+    { name: "Late Edition", decay: 1.1, heat: 0, meter: 1, hard: 1, score: 1.25 },
+    { name: "Night Owl", decay: 1.1, heat: 1, meter: 1, hard: 1, score: 1.5 },
+    { name: "Breaking Coverage", decay: 1.1, heat: 1, meter: 0.85, hard: 1, score: 1.75 },
+    { name: "24-Hour News", decay: 1.1, heat: 1, meter: 0.85, hard: 1.5, score: 2 }
+  ],
   /** v0.3 props in lanes: Medium and Heavy only, densities tunable. */
   props: {
     /** No props before this distance (runway). */
@@ -425,7 +447,7 @@ var TUNING = {
    * → it drops: the points bank at ×1, the multiplier is lost. Smash-across pays `acrossBonus`×.
    */
   spectacle: {
-    points: { medium: 100, heavy: 250, unit: 500, policeCrash: 750, collateral: 100, nearMiss: 200, ramDodge: 200, lostTrack: 250, chopperShaken: 300, leapLand: 150, breakawayLand: 250 },
+    points: { rival: 800, medium: 100, heavy: 250, unit: 500, policeCrash: 750, collateral: 100, nearMiss: 200, ramDodge: 200, lostTrack: 250, chopperShaken: 300, leapLand: 150, breakawayLand: 250 },
     acrossBonus: 1.5,
     audienceMult: [1, 1.25, 1.5, 2],
     window: 2.5,
@@ -443,7 +465,7 @@ var TUNING = {
     perSegment: 3,
     zoneLookahead: 1500,
     pool: [
-      { id: "units", text: "Flatten {n} police cars", n: 6, reward: 3e4 },
+      { id: "units", text: "Flatten {n} police cars", n: 3, reward: 3e4 },
       { id: "crash", text: "Get a police car to crash", n: 1, reward: 3e4 },
       { id: "roadblock", text: "Smash through a roadblock", n: 1, reward: 25e3 },
       { id: "chain", text: "Combo {n} stunts", n: 12, reward: 35e3 },
@@ -452,10 +474,11 @@ var TUNING = {
       { id: "bridge", text: "Smash {n} things on the bridge", n: 4, reward: 25e3, zone: "bridge" },
       { id: "tunnel", text: "Smash {n} things in the tunnel", n: 4, reward: 25e3, zone: "tunnel" },
       { id: "chopper", text: "Shake the police chopper", n: 1, reward: 25e3, fromSegment: 1 },
-      { id: "dodge", text: "Dodge a cruiser's swerve", n: 1, reward: 2e4 },
+      // 'dodge' (dodge a cruiser's swerve) is out of the pool (2026-11-17): on the busier road a ram rarely gets to swerve (soak: 0 of 48).
       { id: "clean", text: "Sign off without a bounce", n: 1, reward: 35e3 },
       { id: "rampage", text: "Go Rampage {n} times", n: 4, reward: 25e3 },
-      { id: "rampsmash", text: "Smash {n} things in one Rampage", n: 10, reward: 3e4 }
+      { id: "rampsmash", text: "Smash {n} things in one Rampage", n: 10, reward: 3e4 },
+      { id: "rivals", text: "Flatten {n} rival news vans", n: 2, reward: 3e4 }
     ]
   },
   /**
@@ -628,13 +651,13 @@ var TUNING = {
     /** Police crash (a cruiser he led into something Heavy): the best TV of the chase, above lost track. Collateral: police plough through something Medium. */
     /** Rampage 0 (Mike, 2026-11-16, deviation from §12's +1/s): the trickle was invisible and half of all gains; the audience now moves only for what he does. */
     /** Difficulty pass (2026-11-17): Medium 1.5, Heavy 3.5 (were 2 / 5): at 15 m/s smashing alone held the audience at 100. */
-    gain: { medium: 1.5, heavy: 3.5, nearMiss: 3, lostTrack: 6, rampage: 0, policeCrash: 8, collateral: 2 },
+    gain: { rival: 4, medium: 1.5, heavy: 3.5, nearMiss: 3, lostTrack: 6, rampage: 0, policeCrash: 8, collateral: 2 },
     /** HUD: viewers shown per Ratings point ("370K WATCHING" at the starting 20). */
     viewersPerPoint: 18500,
     /** §12 decay: after 3s with no gain; segment 1 rate (2.0/2.75/3.5/4.25/5.0 by segment). */
     decayAfter: 3,
     /** Difficulty pass (2026-11-17, human-ish balance harness): segment clears ~98/94/89/67/53%, a full run ~29%. */
-    decayRate: [2.6, 3.4, 4.2, 5, 5.8],
+    decayRate: [3.6, 4.7, 5.8, 6.9, 8],
     /** No decay in a segment's opening seconds (cold open, the prop-free run-up, Jog can't score): balance 2026-11-16, later segments otherwise bust at ~9s before he can reach anything. */
     decayGrace: 12,
     /** §12 variety: repeats within 10s pay ×0.5 then ×0.25; a type unseen this segment pays ×1.5. */
@@ -646,7 +669,7 @@ var TUNING = {
     outnumberedMult: 1.25,
     /** Gear multiplier on spectacle points (was §12's per-second banking multiplier). */
     /** Rampage loop: Rampage pays double Stride. */
-    bankMult: [1, 1, 2],
+    bankMult: [1, 1, 1.5],
     /** §12 Heat: rises at these Ratings, and +1 every 45s; never falls in a segment. */
     heatAt: [30, 50, 70, 90],
     heatEvery: 45,
@@ -689,6 +712,8 @@ var TUNING = {
       sideSpeed: 5,
       /** Alongside him it holds its lane whatever is ahead (Mike, 2026-11-17: kiting works anywhere, not just at the road edge). */
       fixated: true,
+      /** Kiting window (Mike, 2026-11-17: "still not able to kite cops into bulldozers"): alongside him it rides beside him this long before winding up a ram (it used to wind up at once). */
+      holdAlongside: 3,
       /** A ram that connects costs a gear even at Rampage (Mike, 2026-11-16: Rampage is defended, not kept); a Shoulder Check into it still flattens it. */
       ramBeatsRampage: true,
       /**
@@ -702,7 +727,8 @@ var TUNING = {
     /** Tells start inside the visible road (the frame shows ≥2s ahead; capped at 28m for the faster Hijack ride), or nobody sees them. */
     rolling: { cruiseFactor: 0.55, tellAhead: 1.9, tellMin: 25, tellMax: 28, tell: 1.5, decel: 6, crawl: 3, actMax: 12 },
     /** Spike strip (v0.3: officer kneels, 1.2s, covers one lane). Crossing it: −1 tier, keep 70% speed, stumble. */
-    spike: { aheadTime: 4.5, aheadMin: 60, tellAhead: 1.9, tellMax: 28, tell: 1.2, speedKeep: 0.7 },
+    /** aheadTime 5.5, aheadMin 75 (were 4.5 / 60): with the Rampage swell the chopper pulls out, and the soak caught one spawning in view. */
+    spike: { aheadTime: 5.5, aheadMin: 75, tellAhead: 1.9, tellMax: 28, tell: 1.2, speedKeep: 0.7 },
     /** Static roadblock (v0.3: cars slide in 2.0s, all lanes but one; the gap glows). */
     roadblock: { aheadTime: 7.5, slideAhead: 1.9, slideMax: 28, tell: 2 },
     /**
@@ -790,7 +816,9 @@ var TUNING = {
   run: {
     segments: 5,
     /** Offers per meeting (§17: pick 1 of 3). */
-    offers: 3
+    offers: 3,
+    /** Abilities stack (Mike, 2026-11-17): hold up to this many, each on its own button. */
+    abilitySlots: 2
   },
   /**
    * Upgrade pool v2 (Mike, 2026-11-17: "a winning set"; art from his sheet, each card's image reused). Abilities
@@ -798,21 +826,21 @@ var TUNING = {
    * a different one replaces it. Passives stack. Prices are paid from banked spectacle points (spending never lowers
    * the score). Breakaway and Slipstream start locked (Awards unlock them, src/awards.ts).
    */
-  /** Prices: back to the v2 values (2026-11-17 difficulty pass: a cleared segment banks ~150k p50 for a human-ish player). */
+  /** Prices (Mike's playtest, 2026-11-17: "couldn't buy an upgrade after round 1"; his segments banked ~110k median): 70–125k, so an average segment buys one and a good one two or three (the meeting stays open). */
   upgrades: {
-    leap: { kind: "ability", price: 195e3, label: "Leap", blurb: "Hop lanes of trouble. The landing flattens what you land on.", pitch: "Get a clean shot of him clearing the spike strip.", levels: ["", "Longer jump, bigger landing.", "The landing flattens anything, armored trucks too."] },
-    stare: { kind: "ability", price: 16e4, label: "The Stare", blurb: "Traffic and police ahead pull out of your lane.", pitch: "Stay tight on the eyes. We have time.", levels: ["", "Reaches half again as far.", "Police that pull over crash out."] },
-    breakaway: { kind: "ability", price: 21e4, label: "Breakaway", blurb: "Dive over everything ahead. The police behind lose you.", pitch: "Get the long lens on him. He\u2019s about to leave them all behind.", levels: ["", "Longer dive, bigger slam.", "Lands straight into Rampage."] },
-    primeTime: { kind: "ability", price: 18e4, label: "Prime Time", blurb: "For a few seconds the audience can\u2019t drop and every smash counts double.", pitch: "Every station is taking our feed. Make it count.", levels: ["", "Lasts 8 seconds.", "Lasts 10 seconds."] },
-    thickSkin: { kind: "passive", price: 14e4, label: "Thick Skin", blurb: "Shrug off the first hit each segment: no meter lost.", pitch: "He walked through that like a turnstile." },
-    secondWind: { kind: "passive", price: 125e3, label: "Second Wind", blurb: "Each Rampage ends with the meter a third full.", pitch: "He\u2019s catching his breath. Stay on him, he\u2019s coming back." },
-    crowdPleaser: { kind: "passive", price: 15e4, label: "Crowd Pleaser", blurb: "At Rampage the audience drains 40% slower.", pitch: "Keep rolling. Nobody can look away." },
-    slipstream: { kind: "passive", price: 16e4, label: "Slipstream", blurb: "Police crashes pay double: Ratings and points.", pitch: "Anyone chasing him ends up in the scenery. Keep it wide." },
+    leap: { kind: "ability", price: 11e4, label: "Leap", blurb: "Hop lanes of trouble. The landing flattens what you land on.", pitch: "Get a clean shot of him clearing the spike strip.", levels: ["", "Longer jump, bigger landing.", "The landing flattens anything, armored trucks too."] },
+    stare: { kind: "ability", price: 95e3, label: "The Stare", blurb: "Traffic and police ahead pull out of your lane.", pitch: "Stay tight on the eyes. We have time.", levels: ["", "Reaches half again as far.", "Police that pull over crash out."] },
+    breakaway: { kind: "ability", price: 125e3, label: "Breakaway", blurb: "Dive over everything ahead. The police behind lose you.", pitch: "Get the long lens on him. He\u2019s about to leave them all behind.", levels: ["", "Longer dive, bigger slam.", "Lands straight into Rampage."] },
+    primeTime: { kind: "ability", price: 105e3, label: "Prime Time", blurb: "For a few seconds the audience can\u2019t drop and every smash counts double.", pitch: "Every station is taking our feed. Make it count.", levels: ["", "Lasts 8 seconds.", "Lasts 10 seconds."] },
+    thickSkin: { kind: "passive", price: 8e4, label: "Thick Skin", blurb: "Shrug off the first hit each segment: no meter lost.", pitch: "He walked through that like a turnstile." },
+    secondWind: { kind: "passive", price: 7e4, label: "Second Wind", blurb: "Each Rampage ends with the meter a third full.", pitch: "He\u2019s catching his breath. Stay on him, he\u2019s coming back." },
+    crowdPleaser: { kind: "passive", price: 85e3, label: "Crowd Pleaser", blurb: "At Rampage the audience drains 40% slower.", pitch: "Keep rolling. Nobody can look away." },
+    slipstream: { kind: "passive", price: 9e4, label: "Slipstream", blurb: "Police crashes pay double: Ratings and points.", pitch: "Anyone chasing him ends up in the scenery. Keep it wide." },
     // Rampage upgrades (Mike, 2026-11-17: "upgrades built around Rampage"). Card art: Mike's (2026-11-17), in the cards' flat low-poly style.
-    shoulder: { kind: "ability", price: 15e4, label: "Shoulder Check", blurb: "A short charge that breaks concrete and police lines without Rampage.", pitch: "He\u2019s dropping the shoulder. Stay wide, this one goes through the barrier.", levels: ["", "Charges for longer.", "Every smash in the charge fills the Rampage meter."] },
-    overdrive: { kind: "passive", price: 15e4, label: "Overdrive", blurb: "Rampage lasts 3 seconds longer.", pitch: "Don\u2019t cut away. He\u2019s not done yet." },
-    shortFuse: { kind: "passive", price: 14e4, label: "Short Fuse", blurb: "The Rampage meter fills 25% faster.", pitch: "He\u2019s wound tight tonight. It won\u2019t take much." },
-    groundZero: { kind: "passive", price: 17e4, label: "Ground Zero", blurb: "Going Rampage flattens everything within 12m.", pitch: "Get the wide shot ready for when he goes off." }
+    shoulder: { kind: "ability", price: 85e3, label: "Shoulder Check", blurb: "A short charge that breaks concrete and police lines without Rampage.", pitch: "He\u2019s dropping the shoulder. Stay wide, this one goes through the barrier.", levels: ["", "Charges for longer.", "Every smash in the charge fills the Rampage meter."] },
+    overdrive: { kind: "passive", price: 85e3, label: "Overdrive", blurb: "Rampage lasts 3 seconds longer.", pitch: "Don\u2019t cut away. He\u2019s not done yet." },
+    shortFuse: { kind: "passive", price: 75e3, label: "Short Fuse", blurb: "The Rampage meter fills 25% faster.", pitch: "He\u2019s wound tight tonight. It won\u2019t take much." },
+    groundZero: { kind: "passive", price: 1e5, label: "Ground Zero", blurb: "Going Rampage flattens everything within 12m.", pitch: "Get the wide shot ready for when he goes off." }
   },
   /** Ability level-up price, as a share of the ability's price; highest level. */
   levelPrice: 0.8,
@@ -878,7 +906,8 @@ var TUNING = {
     /** Never land inside something unflattenable: the flight stretches up to this much longer (s) to clear it. */
     landExtendMax: 0.8,
     /** Per-level numbers are [I, II, III]. Leap: airborne this long (no collisions), apex height (m), landing shockwave radius (m) smashing up to Heavy (III: anything). Mike's playtest: 3.2m / 0.9s didn't read from the chopper. */
-    leap: { time: [1.1, 1.3, 1.3], height: 5.5, shockRadius: [6.5, 9, 9], cooldown: 6 },
+    /** height (presentation): 9m (was 5.5; Mike: "Leap doesn't have an animation", it didn't read from the chopper); loom: he swells this much at the apex (toward the lens). */
+    leap: { time: [1.1, 1.3, 1.3], height: 9, loom: 0.28, shockRadius: [6.5, 9, 9], cooldown: 6 },
     /** The Stare: the road parts this far ahead: his lane pulls over, the lanes either side move one further out; police winding up back off (III: they crash out). */
     stare: { reach: [90, 135, 135], lanesEitherSide: 1, time: 0.6, cooldown: 10, glareTime: 0.9 },
     /** Breakaway: a low forward dive, `boost` m/s over his speed, airborne (no collisions); a landing slam smashing up to Heavy; every police car behind him loses track. III lands in Rampage. */
@@ -1056,6 +1085,8 @@ var PROP_DEFS = {
   // Landmarks: a toll gate arm (Medium: Stride smashes it) and a food truck (Heavy: Rampage).
   tollgate: { cls: "medium", mat: "wood", hl: 0.15, hw: 1.7, h: 1.2, variants: 1 },
   foodtruck: { cls: "heavy", mat: "fruit", hl: 3, hw: 1.2, h: 2.9, variants: 4 },
+  // A rival station's news van (dish and mast on the roof): a target worth aiming for (TUNING.targets).
+  newsvan: { cls: "heavy", mat: "metal", hl: 2.6, hw: 1.1, h: 2.6, variants: 2 },
   // Police Net (2026-11-16): the armoured truck nothing smashes (Leap clears it), and the car carrier (Heavy).
   armored: { cls: "immovable", mat: "metal", hl: 2.9, hw: 1.25, h: 2.9, variants: 1 },
   carrier: { cls: "heavy", mat: "metal", hl: 6.5, hw: 1.3, h: 3.6, variants: 1 },
@@ -1068,8 +1099,9 @@ var HEAVY = ["car", "car", "van"];
 var MIN_USABLE_LANE_WIDTH = 2.8;
 var smoothstep = (t) => t * t * (3 - 2 * t);
 var Track = class {
-  constructor(seed, segment = 0, guided = false) {
+  constructor(seed, segment = 0, guided = false, hardMult = 1) {
     this.seed = seed;
+    this.hardMult = hardMult;
     this.segmentNo = segment;
     this.hardFrom = guided ? TUNING.guided.clearFor : TUNING.props.immovableFrom;
     const Pc = TUNING.pacing;
@@ -1120,6 +1152,8 @@ var Track = class {
   segmentNo;
   /** Guided first broadcast: nothing unbreakable this close to the start (m). */
   hardFrom;
+  /** Edition: × bulldozer and concrete chances. */
+  hardMult;
   get end() {
     const last = this.segments[this.segments.length - 1];
     return last ? last.s0 + last.length : 0;
@@ -1381,13 +1415,13 @@ var Track = class {
         const mw = TUNING.zones.mediumWeight[seg.zone];
         const heavy = rng.next() >= mw;
         const canHard = hard < D.hardPerRow[di] && rowS >= this.hardFrom && !hardLanes.some((l) => Math.abs(l - lane) === 1);
-        const immovable = canHard && rng.chance(D.dozer[di]);
-        const concrete = !immovable && heavy && canHard && rng.chance(D.concrete[di]);
+        const immovable = canHard && rng.chance(Math.min(0.9, D.dozer[di] * this.hardMult));
+        const concrete = !immovable && heavy && canHard && rng.chance(Math.min(0.9, D.concrete[di] * this.hardMult));
         if (immovable || concrete) {
           hard++;
           hardLanes.push(lane);
         }
-        const kind = immovable ? "dozer" : concrete ? "barricade" : rng.pick(heavy ? HEAVY : MEDIUM);
+        const kind = immovable ? "dozer" : concrete ? "barricade" : heavy && rng.chance(TUNING.targets.newsvanChance) ? "newsvan" : rng.pick(heavy ? HEAVY : MEDIUM);
         const def = PROP_DEFS[kind];
         this.props.push({
           id: this.propId++,
@@ -1471,6 +1505,26 @@ var Track = class {
     while (i > 0 && this.props[i - 1].s > s) i--;
     this.props.splice(i, 0, p);
     return p;
+  }
+  /**
+   * Rampage surge (TUNING.targets): rows of traffic between s0 and s1 (already generated road, past the frame),
+   * `fill` lanes a row, never every lane, never on top of what's there. Rival vans at `surgeVanChance`.
+   */
+  surge(s0, s1) {
+    const T = TUNING.targets;
+    const rng = this.rng;
+    for (let s = s0; s < s1; s += rng.range(T.rowGap[0], T.rowGap[1])) {
+      const lanes = Math.min(this.lanesAt(s - 4), this.lanesAt(s), this.lanesAt(s + 4));
+      if (lanes < 2) continue;
+      const n = Math.min(lanes - 1, rng.int(T.fill[0], T.fill[1]));
+      const order = Array.from({ length: lanes }, (_, i) => i).sort(() => rng.next() - 0.5);
+      for (const lane of order.slice(0, n)) {
+        const c = this.laneCenter(lane);
+        if (this.propsBetween(s - 6, s + 6).some((p) => Math.abs(p.d - c) < p.hw + 1.2)) continue;
+        const kind = rng.chance(T.surgeVanChance) ? "newsvan" : rng.pick(rng.chance(0.6) ? HEAVY : MEDIUM);
+        this.drop(kind, s + rng.range(-1, 1), c + rng.range(-0.25, 0.25));
+      }
+    }
   }
   /** Live props overlapping [s0, s1] along the road. */
   propsBetween(s0, s1, out = []) {
@@ -1613,6 +1667,8 @@ var Show = class _Show {
   peak = TUNING.show.startRatings;
   /** No drain before this (s): TUNING.show.decayGrace, longer in the guided first broadcast. */
   decayGrace = TUNING.show.decayGrace;
+  /** Edition (TUNING.editions): × the drain. */
+  decayMult = 1;
   /** Segment index (0-based): sets the decay rate (§12) and the starting Heat (§19). */
   segment = 0;
   /** Phase 3 passives: Showman's fresh-type multiplier, Second Wind's Pin drain multiplier. */
@@ -1690,7 +1746,7 @@ var Show = class _Show {
     } else this.rampageAcc = 0;
     if (!this.prime && time > this.decayGrace && time - Math.max(this.lastGain, this.decayGrace - S.decayAfter) > S.decayAfter) {
       const atRampage = tier === TUNING.tiers.length - 1;
-      this.ratings = Math.max(0, this.ratings - S.decayRate[Math.min(this.segment, S.decayRate.length - 1)] * (atRampage ? this.rampageDecayMult : 1) * dt);
+      this.ratings = Math.max(0, this.ratings - this.decayMult * S.decayRate[Math.min(this.segment, S.decayRate.length - 1)] * (atRampage ? this.rampageDecayMult : 1) * dt);
     }
     if (this.chain.count > 0 && time - this.chain.last > TUNING.spectacle.window) this.endChain(false, out);
     if (time >= this.nextHeatT) {
@@ -2319,6 +2375,8 @@ var Pursuit = class {
         } else {
           u.speed = g.speed;
           u.s += g.speed * dt + (g.s - u.s) * Math.min(1, dt * 3);
+          u.alongT = (u.alongT ?? 0) + dt;
+          if (u.alongT < C.holdAlongside) break;
           const reach = u.s + u.hl + g.speed * (C.tell + C.swerve) + 3;
           const room = !this.propIn(u.lane, u.s - u.hl, reach) && !this.propIn(g.lane, u.s - u.hl, reach);
           if (!g.move && room && !this.sim.tellBusy(u) && !this.aheadThreatActive()) {
@@ -2639,7 +2697,7 @@ var Pursuit = class {
     const sim = this.sim;
     const g = sim.giant;
     const K = TUNING.pursuit.crash;
-    const onAir = u.s >= g.s - K.visibleBehind;
+    const onAir = u.s + u.hl >= g.s - K.visibleBehind;
     const track = sim.track;
     const fixated = u.phase === "approach" && u.s >= g.s - 4 && Math.abs(u.lane - g.lane) === 1;
     if (u.phase === "leave" && !this.inHisWay(u) || !onAir && !fixated && u.phase === "approach") {
@@ -2692,7 +2750,7 @@ var Pursuit = class {
     const sim = this.sim;
     u.alive = false;
     u.lost = true;
-    sim.emitPublic({ type: "policeCrash", id: u.id, propId: p.id, propKind: p.kind, propCls: p.cls, propSmashed: smashed, s: u.s, d: u.d, speed: Math.max(u.speed, sim.giant.speed), onAir, spikes, offRoad });
+    sim.emitPublic({ type: "policeCrash", id: u.id, propId: p.id, propKind: p.kind, propCls: p.cls, propSmashed: smashed, s: u.s + u.hl, d: u.d, speed: Math.max(u.speed, sim.giant.speed), onAir, spikes, offRoad });
     if (onAir) sim.award("policeCrash");
   }
   update(u, dt) {
@@ -2806,6 +2864,9 @@ var Asks = class {
       case "rampageEnd":
         this.inRampage = false;
         break;
+      case "rival":
+        done.push(this.bump("rivals", 1, out));
+        break;
       case "smash":
         if (this.inRampage && ++this.rampSmashes > (this.list.find((x) => x.id === "rampsmash")?.progress ?? Infinity)) done.push(this.bump("rampsmash", 0, out, this.rampSmashes));
         if (e.propId >= 1e6) done.push(this.bump("units", 1, out));
@@ -2880,6 +2941,14 @@ var Sim = class {
   ability;
   /** The equipped ability's level (1–3; 0 with none). */
   abilityLevel;
+  /** Abilities stack (Mike, 2026-11-17): up to `run.abilitySlots`, in the order bought; slot 2 has its own button. */
+  abilities;
+  ability2;
+  levels;
+  /** An ability's level (1–3), 0 if not held. */
+  levelOf(id) {
+    return this.abilities.includes(id) ? Math.max(1, Math.min(TUNING.maxLevel, this.levels[id] ?? 1)) : 0;
+  }
   /** Phase 2: the sign-off exit ramp, once open (v0.3 §4). */
   exit = null;
   /** A fork's exit ramp, once open (Mike, 2026-11-15). */
@@ -2893,6 +2962,8 @@ var Sim = class {
   near = [];
   /** Giant size grows with gear (SimOptions.growth). */
   growth;
+  /** This broadcast's edition (TUNING.editions). */
+  edition;
   /** First broadcast ever: a calm opening (no drain or police for `guided.calmFor` s, nothing unbreakable for `guided.clearFor` m). */
   guided;
   constructor(opts) {
@@ -2900,14 +2971,20 @@ var Sim = class {
     this.growth = opts.growth ?? false;
     this.rng = new Rng(opts.seed ^ 20973);
     this.guided = !!opts.guided;
-    this.track = new Track(opts.seed, opts.segment ?? 0, this.guided);
+    this.edition = TUNING.editions[Math.max(0, Math.min(TUNING.editions.length - 1, opts.edition ?? 0))];
+    this.track = new Track(opts.seed, opts.segment ?? 0, this.guided, this.edition.hard);
     this.escort = new Escort(opts.seed, this.track);
     this.pursuit = new Pursuit(opts.seed, this);
     this.upgrades = new Set(opts.upgrades ?? []);
-    this.ability = ["leap", "stare", "breakaway", "primeTime", "shoulder"].find((a) => this.upgrades.has(a)) ?? null;
-    this.abilityLevel = this.ability ? Math.max(1, Math.min(TUNING.maxLevel, opts.levels?.[this.ability] ?? 1)) : 0;
+    this.abilities = (opts.upgrades ?? []).filter((u) => ["leap", "stare", "breakaway", "primeTime", "shoulder"].includes(u)).slice(0, TUNING.run.abilitySlots);
+    this.levels = { ...opts.levels ?? {} };
+    this.ability = this.abilities[0] ?? null;
+    this.ability2 = this.abilities[1] ?? null;
+    this.abilityLevel = this.ability ? this.levelOf(this.ability) : 0;
     this.show.startSegment(opts.segment ?? 0);
     if (this.guided) this.show.decayGrace = TUNING.guided.calmFor;
+    this.show.decayMult = this.edition.decay;
+    if (this.edition.heat) this.show.heat = Math.min(5, this.show.heat + this.edition.heat);
     this.asks = new Asks(opts.seed, opts.segment ?? 0, this.track);
     const PV = TUNING.passives;
     if (this.upgrades.has("crowdPleaser")) this.show.rampageDecayMult = PV.crowdPleaserDecay;
@@ -2948,6 +3025,8 @@ var Sim = class {
       odometer: 0,
       abilityCd: 0,
       abilityBuffer: 0,
+      ability2Cd: 0,
+      ability2Buffer: 0,
       air: 0,
       airDur: 0,
       airKind: "leap",
@@ -3264,9 +3343,13 @@ var Sim = class {
       case "smash": {
         st.smashes++;
         if (e.across) st.smashesAcross++;
-        if (e.cls === "medium" || e.cls === "heavy") this.award(e.cls);
+        const rival = e.propId < 1e6 && this.track.props.find((x) => x.id === e.propId)?.kind === "newsvan";
+        if (rival) {
+          this.award("rival");
+          this.emit({ type: "rival", s: e.s, d: e.d });
+        } else if (e.cls === "medium" || e.cls === "heavy") this.award(e.cls);
         const unit = e.propId >= 1e6 && this.pursuit.units.find((x) => x.id === e.propId)?.unit !== "carrier";
-        const cause = unit ? "unit" : e.cls === "heavy" ? "heavy" : e.cls === "medium" ? "medium" : null;
+        const cause = rival ? "rival" : unit ? "unit" : e.cls === "heavy" ? "heavy" : e.cls === "medium" ? "medium" : null;
         if (cause) this.stunt(cause, e.across ? TUNING.spectacle.points[cause] * TUNING.spectacle.acrossBonus : void 0);
         break;
       }
@@ -3353,6 +3436,9 @@ var Sim = class {
     g.rampElapsed = 0;
     this.setTier(TUNING.tiers.length - 1);
     this.emit({ type: "rampageStart", time: g.rampT });
+    const T = TUNING.targets;
+    this.track.ensure(g.s + T.ahead + T.length + 10);
+    this.track.surge(g.s + T.ahead, g.s + T.ahead + T.length);
     if (this.upgrades.has("groundZero")) this.emit({ type: "groundZero", s: g.s, d: g.d, smashed: this.slam(TUNING.passives.groundZeroRadius, true) });
   }
   endRampage() {
@@ -3373,8 +3459,8 @@ var Sim = class {
     }
     if (g.meter >= 100) return;
     const D = TUNING.difficulty;
-    let add = (R.gain[cause] ?? 0) * D.meterGain[Math.min(this.show.segment, D.meterGain.length - 1)] * (this.upgrades.has("shortFuse") ? TUNING.passives.shortFuseMult : 1);
-    if (g.shoulderT > 0 && this.ability === "shoulder" && this.abilityLevel >= 3 && (cause === "medium" || cause === "heavy" || cause === "unit")) add += TUNING.abilities.shoulder.meterPerSmash;
+    let add = (R.gain[cause] ?? 0) * this.edition.meter * D.meterGain[Math.min(this.show.segment, D.meterGain.length - 1)] * (this.upgrades.has("shortFuse") ? TUNING.passives.shortFuseMult : 1);
+    if (g.shoulderT > 0 && this.levelOf("shoulder") >= 3 && (cause === "medium" || cause === "heavy" || cause === "unit")) add += TUNING.abilities.shoulder.meterPerSmash;
     g.meter = Math.min(100, g.meter + add);
     if (g.meter >= 100) this.emit({ type: "meterFull" });
   }
@@ -3496,8 +3582,8 @@ var Sim = class {
   stepAbility(input, dt) {
     const g = this.giant;
     const A2 = TUNING.abilities;
-    const L = this.abilityLevel - 1;
     g.abilityCd = Math.max(0, g.abilityCd - dt);
+    g.ability2Cd = Math.max(0, g.ability2Cd - dt);
     g.shoulderT = Math.max(0, g.shoulderT - dt);
     if (g.prime > 0) {
       g.prime = Math.max(0, g.prime - dt);
@@ -3518,42 +3604,56 @@ var Sim = class {
       }
     }
     if (input.ability) g.abilityBuffer = A2.bufferFrames;
-    if (g.abilityBuffer <= 0 || !this.ability) return;
-    if (g.abilityCd > 0 || g.stumble > 0 || g.air > 0) {
-      g.abilityBuffer--;
-      return;
+    if (input.ability2) g.ability2Buffer = A2.bufferFrames;
+    if (g.abilityBuffer > 0 && this.ability) {
+      if (g.abilityCd > 0 || g.stumble > 0 || g.air > 0) g.abilityBuffer--;
+      else {
+        g.abilityBuffer = 0;
+        g.abilityCd = this.fire(this.ability);
+        this.emit({ type: "ability", id: this.ability, ok: true, level: this.levelOf(this.ability), slot: 1 });
+      }
     }
-    g.abilityBuffer = 0;
-    const id = this.ability;
+    if (g.ability2Buffer > 0 && this.ability2) {
+      if (g.ability2Cd > 0 || g.stumble > 0 || g.air > 0) g.ability2Buffer--;
+      else {
+        g.ability2Buffer = 0;
+        g.ability2Cd = this.fire(this.ability2);
+        this.emit({ type: "ability", id: this.ability2, ok: true, level: this.levelOf(this.ability2), slot: 2 });
+      }
+    }
+  }
+  /** Fire an ability; returns its cooldown. */
+  fire(id) {
+    const g = this.giant;
+    const A2 = TUNING.abilities;
+    const L = this.levelOf(id) - 1;
     if (id === "leap") {
       g.air = g.airDur = A2.leap.time[L];
       g.airKind = "leap";
-      g.abilityCd = A2.leap.cooldown;
+      return A2.leap.cooldown;
     } else if (id === "stare") {
       this.stare();
-      g.abilityCd = A2.stare.cooldown;
+      return A2.stare.cooldown;
     } else if (id === "breakaway") {
       g.air = g.airDur = A2.breakaway.time[L];
       g.airKind = "breakaway";
-      g.abilityCd = A2.breakaway.cooldown;
+      return A2.breakaway.cooldown;
     } else if (id === "primeTime") {
       g.prime = A2.primeTime.time[L];
       this.show.prime = true;
-      g.abilityCd = A2.primeTime.cooldown;
       this.emit({ type: "primeTime", on: true, time: g.prime });
-    } else if (id === "shoulder") {
-      g.shoulderT = A2.shoulder.time[L];
-      g.speed += A2.shoulder.burst;
-      g.abilityCd = A2.shoulder.cooldown;
-      this.emit({ type: "shoulder", s: g.s, d: g.d });
+      return A2.primeTime.cooldown;
     }
-    this.emit({ type: "ability", id, ok: true, level: this.abilityLevel });
+    g.shoulderT = A2.shoulder.time[L];
+    g.speed += A2.shoulder.burst;
+    this.emit({ type: "shoulder", s: g.s, d: g.d });
+    return A2.shoulder.cooldown;
   }
   /** Would he land inside something the landing can't flatten? */
   landingBlocked() {
     const g = this.giant;
     const r = this.radius();
-    const all = g.airKind === "leap" && this.abilityLevel >= 3;
+    const all = g.airKind === "leap" && this.levelOf("leap") >= 3;
     const near = [...this.track.propsBetween(g.s - r - 4, g.s + r + 4), ...this.pursuit.solidBetween(g.s - r - 4, g.s + r + 4)];
     return near.some((p) => p.alive && (p.cls === "immovable" || p.ram) && !all && Math.abs(p.s - g.s) < p.hl + r && Math.abs(p.d - g.d) < p.hw + r);
   }
@@ -3576,18 +3676,18 @@ var Sim = class {
   /** Leap landing: the shockwave (III flattens anything, armored trucks and bulldozers too). */
   leapLand() {
     const g = this.giant;
-    const L = this.abilityLevel - 1;
-    const smashed = this.slam(TUNING.abilities.leap.shockRadius[L], this.abilityLevel >= 3);
+    const L = this.levelOf("leap") - 1;
+    const smashed = this.slam(TUNING.abilities.leap.shockRadius[L], L >= 2);
     this.emit({ type: "leapLand", s: g.s, d: g.d, smashed });
   }
   /** Breakaway landing: a slam, every police car behind him loses track, and at III he lands in Rampage. */
   breakawayLand() {
     const g = this.giant;
-    const L = this.abilityLevel - 1;
+    const L = this.levelOf("breakaway") - 1;
     const smashed = this.slam(TUNING.abilities.breakaway.shockRadius[L], false);
     g.speed = Math.min(g.speed, this.tierTuning.topSpeed);
     const shaken = this.pursuit.loseAllBehind();
-    if (this.abilityLevel >= 3) this.startRampage();
+    if (L >= 2) this.startRampage();
     this.emit({ type: "breakawayLand", s: g.s, d: g.d, smashed, shaken });
   }
   /**
@@ -3602,7 +3702,7 @@ var Sim = class {
     const moved = [];
     const myC = this.track.laneCenter(g.lane);
     const free = (p, c) => !this.track.propsBetween(p.s - p.hl - 3, p.s + p.hl + 3).some((q) => q !== p && Math.abs(q.d - c) < q.hw + p.hw + 0.4);
-    const props = this.track.propsBetween(g.s, g.s + A2.reach[this.abilityLevel - 1]).filter((p) => p.alive && p.cls !== "immovable" && Math.abs(p.d - myC) <= W * A2.lanesEitherSide + p.hw);
+    const props = this.track.propsBetween(g.s, g.s + A2.reach[this.levelOf("stare") - 1]).filter((p) => p.alive && p.cls !== "immovable" && Math.abs(p.d - myC) <= W * A2.lanesEitherSide + p.hw);
     props.sort((a, b) => Math.abs(b.d - myC) - Math.abs(a.d - myC));
     for (const p of props) {
       const lanes = this.track.lanesAt(p.s);
@@ -3619,7 +3719,7 @@ var Sim = class {
       }
     }
     const backedOff = this.pursuit.backOff();
-    const crashed = this.abilityLevel >= 3 ? this.pursuit.crashBackedOff() : 0;
+    const crashed = this.levelOf("stare") >= 3 ? this.pursuit.crashBackedOff() : 0;
     this.emit({ type: "stare", moved, backedOff, crashed });
   }
   // --- Speed and gait ----------------------------------------------------------
@@ -3832,13 +3932,15 @@ var RunState = class {
    * `pool`: the upgrades this player can be offered (Awards unlock the rest; src/awards.ts). The leaderboard
    * replays a run with the same pool, so the offers match.
    */
-  constructor(seed, pool = ALL_UPGRADES) {
+  constructor(seed, pool = ALL_UPGRADES, edition = 0) {
     this.seed = seed;
     this.pool = pool;
+    this.edition = edition;
     this.rng = new Rng((seed ^ 5395790) >>> 0);
   }
   seed;
   pool;
+  edition;
   segment = 0;
   phase = "live";
   earned = 0;
@@ -3863,7 +3965,11 @@ var RunState = class {
     return Math.floor(this.earned - this.spent);
   }
   get ability() {
-    return this.owned.find((u) => ABILITIES.includes(u)) ?? null;
+    return this.abilities[0] ?? null;
+  }
+  /** Abilities held, in the order bought (they stack, up to `run.abilitySlots`). */
+  get abilities() {
+    return this.owned.filter((u) => ABILITIES.includes(u));
   }
   /** Seed for a segment's road and police. */
   segmentSeed(i = this.segment) {
@@ -3872,7 +3978,7 @@ var RunState = class {
   /** A segment ended: bank it, then meeting / won / lost. */
   finishSegment(show) {
     const cleared = show.state === "cleared";
-    this.earned += show.banked;
+    this.earned += show.banked * TUNING.editions[Math.max(0, Math.min(TUNING.editions.length - 1, this.edition))].score;
     this.results.push({ segment: this.segment, cleared, banked: show.banked, peak: show.peak });
     if (!cleared) this.phase = "lost";
     else if (this.segment >= TUNING.run.segments - 1) this.phase = "won";
@@ -3884,7 +3990,8 @@ var RunState = class {
   /** §17: three pitches. Passives you own aren't offered again; neither is the ability you hold. */
   offers() {
     if (this.offerCache) return this.offerCache;
-    const pool = ALL_UPGRADES.filter((u) => this.pool.includes(u) && (TUNING.upgrades[u].kind === "ability" ? this.levelOf(u) < TUNING.maxLevel : !this.owned.includes(u)));
+    const free = this.abilities.length < TUNING.run.abilitySlots;
+    const pool = ALL_UPGRADES.filter((u) => this.pool.includes(u) && (TUNING.upgrades[u].kind === "ability" ? this.levelOf(u) ? this.levelOf(u) < TUNING.maxLevel : free : !this.owned.includes(u)));
     const out = [];
     while (out.length < TUNING.run.offers && pool.length) out.push(pool.splice(this.rng.int(0, pool.length - 1), 1)[0]);
     return this.offerCache = out;
@@ -3894,24 +4001,26 @@ var RunState = class {
   }
   /** Buy one pitch (abilities replace the equipped one, §17). Returns false if it can't. */
   buy(id) {
-    if (this.phase !== "meeting" || !this.offers().includes(id) || !this.canAfford(id)) return false;
+    if (this.phase !== "meeting" || !this.offers().includes(id) || !this.canAfford(id) || this.bought.includes(id)) return false;
     this.spent += this.priceOf(id);
     if (TUNING.upgrades[id].kind === "ability") {
       const a = id;
       const held = this.levelOf(a);
       if (held) this.levels[a] = held + 1;
-      else {
-        for (const x of ABILITIES) if (this.owned.includes(x)) delete this.levels[x];
-        this.owned = this.owned.filter((u) => !ABILITIES.includes(u));
+      else if (this.abilities.length < TUNING.run.abilitySlots) {
         this.owned.push(id);
         this.levels[a] = 1;
-      }
+      } else return false;
     } else this.owned.push(id);
-    return this.nextSegment();
+    this.bought.push(id);
+    return true;
   }
+  /** Bought at the current meeting (each pitch once). */
+  bought = [];
   /** Leave the meeting (with or without buying) for the next segment. */
   nextSegment() {
     if (this.phase !== "meeting") return false;
+    this.bought = [];
     this.segment++;
     this.phase = "live";
     return true;
@@ -3920,14 +4029,16 @@ var RunState = class {
 
 // src/leaderboard/verify.ts
 var A = "a".charCodeAt(0);
+var CAP = "A".charCodeAt(0);
 function decodeInputs(str, max = TUNING.leaderboard.maxTicks) {
-  if (!/^([a-x]\d*)*$/.test(str)) return null;
+  if (!/^([a-xA-X]\d*)*$/.test(str)) return null;
   const out = [];
-  for (const m of str.matchAll(/([a-x])(\d*)/g)) {
-    const s = m[1].charCodeAt(0) - A;
+  for (const m of str.matchAll(/([a-xA-X])(\d*)/g)) {
+    const upper = m[1] < "a";
+    const s = m[1].charCodeAt(0) - (upper ? CAP : A);
     const n = m[2] ? Number(m[2]) : 1;
     if (!Number.isSafeInteger(n) || n < 1 || out.length + n > max) return null;
-    const inp = { lane: Math.floor(s / 8) - 1, brake: !!(s & 4), shoulder: !!(s & 2), ability: !!(s & 1) };
+    const inp = { lane: Math.floor(s / 8) - 1, brake: !!(s & 4), shoulder: !!(s & 2), ability: !!(s & 1), ...upper ? { ability2: true } : {} };
     for (let k = 0; k < n; k++) out.push(inp);
   }
   return out;
@@ -3947,23 +4058,24 @@ function verify(sub) {
   if (logs.some((l) => !l)) return { ok: false, error: "inputs" };
   if (sub.mode === "broadcast") {
     if (logs.length !== 1) return { ok: false, error: "segments" };
-    const sim = new Sim({ seed: sub.seed, segment: 0, upgrades: [], growth: !!sub.growth, guided: !!sub.guided });
+    const sim = new Sim({ seed: sub.seed, segment: 0, upgrades: [], growth: !!sub.growth, guided: !!sub.guided, edition: sub.edition ?? 0 });
     if (!playSegment(sim, logs[0])) return { ok: false, error: "unfinished" };
     return { ok: true, score: Math.round(sim.show.banked), segments: 1, won: sim.show.state === "cleared" };
   }
   const pool = Array.isArray(sub.pool) ? sub.pool.filter((u) => ALL_UPGRADES.includes(u)) : ALL_UPGRADES;
-  const run = new RunState(sub.seed, pool);
+  const edition = Number.isSafeInteger(sub.edition) && sub.edition >= 0 && sub.edition < TUNING.editions.length ? sub.edition : 0;
+  const run = new RunState(sub.seed, pool, edition);
   const buys = Array.isArray(sub.buys) ? sub.buys : [];
   for (let i = 0; i < logs.length; i++) {
     if (run.phase !== "live") return { ok: false, error: "segments" };
-    const sim = new Sim({ seed: run.segmentSeed(), segment: run.segment, upgrades: run.owned, levels: run.levels, growth: !!sub.growth, guided: !!sub.guided && i === 0 });
+    const sim = new Sim({ seed: run.segmentSeed(), segment: run.segment, upgrades: run.owned, levels: run.levels, growth: !!sub.growth, guided: !!sub.guided && i === 0, edition });
     if (!playSegment(sim, logs[i])) return { ok: false, error: "unfinished" };
     run.finishSegment(sim.show);
     if (run.phase === "meeting") {
       const b = buys[i] ?? null;
       run.offers();
-      if (b !== null && !run.buy(b)) return { ok: false, error: "buy" };
-      if (b === null) run.nextSegment();
+      for (const id of b === null ? [] : Array.isArray(b) ? b : [b]) if (!run.buy(id)) return { ok: false, error: "buy" };
+      run.nextSegment();
     }
   }
   if (run.phase !== "won" && run.phase !== "lost") return { ok: false, error: "unfinished" };

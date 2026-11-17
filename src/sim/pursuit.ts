@@ -609,6 +609,9 @@ export class Pursuit {
         } else {
           u.speed = g.speed;
           u.s += g.speed * dt + (g.s - u.s) * Math.min(1, dt * 3);
+          // Ride beside him a while first (the kiting window): lead it into what's in its lane.
+          u.alongT = (u.alongT ?? 0) + dt;
+          if (u.alongT < C.holdAlongside) break;
           // Only wind up if both lanes stay clear through the windup and swerve.
           const reach = u.s + u.hl + g.speed * (C.tell + C.swerve) + 3;
           const room = !this.propIn(u.lane, u.s - u.hl, reach) && !this.propIn(g.lane, u.s - u.hl, reach);
@@ -966,7 +969,8 @@ export class Pursuit {
     const K = TUNING.pursuit.crash;
     // Out of the chopper's frame it still can't drive through things (Mike, 2026-11-17: police through bulldozers);
     // it just isn't news (no Ratings, no stunt, no headline).
-    const onAir = u.s >= g.s - K.visibleBehind;
+    // On air when its nose (where it hits) is in the frame: a car tailing 2m off his back crashes in shot (Mike, 2026-11-17: kiting).
+    const onAir = u.s + u.hl >= g.s - K.visibleBehind;
     const track = sim.track;
     // Last-moment swerve: a clear neighbouring lane. Leaving the chase, or behind the frame where it isn't
     // fixated on him, a cruiser drives like a cop (it steers round what's solid); his lane is fair game back there.
@@ -1026,7 +1030,8 @@ export class Pursuit {
     const sim = this.sim;
     u.alive = false;
     u.lost = true;
-    sim.emitPublic({ type: 'policeCrash', id: u.id, propId: p.id, propKind: p.kind, propCls: p.cls, propSmashed: smashed, s: u.s, d: u.d, speed: Math.max(u.speed, sim.giant.speed), onAir, spikes, offRoad });
+    // The crash happens at its nose (what it hit), which is where the frame sees it.
+    sim.emitPublic({ type: 'policeCrash', id: u.id, propId: p.id, propKind: p.kind, propCls: p.cls, propSmashed: smashed, s: u.s + u.hl, d: u.d, speed: Math.max(u.speed, sim.giant.speed), onAir, spikes, offRoad });
     if (onAir) sim.award('policeCrash');
   }
 

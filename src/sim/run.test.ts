@@ -13,7 +13,7 @@ const playSegment = (run: RunState) => {
 };
 
 describe('run (§4, §17)', () => {
-  it('pitches 3 distinct upgrades, never a passive you own; abilities replace the slot', () => {
+  it('pitches 3 distinct upgrades, never a passive you own; abilities stack up to the slots', () => {
     const run = new RunState(7);
     run.phase = 'meeting';
     run.earned = 1_000_000;
@@ -28,10 +28,16 @@ describe('run (§4, §17)', () => {
     const ab = run.offers().find((u) => (ABILITIES as string[]).includes(u));
     if (ab) {
       expect(run.buy(ab)).toBe(true);
-      expect(run.ability).toBe(ab);
-      expect(run.owned.filter((u) => (ABILITIES as string[]).includes(u)).length).toBe(1);
+      // Abilities stack (2026-11-17): Leap stays in slot 1, the new one takes slot 2.
+      expect(run.abilities).toEqual(['leap', ab]);
       expect(run.owned).toContain('thickSkin');
       expect(run.levelOf(ab as never)).toBe(1);
+      expect(run.buy(ab)).toBe(false); // each pitch once per meeting
+      // Both slots full: no new abilities on offer, only level-ups.
+      run['offerCache'] = null;
+      run.nextSegment();
+      run.phase = 'meeting';
+      expect(run.offers().filter((u) => (ABILITIES as string[]).includes(u) && !run.levelOf(u as never)).length).toBe(0);
     }
   });
 
@@ -67,6 +73,9 @@ describe('run (§4, §17)', () => {
     expect(run.buy(id)).toBe(true);
     expect(run.purse).toBe(500_000 - TUNING.upgrades[id].price);
     expect(run.earned).toBe(500_000);
+    // The meeting stays open after a buy (2026-11-17); going live is its own step.
+    expect(run.phase).toBe('meeting');
+    expect(run.nextSegment()).toBe(true);
     expect(run.segment).toBe(1);
   });
 
@@ -75,9 +84,8 @@ describe('run (§4, §17)', () => {
     let guard = 0;
     while ((run.phase === 'live' || run.phase === 'meeting') && guard++ < 10) {
       if (run.phase === 'meeting') {
-        const affordable = run.offers().find((u) => run.canAfford(u));
-        if (affordable) run.buy(affordable);
-        else run.nextSegment();
+        for (const u of run.offers()) if (run.canAfford(u)) run.buy(u);
+        run.nextSegment();
         continue;
       }
       const sim = playSegment(run);
@@ -260,5 +268,21 @@ describe('guided first broadcast (2026-11-17)', () => {
       const early = sim.track.props.filter((p) => p.s < TUNING.guided.clearFor && (p.cls === 'immovable' || p.rampOnly) && !sim.track.segmentAt(p.s).landmark);
       expect(early.length).toBe(0);
     }
+  });
+});
+
+describe('abilities stack (2026-11-17)', () => {
+  it('two abilities, each on its own button and cooldown', () => {
+    const sim = new Sim({ seed: 5, upgrades: ['stare', 'primeTime'] });
+    expect(sim.ability).toBe('stare');
+    expect(sim.ability2).toBe('primeTime');
+    for (let i = 0; i < 120; i++) sim.step({ lane: 0, brake: false, shoulder: false });
+    const a = sim.step({ lane: 0, brake: false, shoulder: false, ability: true });
+    expect(a.some((e) => e.type === 'ability' && e.id === 'stare' && e.slot === 1)).toBe(true);
+    const b = sim.step({ lane: 0, brake: false, shoulder: false, ability2: true });
+    expect(b.some((e) => e.type === 'ability' && e.id === 'primeTime' && e.slot === 2)).toBe(true);
+    expect(sim.giant.abilityCd).toBeGreaterThan(0);
+    expect(sim.giant.ability2Cd).toBeGreaterThan(0);
+    expect(sim.show.prime).toBe(true);
   });
 });

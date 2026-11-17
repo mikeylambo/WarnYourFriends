@@ -2,7 +2,7 @@ import type { AbilityId, MassClass } from '../tuning';
 
 export type Material = 'wood' | 'glass' | 'metal' | 'fruit' | 'concrete' | 'paper';
 
-export type PropKind = 'sawhorse' | 'cart' | 'fence' | 'scooter' | 'car' | 'van' | 'barricade' | 'dozer' | 'cruiser' | 'compact' | 'tollgate' | 'foodtruck' | 'armored' | 'carrier';
+export type PropKind = 'sawhorse' | 'cart' | 'fence' | 'scooter' | 'car' | 'van' | 'barricade' | 'dozer' | 'cruiser' | 'compact' | 'tollgate' | 'foodtruck' | 'armored' | 'carrier' | 'newsvan';
 
 /** Content pass (Mike, 2026-11-15): landmark set pieces, one per segment (v0.3 §16: landmarks become segments). */
 export type LandmarkKind = 'toll' | 'foodtrucks' | 'works' | 'jam';
@@ -77,6 +77,9 @@ export interface GiantState {
   // --- Phase 3 abilities ---
   abilityCd: number;
   abilityBuffer: number;
+  /** The second ability slot's cooldown and input buffer. */
+  ability2Cd: number;
+  ability2Buffer: number;
   /** Leap / Breakaway: time left airborne (s), and its total; which one it is. */
   air: number;
   airDur: number;
@@ -102,6 +105,8 @@ export interface SimInput {
   shoulder: boolean;
   /** Phase 3: ability button (edge), 5f buffer. */
   ability?: boolean;
+  /** Abilities stack (2026-11-17): the second ability slot's button. */
+  ability2?: boolean;
 }
 
 export const NO_INPUT: SimInput = { lane: 0, brake: false, shoulder: false, ability: false };
@@ -122,6 +127,8 @@ export type SimEvent =
   | { type: 'meterFull' }
   | { type: 'rampageStart'; time: number }
   | { type: 'rampageEnd' }
+  /** A rival station's news van flattened (2026-11-17: something worth aiming for, Rampage most of all). */
+  | { type: 'rival'; s: number; d: number }
   /** Ground Zero (passive): the blast when Rampage fires, and how much it flattened. */
   | { type: 'groundZero'; s: number; d: number; smashed: number }
   | { type: 'meterLoss'; amount: number; reason: TierDropReason }
@@ -158,7 +165,7 @@ export type SimEvent =
   | { type: 'chainEnd'; count: number; mult: number; points: number; dropped: boolean }
   | { type: 'busted'; reason: BustReason }
   /** Phase 3: an ability fired (ok) or the button was pressed with nothing to do. `level` I–III. */
-  | { type: 'ability'; id: AbilityId; ok: boolean; level: number }
+  | { type: 'ability'; id: AbilityId; ok: boolean; level: number; slot?: 1 | 2 }
   | { type: 'leapLand'; s: number; d: number; smashed: number }
   | { type: 'stare'; moved: { id: number; from: number; to: number }[]; backedOff: number; crashed: number }
   /** Breakaway landed: what the slam smashed, and how many police behind lost him. */
@@ -185,9 +192,9 @@ export type SimEvent =
 
 export type UnitKind = 'cruiser' | 'rolling' | 'roadblock' | 'spike' | 'chopper' | 'net' | 'carrier';
 /** §12 gain sources. */
-export type GainType = 'medium' | 'heavy' | 'nearMiss' | 'lostTrack' | 'rampage' | 'policeCrash' | 'collateral';
+export type GainType = 'medium' | 'heavy' | 'nearMiss' | 'lostTrack' | 'rampage' | 'policeCrash' | 'collateral' | 'rival';
 /** Spectacle stunts (score, not Ratings). */
-export type StuntType = 'medium' | 'heavy' | 'unit' | 'policeCrash' | 'collateral' | 'nearMiss' | 'ramDodge' | 'lostTrack' | 'chopperShaken' | 'leapLand' | 'breakawayLand';
+export type StuntType = 'medium' | 'heavy' | 'unit' | 'policeCrash' | 'collateral' | 'nearMiss' | 'ramDodge' | 'lostTrack' | 'chopperShaken' | 'leapLand' | 'breakawayLand' | 'rival';
 export type BustReason = 'ratings' | 'pin' | 'missed';
 /** What filled the meter: boxed in by a Police Net, or caught crawling with police on his tail. */
 export type PinCause = 'net' | 'caught';
@@ -209,6 +216,8 @@ export interface Unit extends Prop {
   solid: boolean;
   /** Caught: seconds it stays dropped back after he shook it off. */
   backOff?: number;
+  /** Cruiser: seconds spent riding alongside him (it winds up only after `cruiser.holdAlongside`). */
+  alongT?: number;
   /** Rams: the lane it will swerve into. */
   target: number;
   hit: boolean;

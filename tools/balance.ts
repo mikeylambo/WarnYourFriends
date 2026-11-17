@@ -17,7 +17,7 @@
 import { Sim } from '../src/sim/sim';
 import { Bot } from '../src/sim/bot';
 import { RunState, ABILITIES, ALL_UPGRADES } from '../src/sim/run';
-import { TUNING, type UpgradeId } from '../src/tuning';
+import { TUNING } from '../src/tuning';
 
 const seeds = Number(process.argv[2] ?? 200);
 /** HUMAN=1: the bot's inputs arrive REACT seconds late and it misreads MISS of its lane decisions (a person, roughly). */
@@ -83,12 +83,11 @@ for (let seed = 1; seed <= seeds; seed++) {
         const pb = !hasAbility && (ABILITIES as string[]).includes(b) ? 1e9 : 0;
         return pb + TUNING.upgrades[b].price - (pa + TUNING.upgrades[a].price);
       });
-      const pick: UpgradeId | undefined = offers[0];
-      if (pick && run.buy(pick)) bought[pick] = (bought[pick] ?? 0) + 1;
-      else {
-        walkouts++;
-        run.nextSegment();
-      }
+      // The meeting stays open (2026-11-17): buy down the list while the budget lasts, then go live.
+      let n = 0;
+      for (const pick of offers) if (run.canAfford(pick) && run.buy(pick)) (bought[pick] = (bought[pick] ?? 0) + 1), n++;
+      if (!n) walkouts++;
+      run.nextSegment();
     }
   }
   if (run.phase === 'won') runs.won++;

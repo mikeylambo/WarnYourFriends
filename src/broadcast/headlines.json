@@ -84,6 +84,10 @@
     "carrier": [
       "Car Carrier",
       "Car Carriers"
+    ],
+    "newsvan": [
+      "Rival News Van",
+      "Rival News Vans"
     ]
   },
   "verbs": {

@@ -8,7 +8,7 @@ import type { SimEvent } from './sim/types';
  * instructions with the button on them, never a voice or a quote (the producer notes were cut on 2026-11-16).
  * At most one on screen, `gap` s apart. Presentation only: reads the sim, never writes it.
  */
-export type PromptId = 'lanes' | 'blocked' | 'concrete' | 'meter' | 'ready' | 'hit' | 'ram' | 'rampage' | 'audience' | 'kite' | 'boxed' | 'caught' | 'exit' | 'ability';
+export type PromptId = 'lanes' | 'blocked' | 'concrete' | 'meter' | 'ready' | 'hit' | 'ram' | 'rampage' | 'audience' | 'kite' | 'boxed' | 'caught' | 'exit' | 'ability' | 'ability2';
 
 /** v2: the Rampage loop (2026-11-17) teaches new lessons, so everyone sees them once. */
 const STORE = 'wyf.prompts.v2';
@@ -112,6 +112,7 @@ export class Onboarding {
     // Crawling with police coming up behind: let go.
     if (sim.caught() || (g.speed < TUNING.pursuit.caught.below && sim.pursuit.onHisTail().length)) this.want('caught');
     if (sim.ability && sim.time > O.quietStart) this.want('ability');
+    else if (sim.ability2 && sim.time > O.quietStart) this.want('ability2');
 
     if (this.showing && now >= this.showing.until) this.hide();
     if (!this.showing && this.queued && now - this.lastAt >= O.gap) {

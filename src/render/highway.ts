@@ -129,6 +129,19 @@ export function partsFor(p: Prop): Part[] {
         [L * 0.5 + 0.03, 0.55, 0, 0.1, 0.25, W * 0.98, TRIM],
         ...wheels(L, W, 0.82, [0.36, -0.16, -0.36]),
       ];
+    case 'newsvan':
+      // A rival station's van: livery box, white band, cab, and a mast with a satellite dish on the roof (reads from above).
+      return [
+        [0, 0.48, 0, L, 0.3, W * 0.94, TRIM],
+        [-L * 0.1, 1.45, 0, L * 0.78, 1.8, W, 'kind'],
+        [-L * 0.1, 1.2, 0, L * 0.785, 0.3, W * 1.01, 0xf2efe8],
+        [L * 0.4, 1.05, 0, L * 0.2, 1.2, W * 0.96, 'kind'],
+        [L * 0.49, 1.4, 0, 0.12, 0.5, W * 0.84, GLASS, undefined, -0.35],
+        [-L * 0.25, 2.55, 0, 0.14, 0.7, 0.14, 0x8c939b],
+        [-L * 0.25, 2.95, 0, 0.9, 0.14, 0.9, 0xf2efe8, undefined, 0.5],
+        [L * 0.05, 2.42, 0, L * 0.35, 0.08, W * 0.7, 0x2a2a30],
+        ...wheels(L, W, 0.82, [0.36, -0.3]),
+      ];
     case 'barricade':
       return [[0, 0.38, 0, L, 0.75, W, 'kind'], [0, 0.86, 0, L * 0.8, 0.2, W, 0xf08a24]];
     case 'dozer':
@@ -1037,7 +1050,7 @@ export class HighwayView {
     g.position.set(this.pos.x, 0, this.pos.z);
     g.rotation.y = -this.sim.track.headingAt(p.s);
     g.userData.colors = [kc, ...partsFor(p).map((q) => (q[6] === 'kind' ? kc : q[6]))];
-    if (p.kind === 'car' || p.kind === 'van') this.addCarLights(p, g, body);
+    if (p.kind === 'car' || p.kind === 'van' || p.kind === 'newsvan') this.addCarLights(p, g, body);
     return g;
   }
 

@@ -391,8 +391,16 @@ try {
     if (!pitches || pitches.length !== 3) fail(`run: meeting should pitch 3 upgrades (${JSON.stringify(pitches)})`);
     else ok(`run: Producer's Meeting pitches ${pitches.map((p) => p.id + (p.disabled ? ' (over budget)' : '')).join(', ')}`);
     const pick = pitches?.find((p) => !p.disabled)?.id;
-    await page.keyboard.press('Enter'); // focused: the first affordable pitch (or Skip)
-    await page.waitForTimeout(300);
+    await page.keyboard.press('Enter'); // focused: the first affordable pitch (or Go live)
+    await page.waitForTimeout(400);
+    // The meeting stays open after a buy (2026-11-17): it's bought and marked, then Go live starts the segment.
+    if (pick) {
+      const still = await page.evaluate((id) => ({ phase: window.__GAME.run()?.phase, bought: !!document.querySelector(`#recap .pitch.bought[data-id="${id}"]`) }), pick);
+      if (still.phase !== 'meeting' || !still.bought) fail(`run: after buying ${pick} the meeting should stay open with it marked (${JSON.stringify(still)})`);
+      else ok(`run: bought ${pick}; the meeting stays open`);
+      await page.click('#skip');
+      await page.waitForTimeout(400);
+    }
     const r2 = await page.evaluate(() => ({ run: window.__GAME.run(), show: window.__GAME.show(), recap: window.__GAME.recap(), ability: window.__GAME.ability() }));
     if (r2.run?.segment !== 1 || r2.run.phase !== 'live' || !r2.show.live || r2.recap) fail(`run: segment 2 didn't start (${JSON.stringify(r2.run)})`);
     else ok(`run: segment 2 live at Heat ${r2.show.heat}, owns [${r2.run.owned.join(', ')}]`);

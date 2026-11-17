@@ -71,6 +71,7 @@ export class Asks {
         done.push(this.bump('rampage', 1, out));
         break;
       case 'rampageEnd': this.inRampage = false; break;
+      case 'rival': done.push(this.bump('rivals', 1, out)); break;
       case 'smash':
         // Best single Rampage so far (a shorter one later never lowers it).
         if (this.inRampage && ++this.rampSmashes > (this.list.find((x) => x.id === 'rampsmash')?.progress ?? Infinity)) done.push(this.bump('rampsmash', 0, out, this.rampSmashes));

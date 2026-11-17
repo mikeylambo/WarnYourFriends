@@ -1,4 +1,5 @@
 import type { Sim } from './sim';
+import type { AbilityId } from '../tuning';
 import type { SimInput } from './types';
 
 /**
@@ -13,12 +14,12 @@ export class Bot {
   constructor(private sim: Sim) {}
 
   /** Phase 3: when to use the equipped ability (so the soak exercises every one). */
-  private wantAbility(here: number, bestScore: number, best: number): boolean {
+  private wantAbility(here: number, bestScore: number, best: number, id: AbilityId | null, cd: number): boolean {
     const sim = this.sim;
     const g = sim.giant;
-    if (!sim.ability || g.abilityCd > 0) return false;
+    if (!id || cd > 0) return false;
     const trapped = here <= -60 && (best === g.lane || bestScore <= -60);
-    switch (sim.ability) {
+    switch (id) {
       case 'leap':
         return trapped;
       case 'stare':
@@ -100,8 +101,9 @@ export class Bot {
       const truck = net.find((u) => u.kind === 'armored');
       const closing = truck && truck.s > g.s && truck.s - g.s < 22 && Math.abs(truck.d - g.d) < 2;
       if (closing && flank.length) {
-        if (sim.ability === 'leap' || sim.ability === 'stare') {
-          if (g.abilityCd <= 0) return { lane: 0, brake: false, shoulder: false, ability: true };
+        if ((sim.ability === 'leap' || sim.ability === 'stare') && g.abilityCd <= 0) return { lane: 0, brake: false, shoulder: false, ability: true };
+        if (sim.ability2 === 'leap' || sim.ability2 === 'stare') {
+          if (g.ability2Cd <= 0) return { lane: 0, brake: false, shoulder: false, ability2: true };
         }
         // Behind the flankers now? Then step out of the box.
         if (flank.every((f) => f.s - f.hl > g.s + 1)) {
@@ -147,11 +149,13 @@ export class Bot {
     }
 
     const shoulder = false;
-    const ability = this.wantAbility(here, bestScore, best);
+    const ability = this.wantAbility(here, bestScore, best, sim.ability, g.abilityCd);
+    // Slot 2 waits a frame if slot 1 fires (one at a time reads better, and airborne blocks both anyway).
+    const ability2 = !ability && this.wantAbility(here, bestScore, best, sim.ability2, g.ability2Cd);
     if (best !== g.lane) {
       this.decideCooldown = 0.15;
-      return { lane: Math.sign(best - g.lane), brake: false, shoulder, ability };
+      return { lane: Math.sign(best - g.lane), brake: false, shoulder, ability, ...(ability2 ? { ability2 } : {}) };
     }
-    return { lane: 0, brake: false, shoulder, ability };
+    return { lane: 0, brake: false, shoulder, ability, ...(ability2 ? { ability2 } : {}) };
   }
 }

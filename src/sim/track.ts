@@ -71,6 +71,8 @@ export const PROP_DEFS: Record<PropKind, PropDef> = {
   // Landmarks: a toll gate arm (Medium: Stride smashes it) and a food truck (Heavy: Rampage).
   tollgate: { cls: 'medium', mat: 'wood', hl: 0.15, hw: 1.7, h: 1.2, variants: 1 },
   foodtruck: { cls: 'heavy', mat: 'fruit', hl: 3.0, hw: 1.2, h: 2.9, variants: 4 },
+  // A rival station's news van (dish and mast on the roof): a target worth aiming for (TUNING.targets).
+  newsvan: { cls: 'heavy', mat: 'metal', hl: 2.6, hw: 1.1, h: 2.6, variants: 2 },
   // Police Net (2026-11-16): the armoured truck nothing smashes (Leap clears it), and the car carrier (Heavy).
   armored: { cls: 'immovable', mat: 'metal', hl: 2.9, hw: 1.25, h: 2.9, variants: 1 },
   carrier: { cls: 'heavy', mat: 'metal', hl: 6.5, hw: 1.3, h: 3.6, variants: 1 },
@@ -129,7 +131,11 @@ export class Track {
   /** Guided first broadcast: nothing unbreakable this close to the start (m). */
   private readonly hardFrom: number;
 
-  constructor(readonly seed: number, segment = 0, guided = false) {
+  /** Edition: × bulldozer and concrete chances. */
+  private readonly hardMult: number;
+
+  constructor(readonly seed: number, segment = 0, guided = false, hardMult = 1) {
+    this.hardMult = hardMult;
     this.segmentNo = segment;
     this.hardFrom = guided ? TUNING.guided.clearFor : TUNING.props.immovableFrom;
     const Pc = TUNING.pacing;
@@ -445,13 +451,13 @@ export class Track {
         const heavy = rng.next() >= mw;
         // Never two side by side: a wall of two beside the edge lane left no way out but through one (Law 1).
         const canHard = hard < D.hardPerRow[di] && rowS >= this.hardFrom && !hardLanes.some((l) => Math.abs(l - lane) === 1);
-        const immovable = canHard && rng.chance(D.dozer[di]);
-        const concrete = !immovable && heavy && canHard && rng.chance(D.concrete[di]);
+        const immovable = canHard && rng.chance(Math.min(0.9, D.dozer[di] * this.hardMult));
+        const concrete = !immovable && heavy && canHard && rng.chance(Math.min(0.9, D.concrete[di] * this.hardMult));
         if (immovable || concrete) {
           hard++;
           hardLanes.push(lane);
         }
-        const kind: PropKind = immovable ? 'dozer' : concrete ? 'barricade' : rng.pick(heavy ? HEAVY : MEDIUM);
+        const kind: PropKind = immovable ? 'dozer' : concrete ? 'barricade' : heavy && rng.chance(TUNING.targets.newsvanChance) ? 'newsvan' : rng.pick(heavy ? HEAVY : MEDIUM);
         const def = PROP_DEFS[kind];
         this.props.push({
           id: this.propId++,
@@ -538,6 +544,27 @@ export class Track {
     while (i > 0 && this.props[i - 1].s > s) i--;
     this.props.splice(i, 0, p);
     return p;
+  }
+
+  /**
+   * Rampage surge (TUNING.targets): rows of traffic between s0 and s1 (already generated road, past the frame),
+   * `fill` lanes a row, never every lane, never on top of what's there. Rival vans at `surgeVanChance`.
+   */
+  surge(s0: number, s1: number) {
+    const T = TUNING.targets;
+    const rng = this.rng;
+    for (let s = s0; s < s1; s += rng.range(T.rowGap[0], T.rowGap[1])) {
+      const lanes = Math.min(this.lanesAt(s - 4), this.lanesAt(s), this.lanesAt(s + 4));
+      if (lanes < 2) continue;
+      const n = Math.min(lanes - 1, rng.int(T.fill[0], T.fill[1]));
+      const order = Array.from({ length: lanes }, (_, i) => i).sort(() => rng.next() - 0.5);
+      for (const lane of order.slice(0, n)) {
+        const c = this.laneCenter(lane);
+        if (this.propsBetween(s - 6, s + 6).some((p) => Math.abs(p.d - c) < p.hw + 1.2)) continue;
+        const kind: PropKind = rng.chance(T.surgeVanChance) ? 'newsvan' : rng.pick(rng.chance(0.6) ? HEAVY : MEDIUM);
+        this.drop(kind, s + rng.range(-1, 1), c + rng.range(-0.25, 0.25));
+      }
+    }
   }
 
   /** Live props overlapping [s0, s1] along the road. */
