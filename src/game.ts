@@ -207,7 +207,7 @@ let recapShown = false;
  * straight on, so he's drawn along the ramp's centreline instead (presentation only), while the chopper swivels into
  * Head-On; then the recap cuts in.
  */
-let outro: { seg: ReturnType<Sim['track']['segmentAt']> } | null = null;
+let outro: { seg: ReturnType<Sim['track']['segmentAt']>; d: number; v: number; t: number } | null = null;
 /** Phase 2 Pin meter: a red ring on the ground around the giant, only above 0 (§21). */
 const pinRing = (() => {
   const g = new THREE.RingGeometry(2.0, 2.45, 64, 1);
@@ -386,6 +386,11 @@ function newRun(seed: number, segment = 0, upgrades: UpgradeId[] = [], levels: P
   prev.stepPos = g.stepPos;
   rig.snap(targetAt(g.s, g.d));
   if (flags.angle !== null) setAngle(flags.angle, 1);
+  else {
+    // Mike (2026-11-17): every broadcast opens on High Head-On, then swoops home (TUNING.camera.openingAngle).
+    const open = director.open();
+    if (open !== null) rig.cut(open, director.side, targetAt(g.s, g.d));
+  }
   // Compile every shader now (cruisers included, before they join) so the run never hitches on first sight.
   cruisers.showAll(true);
   renderer.compile(scene, rig.camera);
@@ -1050,7 +1055,8 @@ function present(e: SimEvent) {
     case 'signOff': {
       const ex = sim.exit;
       const seg = ex ? sim.track.segments.find((x) => x.index === ex.segment) : undefined;
-      if (seg) outro = { seg };
+      // Start the outro where he is, moving as he was (a lane change onto the ramp keeps its sideways speed).
+      if (seg) outro = { seg, d: sim.giant.d, v: (sim.giant.d - prev.d) / SIM_DT, t: 0 };
       if (!attract && !flags.stepMode) {
         const H = TUNING.camera.angles.findIndex((a) => a.name === 'Sign-Off');
         director.force(H, director.side, true);
@@ -1775,17 +1781,25 @@ function frame(now: number) {
   let d = prev.d + (g.d - prev.d) * alpha;
   let rampSlope = 0;
   if (outro && !replay) {
-    // On the ramp once it peels away from his lane: its centreline, and its curve in his heading.
-    const rd = sim.track.widthAt(s) + sim.track.exitOffset(outro.seg, s);
-    if (rd > d) {
-      d = rd;
-      rampSlope = sim.track.exitOffset(outro.seg, s + 1) - sim.track.exitOffset(outro.seg, s);
+    // Mike (2026-11-17: "sign-off lane change still not smooth"): at the gore the ramp's centreline is already
+    // ~7m right of his lane, and snapping onto it jumped him sideways. Now he eases onto it: a critically damped
+    // follow of the centreline, from where he was and as fast as he was moving across, eased in.
+    const O = TUNING.segment;
+    const odt = paused || frozen ? 0 : realDt * flags.timescale * settings.gameSpeed;
+    if (odt > 0) {
+      outro.t += odt;
+      const R = O.rampFollow * Math.min(1, outro.t / O.rampFollowIn);
+      const rd = sim.track.widthAt(s) + sim.track.exitOffset(outro.seg, s);
+      outro.v += (R * R * (rd - outro.d) - 2 * R * outro.v) * odt;
+      outro.d += outro.v * odt;
     }
+    d = outro.d;
+    rampSlope = outro.v / Math.max(4, g.speed); // his heading follows how he's actually moving across
   }
   const stepPos = prev.stepPos + (g.stepPos - prev.stepPos) * alpha;
   const t = targetAt(s, d);
   t.travel += Math.atan(rampSlope); // on the ramp: he (and the chopper) follow its curve
-  const lateralVel = (g.d - prev.d) / SIM_DT;
+  const lateralVel = outro && !replay ? 0 : (g.d - prev.d) / SIM_DT;
   const heading = t.travel + Math.atan2(lateralVel, Math.max(4, g.speed)) * 0.5;
 
   if (replay) updateReplay();
@@ -1962,6 +1976,8 @@ function updateGlyphs() {
     recapEl.dataset.fam = '';
   }
   controlsEl.hidden = attract || !sim.live || sim.time > TUNING.input.controlsHintTime;
+  // In the head-on opening he runs at the top of the frame: the strip moves down out of his way.
+  controlsEl.classList.toggle('low', !!rig.angle.headOn);
   const hint = recapEl.querySelector<HTMLElement>('.padhint');
   if (hint && recapEl.dataset.fam !== fam) {
     recapEl.dataset.fam = fam;

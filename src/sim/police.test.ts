@@ -8,7 +8,7 @@ const HZ = TUNING.sim.hz;
 /** Empty road, nothing spawning on its own (tests stay under `pursuit.firstAt`). */
 function emptySim(seed = 1): Sim {
   const sim = new Sim({ seed });
-  sim.show.ratings = 100; // an empty road decays to a bust in ~13s; keep the broadcast on air
+  sim.show.ratings = 90; // an empty road decays to a bust; keep the broadcast on air (below the cap, so gains show)
   sim.track.props.length = 0;
   (sim.track as unknown as { addProps: () => void }).addProps = () => {};
   return sim;

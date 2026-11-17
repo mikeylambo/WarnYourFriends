@@ -201,9 +201,13 @@ export class CameraRig {
     this.orient(t, this.look);
     if (u >= 1) {
       this.swoop = null;
-      this.pos.copy(d.pos);
-      this.look.copy(d.look);
       this.applyLens();
+      // The look-ahead feedback sleeps during a swoop: solve it for the landing like a cut, so a speed change
+      // mid-swoop (letting go of the brake) can't land the first home frame with him too low.
+      this.leadCap = this.solveLeadCap(t);
+      const land = this.desired(t);
+      this.pos.copy(land.pos);
+      this.look.copy(land.look);
       this.orient(t, this.look);
     }
   }
@@ -605,6 +609,22 @@ export class Director {
 
   get home(): boolean {
     return this.current === TUNING.camera.homeAngle;
+  }
+
+  /**
+   * The broadcast opens on `openingAngle` (an away angle held `openingHold` s, then home as usual).
+   * Returns the angle to cut to, or null when cuts are off.
+   */
+  open(): number | null {
+    const C = TUNING.camera;
+    if (!this.enabled || this.pinned) return null;
+    this.current = C.openingAngle;
+    this.lastAwayAngle = C.openingAngle;
+    this.side = 1;
+    this.hold = C.openingHold;
+    this.awayFor = 0;
+    this.sinceAway = C.cutMinInterval - C.openingHold - C.openingQuiet;
+    return this.current;
   }
 
   /** A cut-worthy event happened. Returns whether it was accepted (pending a cut). */

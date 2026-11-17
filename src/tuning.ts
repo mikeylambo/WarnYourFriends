@@ -308,7 +308,7 @@ export const TUNING = {
     length: { highway: [5, 9], avenue: [4, 7], bridge: [3, 5], tunnel: [3, 5] } as Record<'highway' | 'avenue' | 'bridge' | 'tunnel', [number, number]>,
     weight: { highway: 2, avenue: 1.5, bridge: 1, tunnel: 1 },
     /** Extra row filter per zone (on top of props.rowChance): bridges and tunnels are a breather. */
-    rowChance: { highway: 1, avenue: 1, bridge: 0.7, tunnel: 0.65 },
+    rowChance: { highway: 1, avenue: 1, bridge: 0.85, tunnel: 0.8 },
     /** Share of Medium props per zone: avenues are carts and sawhorses; tunnels are traffic. */
     mediumWeight: { highway: 0.55, avenue: 0.75, bridge: 0.5, tunnel: 0.3 },
     /** Chance a highway segment has an overpass crossing it. */
@@ -343,10 +343,23 @@ export const TUNING = {
     suffix: { toll: 'Toll Plaza', foodtrucks: 'Night Market', works: 'Roadworks', jam: 'Rush Hour' } as Record<'toll' | 'foodtrucks' | 'works' | 'jam', string>,
   },
 
+  /**
+   * Pacing pass (Mike, 2026-11-17: "a stretch of like 6s with nothing to do"; "bored around segment 3").
+   * - `maxEmpty`: never more than this many metres without a prop row (~2.5s at Rampage, ~4s at Stride),
+   *   whatever the random rolls said (landmarks and the sign-off's clear lane still win).
+   * - Later segments get busier rather than only harsher: rows closer together and landmarks more often.
+   */
+  pacing: {
+    maxEmpty: 38,
+    /** Scales the random part of `props.rowGap` above its minimum (16m stays: closer rows can trap him between bulldozers). */
+    rowGapScale: [1, 0.88, 0.76, 0.66, 0.58] as number[],
+    landmarkEveryScale: [1, 0.9, 0.8, 0.7, 0.65] as number[],
+  },
+
   /** v0.3 props in lanes: Medium and Heavy only, densities tunable. */
   props: {
     /** No props before this distance (runway). */
-    startAt: 90,
+    startAt: 45,
     /** Gap between prop rows (m). */
     rowGap: [16, 34] as [number, number],
     /** Chance a row slot actually gets props (global density). */
@@ -523,6 +536,14 @@ export const TUNING = {
      * only on these triggers and returns home after `awayHold`.
      */
     homeAngle: 0,
+    /**
+     * Mike (2026-11-17): every broadcast opens on High Head-On (he runs down the screen at you), held for
+     * `openingHold` s, then the swoop home to Chase High. The next cut-away waits at least `openingQuiet` s
+     * after that so the swoop home isn't followed by a cut straight away. Off when camera cuts are off.
+     */
+    openingAngle: 4,
+    openingHold: 10,
+    openingQuiet: 6,
     /** Phase 0c: at least 15s between cut-aways (tighter than v0.3's 7s). */
     cutMinInterval: 15,
     /** Phase 0c: return to Chase High after this long away (s, random in range). */
@@ -610,6 +631,9 @@ export const TUNING = {
     exitClearAfter: 40,
     /** Steering onto a ramp (sign-off or fork) up to this long after passing the gore still takes it (s): forgiving, the ramp is still beside him. */
     lateTake: 0.35,
+    /** Sign-off outro: he eases onto the ramp's centreline (critically damped, this rate in 1/s), eased in over `rampFollowIn` s. */
+    rampFollow: 4,
+    rampFollowIn: 0.8,
   },
 
   /** §12 Ratings / Heat / Pin. */
@@ -625,7 +649,8 @@ export const TUNING = {
     viewersPerPoint: 18_500,
     /** §12 decay: after 3s with no gain; segment 1 rate (2.0/2.75/3.5/4.25/5.0 by segment). */
     decayAfter: 3,
-    decayRate: [2.0, 2.75, 3.5, 4.25, 5.0],
+    /** Pacing pass (2026-11-17): was 2.0/2.75/3.5/4.25/5.0; with the Rampage trickle gone, segment 4 emptied the audience in seconds of quiet. */
+    decayRate: [2.0, 2.4, 2.8, 3.2, 3.6],
     /** No decay in a segment's opening seconds (cold open, the prop-free run-up, Jog can't score): balance 2026-11-16, later segments otherwise bust at ~9s before he can reach anything. */
     decayGrace: 12,
     /** §12 variety: repeats within 10s pay ×0.5 then ×0.25; a type unseen this segment pays ×1.5. */
@@ -740,7 +765,8 @@ export const TUNING = {
      * he shakes them (they drop back for `backOff` s; a gear, a stumble and `net.slipRatings` lost), the second busts.
      */
     /** `slips`: catches shaken off before one busts him. 0 (Mike, 2026-11-17: "if they catch the giant once it's game over"). */
-    caught: { below: 4, from: 20, gap: 2.5, reach: 3.5, fill: 30, backOff: 2.5, runDown: 14, slips: 0 },
+    /** `escortGap`: the escort's lead cruiser runs him down to this centre-to-centre gap (m) while he crawls (2026-11-17). */
+    caught: { below: 4, from: 20, gap: 2.5, reach: 3.5, fill: 30, backOff: 2.5, runDown: 14, slips: 0, escortGap: 4.2 },
     /** Near-miss (§12): a pursuer passes within 1.5m without contact. */
     nearMiss: 1.5,
     /** A unit this far behind the giant has lost track (§12) and leaves. */

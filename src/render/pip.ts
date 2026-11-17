@@ -37,10 +37,19 @@ export class ViewerVideo {
     const ahead = 9 + g.speed * 0.55;
     const s = g.s + ahead;
     const w = sim.track.widthAt(s);
-    const left = Math.random() < 0.5;
-    // From an overpass or a window: high enough that his lit pool fills the background at night.
-    const p = sim.track.posAt(s, left ? -4 : w + 4, { x: 0, z: 0 });
-    this.spot.set(p.x, 6 + Math.random() * 3, p.z);
+    const inTunnel = sim.track.segmentAt(s).zone === 'tunnel' || sim.track.segmentAt(g.s).zone === 'tunnel';
+    if (inTunnel) {
+      // Mike: in a tunnel the overpass/window phone was behind the walls and roof. Here it's a driver's
+      // phone out of a car window inside the tunnel: low, in the lane furthest from his, a bit further ahead.
+      const lane = g.d < w / 2 ? w - TUNING.lanes.width / 2 : TUNING.lanes.width / 2;
+      const p = sim.track.posAt(s + 6, lane, { x: 0, z: 0 });
+      this.spot.set(p.x, 1.6 + Math.random() * 0.5, p.z);
+    } else {
+      const left = Math.random() < 0.5;
+      // From an overpass or a window: high enough that his lit pool fills the background at night.
+      const p = sim.track.posAt(s, left ? -4 : w + 4, { x: 0, z: 0 });
+      this.spot.set(p.x, 6 + Math.random() * 3, p.z);
+    }
     this.t = C.pipTime;
     this.look.set(0, 0, 0);
     this.cooldown = C.pipGap;

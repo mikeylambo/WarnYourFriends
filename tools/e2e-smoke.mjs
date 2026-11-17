@@ -126,13 +126,19 @@ try {
     const sp = await page.evaluate(() => ({ r: window.__GAME.sfxPlace(10, 0), l: window.__GAME.sfxPlace(-10, 0), far: window.__GAME.sfxPlace(0, 120) }));
     if (!(sp.r.pan > 0.3 && sp.l.pan < -0.3 && sp.far.gain < 0.3 && sp.r.gain > 0.8)) fail(`spatial mix (${JSON.stringify(sp)})`);
     else ok(`spatial mix: right pans ${sp.r.pan.toFixed(2)}, left ${sp.l.pan.toFixed(2)}, 120m ahead at ${(sp.far.gain * 100).toFixed(0)}% level`);
-    // v0.3: A changes lane left; D changes lane right.
+    // v0.3: A moves him screen-left. The broadcast opens on High Head-On (he runs down the screen at you),
+    // where screen-left is his right: one lane up in lane numbers. In the chase angles it's one lane down.
     const lane0 = await page.evaluate(() => window.__GAME.state().lane);
+    const openAng = await page.evaluate(() => window.__GAME.director().current);
+    if (openAng !== 4) fail(`broadcast opened on angle ${openAng}, expected High Head-On (4)`);
+    else ok('broadcast opens on High Head-On');
+    const headOn = openAng === 3 || openAng === 4;
     await page.keyboard.press('KeyA');
     await page.waitForTimeout(600);
     const s = await page.evaluate(() => window.__GAME.state());
-    if (s.lane !== lane0 - 1) fail(`A did not change lane (${lane0} → ${s.lane})`);
-    else ok(`A changes lane ${lane0 + 1} → ${s.lane + 1}`);
+    const want = headOn ? lane0 + 1 : lane0 - 1;
+    if (s.lane !== want) fail(`A did not move him screen-left (${lane0} → ${s.lane}, wanted ${want})`);
+    else ok(`A moves him screen-left in the opening shot: lane ${lane0 + 1} → ${s.lane + 1}`);
     if (s.speed < 2) fail(`speed below floor (${s.speed})`);
     await page.keyboard.press('Escape');
     // Pause lands on the next rendered frame; software GL runs ~12 fps, so wait for it (≤1s) rather than a fixed 100ms.

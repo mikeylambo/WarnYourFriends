@@ -115,7 +115,15 @@ export class Track {
   private propId = 0;
   private readonly rng: Rng;
 
-  constructor(readonly seed: number) {
+  /** Last row actually placed (m), for TUNING.pacing.maxEmpty. */
+  private lastRowAt: number = TUNING.props.startAt;
+  private readonly gapScale: number;
+  private readonly landmarkScale: number;
+
+  constructor(readonly seed: number, segment = 0) {
+    const Pc = TUNING.pacing;
+    this.gapScale = Pc.rowGapScale[Math.min(segment, Pc.rowGapScale.length - 1)];
+    this.landmarkScale = Pc.landmarkEveryScale[Math.min(segment, Pc.landmarkEveryScale.length - 1)];
     this.rng = new Rng((seed ^ 0x7f4a7c15) >>> 0);
     const T = TUNING.track;
     this.nextMerge = T.runwaySegments + this.rng.int(T.mergeEvery[0], T.mergeEvery[1]);
@@ -207,7 +215,7 @@ export class Track {
         kind = 'straight';
         h1 = h0;
         landmarkName = `${rng.pick(TUNING.zones.names.first)} ${TUNING.landmarks.suffix[landmark]}`;
-        this.nextLandmark = index + rng.int(TUNING.landmarks.every[0], TUNING.landmarks.every[1]);
+        this.nextLandmark = index + Math.max(3, Math.round(rng.int(TUNING.landmarks.every[0], TUNING.landmarks.every[1]) * this.landmarkScale));
       }
     }
     const overpass = !landmark && zone === 'highway' && kind !== 'merge' && index >= T.runwaySegments && rng.chance(Z.overpassChance);
@@ -278,6 +286,7 @@ export class Track {
     this.zoneJustStarted = true;
     this.forceLanes = Z.lanes[zone];
     this.nextRowS = propsFrom;
+    this.lastRowAt = propsFrom;
   }
 
   /** A landmark that suits this zone (weighted), or none. */
@@ -371,9 +380,9 @@ export class Track {
   /** Lane props for one segment: rows that always leave at least one lane open. */
   private addProps(seg: Segment) {
     const P = TUNING.props;
-    if (seg.index < TUNING.track.runwaySegments) return;
     if (seg.landmark) {
       this.addLandmarkProps(seg);
+      this.lastRowAt = seg.s0 + seg.length;
       // No random rows inside a landmark, and a short breath after it.
       this.nextRowS = Math.max(this.nextRowS, seg.s0 + seg.length + P.rowGap[0]);
       return;
@@ -382,12 +391,20 @@ export class Track {
     const end = seg.s0 + seg.length;
     while (this.nextRowS < end) {
       const rowS = this.nextRowS;
-      this.nextRowS += rng.range(P.rowGap[0], P.rowGap[1]);
-      if (rowS < seg.s0 || !rng.chance(P.rowChance)) continue;
+      // Later segments shorten the random part of the gap; the minimum stays (rows closer than that can
+      // stagger two bulldozers into a trap with no lane change between them: Law 1).
+      this.nextRowS += P.rowGap[0] + (rng.range(P.rowGap[0], P.rowGap[1]) - P.rowGap[0]) * this.gapScale;
+      // ...and the next slot never lands past the `maxEmpty` mark (a skipped roll can't leave a long hole).
+      this.nextRowS = Math.max(rowS + P.rowGap[0], Math.min(this.nextRowS, this.lastRowAt + TUNING.pacing.maxEmpty));
+      if (rowS < seg.s0) continue;
+      // Pacing: the chance rolls can skip a row, but never leave more than `maxEmpty` metres of nothing.
+      const overdue = rowS - this.lastRowAt >= TUNING.pacing.maxEmpty;
+      const skip = !rng.chance(P.rowChance) || !rng.chance(TUNING.zones.rowChance[seg.zone]);
+      if (skip && !overdue) continue;
       // Only lanes usable through the whole row, so nothing sits in a closing merge lane.
-      if (!rng.chance(TUNING.zones.rowChance[seg.zone])) continue;
       const lanes = Math.min(this.lanesAt(rowS - 6), this.lanesAt(rowS), this.lanesAt(Math.min(rowS + 6, end - 0.01)));
       if (lanes < 2) continue;
+      this.lastRowAt = rowS;
       const maxBlocked = Math.max(1, Math.min(lanes - 1, Math.floor(lanes * P.maxBlockedShare)));
       const k = rng.int(1, maxBlocked);
       const order = Array.from({ length: lanes }, (_, i) => i);

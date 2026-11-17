@@ -71,7 +71,19 @@ export class Escort {
   }
 
   /** Returns ids of cruisers that joined this tick. */
+  /**
+   * Caught, by the escort (Mike, 2026-11-17: "sometimes I can still hold down for 5-10s and not get caught"):
+   * only pursuit cruisers could catch him, and often none was near. Now while he crawls (under `caught.below`)
+   * the escort's lead cruiser runs him down to `escortGap` m behind, nose to his heels, and counts as on his tail.
+   */
+  tailing(g: GiantState): boolean {
+    const C = TUNING.pursuit.caught;
+    return this.cruisers.some((c) => c.active && g.s - c.s <= C.escortGap + C.reach && Math.abs(c.d - g.d) < TUNING.lanes.width);
+  }
+
   step(dt: number, time: number, g: GiantState): number[] {
+    const C = TUNING.pursuit.caught;
+    const crawl = g.speed < C.below && g.air <= 0;
     const E = TUNING.escort;
     const joined: number[] = [];
     const S = this.pathS;
@@ -99,22 +111,35 @@ export class Escort {
         continue;
       }
       const gap = g.s - c.s;
-      const want = g.speed + clamp((gap - c.trail) / E.holdTau, -E.closeSpeed, E.closeSpeed);
+      // Crawling: the lead cruiser runs him down (the others close up behind it).
+      const lead = crawl && c.id === this.leadId(g);
+      const trail = lead ? C.escortGap : c.trail;
+      const close = crawl ? C.runDown : E.closeSpeed;
+      const want = g.speed + clamp((gap - trail) / E.holdTau, -close, close);
       c.speed += (want - c.speed) * Math.min(1, dt / 0.25);
       c.speed = Math.max(0, c.speed);
       c.s += c.speed * dt;
       // Never catch up: hard floor on the gap.
-      if (g.s - c.s < E.minGap) {
-        c.s = g.s - E.minGap;
+      // Never closer than the run-down gap; inside the usual floor (after a crawl) it drops back smoothly, no jump.
+      if (g.s - c.s < C.escortGap) {
+        c.s = g.s - C.escortGap;
         c.speed = Math.min(c.speed, g.speed);
-      }
+      } else if (!lead && g.s - c.s < E.minGap) c.speed = Math.min(c.speed, g.speed * 0.85);
       const base = this.pathAt(c.s);
-      const target = c.side !== 0 && !this.blocked(c.s, base + c.side) ? c.side : 0;
+      const target = !lead && c.side !== 0 && !this.blocked(c.s, base + c.side) ? c.side : 0;
       c.off += clamp(target - c.off, -E.sideSpeed * dt, E.sideSpeed * dt);
       if (c.off !== 0 && this.blocked(c.s, base + c.off)) c.off += clamp(-c.off, -E.sideSpeed * 2 * dt, E.sideSpeed * 2 * dt);
       const w = this.track.widthAt(c.s);
       c.d = clamp(base + c.off, 1.2, Math.max(1.2, w - 1.2));
     }
     return joined;
+  }
+
+  /** The active cruiser closest behind him. */
+  private leadId(g: GiantState): number {
+    let id = -1;
+    let best = Infinity;
+    for (const c of this.cruisers) if (c.active && g.s - c.s < best) { best = g.s - c.s; id = c.id; }
+    return id;
   }
 }

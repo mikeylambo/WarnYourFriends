@@ -353,6 +353,7 @@ html.touch #abil { display: none; }
 /* Button labels per device (src/glyphs.ts): controls strip at a segment's start, hints under cards. */
 #controls { position: absolute; left: 50%; top: calc(64px + env(safe-area-inset-top)); transform: translateX(-50%); display: flex; gap: 14px; padding: 6px 12px; background: rgba(10, 8, 20, 0.72); color: var(--bone); font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; white-space: nowrap; pointer-events: none; }
 #controls[hidden] { display: none; }
+#controls.low { top: auto; bottom: calc(var(--d-lt, 96px) + 64px + env(safe-area-inset-bottom)); }
 #controls span { display: flex; align-items: center; gap: 6px; }
 #controls kbd, #recap .padhint kbd { font: inherit; font-weight: 700; border: 1px solid currentColor; border-radius: 3px; padding: 0 5px; min-width: 1.2em; text-align: center; text-transform: none; }
 #recap .padhint { margin-top: 10px; font-size: 12px; opacity: 0.7; display: flex; gap: 6px; align-items: center; justify-content: center; }
@@ -596,6 +597,10 @@ html[data-palette='network'] {
 #live b { background: var(--c-red); padding: 0 24px 0 32px; font: italic 900 30px/1 var(--f-head); letter-spacing: 0.03em; clip-path: polygon(0 0, 100% 0, calc(100% - 14px) 100%, 0 100%); }
 #live #clock, #live #segno { background: var(--c-panel); padding: 0 22px; font: 900 34px/1 var(--f-num); letter-spacing: 0.02em; clip-path: polygon(14px 0, 100% 0, calc(100% - 14px) 100%, 0 100%); }
 #live #segno { font-size: 24px; }
+/* Cut tag: the camera ID rides the LIVE row for 1.6s after a cut (it used to sit bottom-left, on the chyron's kicker). */
+#live #camtag { position: static; display: flex; align-items: center; margin: 0; background: var(--c-red); color: var(--c-text); padding: 0 22px; font: italic 800 14px/1 var(--f-head); letter-spacing: 0.2em; border: 0; white-space: nowrap; clip-path: polygon(14px 0, 100% 0, calc(100% - 14px) 100%, 0 100%); opacity: 0; transform: translateX(-8px); transition: opacity 0.25s, transform 0.25s; }
+#live #camtag:empty { display: none; }
+#live #camtag.show { opacity: 1; transform: none; }
 #live #clock.count { background: var(--c-paper); color: var(--c-red); }
 
 /* --- One primary number (2026-11-16): the score in oversized numerals; Ratings is the audience bar under it --- */

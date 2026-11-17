@@ -104,7 +104,7 @@ export class Sim {
     this.seed = opts.seed;
     this.growth = opts.growth ?? false;
     this.rng = new Rng(opts.seed ^ 0x51ed);
-    this.track = new Track(opts.seed);
+    this.track = new Track(opts.seed, opts.segment ?? 0);
     this.escort = new Escort(opts.seed, this.track);
     this.pursuit = new Pursuit(opts.seed, this);
     this.upgrades = new Set(opts.upgrades ?? []);
@@ -344,7 +344,7 @@ export class Sim {
     const g = this.giant;
     const C = TUNING.pursuit.caught;
     if (g.speed >= C.below || g.air > 0) return false;
-    return this.pursuit.onHisTail().length > 0;
+    return this.pursuit.onHisTail().length > 0 || this.escort.tailing(g);
   }
 
   /** v0.3 box-in: both neighbouring lanes blocked and a unit within 8m ahead in yours. */
@@ -998,8 +998,27 @@ export class Sim {
         best = lane;
       }
     }
-    // Boxed on both sides (a Police Net): he stays in his lane behind whatever stopped him. That's the box.
-    if (best >= 0 && room <= 0) return here;
+    // Boxed on both sides by a Police Net: he stays in his lane behind whatever stopped him. That's the box.
+    // Boxed by anything else (stalled cars staggered beside and ahead of him at Jog): Law 1, he never stops.
+    // He bulls through what's in front of him if it isn't a bulldozer or police; against a bulldozer, through
+    // what blocks the side lane instead (the stumble and lost gear already paid for it).
+    if (best >= 0 && room <= 0) {
+      const force = (x: Prop) => {
+        x.alive = false;
+        this.emit({ type: 'smash', propId: x.id, cls: x.cls, mat: x.mat, s: x.s, d: x.d, across: false, speed: g.speed });
+      };
+      // A stalled car in front is never the Net's box (that's its armoured truck), even with a flanker alongside.
+      if (!(p as Unit).unit && p.cls !== 'immovable' && p.alive) {
+        force(p);
+        return here;
+      }
+      if (this.pursuit.solidBetween(g.s - 10, g.s + 10).some((u) => u.unit === 'net' && u.phase !== 'leave')) return here;
+      const c = this.track.laneCenter(best);
+      const side = this.track.propsBetween(g.s - r0 - 4, g.s + r0 + 6).filter((x) => x.alive && Math.abs(x.d - c) < x.hw + r0);
+      if (side.some((x) => x.cls === 'immovable') || this.pursuit.solidBetween(g.s - r0 - 4, g.s + r0 + 6).some((u) => Math.abs(u.d - c) < u.hw + r0 && u.phase !== 'leave' && u.unit !== 'cruiser' && u.unit !== 'rolling')) return here;
+      for (const x of side) if (CLASS_RANK[x.cls] > this.smashRank()) force(x);
+      return best;
+    }
     return best >= 0 ? best : this.track.laneUsable(g.prevLane, g.s) && !solidBeside(g.prevLane) ? g.prevLane : here;
   }
 

@@ -210,7 +210,7 @@ var TUNING = {
     length: { highway: [5, 9], avenue: [4, 7], bridge: [3, 5], tunnel: [3, 5] },
     weight: { highway: 2, avenue: 1.5, bridge: 1, tunnel: 1 },
     /** Extra row filter per zone (on top of props.rowChance): bridges and tunnels are a breather. */
-    rowChance: { highway: 1, avenue: 1, bridge: 0.7, tunnel: 0.65 },
+    rowChance: { highway: 1, avenue: 1, bridge: 0.85, tunnel: 0.8 },
     /** Share of Medium props per zone: avenues are carts and sawhorses; tunnels are traffic. */
     mediumWeight: { highway: 0.55, avenue: 0.75, bridge: 0.5, tunnel: 0.3 },
     /** Chance a highway segment has an overpass crossing it. */
@@ -243,10 +243,22 @@ var TUNING = {
     /** Invented names for the headlines (the zone's first-name bank supplies the rest). */
     suffix: { toll: "Toll Plaza", foodtrucks: "Night Market", works: "Roadworks", jam: "Rush Hour" }
   },
+  /**
+   * Pacing pass (Mike, 2026-11-17: "a stretch of like 6s with nothing to do"; "bored around segment 3").
+   * - `maxEmpty`: never more than this many metres without a prop row (~2.5s at Rampage, ~4s at Stride),
+   *   whatever the random rolls said (landmarks and the sign-off's clear lane still win).
+   * - Later segments get busier rather than only harsher: rows closer together and landmarks more often.
+   */
+  pacing: {
+    maxEmpty: 38,
+    /** Scales the random part of `props.rowGap` above its minimum (16m stays: closer rows can trap him between bulldozers). */
+    rowGapScale: [1, 0.88, 0.76, 0.66, 0.58],
+    landmarkEveryScale: [1, 0.9, 0.8, 0.7, 0.65]
+  },
   /** v0.3 props in lanes: Medium and Heavy only, densities tunable. */
   props: {
     /** No props before this distance (runway). */
-    startAt: 90,
+    startAt: 45,
     /** Gap between prop rows (m). */
     rowGap: [16, 34],
     /** Chance a row slot actually gets props (global density). */
@@ -422,6 +434,14 @@ var TUNING = {
      * only on these triggers and returns home after `awayHold`.
      */
     homeAngle: 0,
+    /**
+     * Mike (2026-11-17): every broadcast opens on High Head-On (he runs down the screen at you), held for
+     * `openingHold` s, then the swoop home to Chase High. The next cut-away waits at least `openingQuiet` s
+     * after that so the swoop home isn't followed by a cut straight away. Off when camera cuts are off.
+     */
+    openingAngle: 4,
+    openingHold: 10,
+    openingQuiet: 6,
     /** Phase 0c: at least 15s between cut-aways (tighter than v0.3's 7s). */
     cutMinInterval: 15,
     /** Phase 0c: return to Chase High after this long away (s, random in range). */
@@ -506,7 +526,10 @@ var TUNING = {
     /** ...and this far past it: he crosses the exit lane while the ramp pulls clear (no collisions after sign-off). */
     exitClearAfter: 40,
     /** Steering onto a ramp (sign-off or fork) up to this long after passing the gore still takes it (s): forgiving, the ramp is still beside him. */
-    lateTake: 0.35
+    lateTake: 0.35,
+    /** Sign-off outro: he eases onto the ramp's centreline (critically damped, this rate in 1/s), eased in over `rampFollowIn` s. */
+    rampFollow: 4,
+    rampFollowIn: 0.8
   },
   /** §12 Ratings / Heat / Pin. */
   show: {
@@ -521,7 +544,8 @@ var TUNING = {
     viewersPerPoint: 18500,
     /** §12 decay: after 3s with no gain; segment 1 rate (2.0/2.75/3.5/4.25/5.0 by segment). */
     decayAfter: 3,
-    decayRate: [2, 2.75, 3.5, 4.25, 5],
+    /** Pacing pass (2026-11-17): was 2.0/2.75/3.5/4.25/5.0; with the Rampage trickle gone, segment 4 emptied the audience in seconds of quiet. */
+    decayRate: [2, 2.4, 2.8, 3.2, 3.6],
     /** No decay in a segment's opening seconds (cold open, the prop-free run-up, Jog can't score): balance 2026-11-16, later segments otherwise bust at ~9s before he can reach anything. */
     decayGrace: 12,
     /** §12 variety: repeats within 10s pay ×0.5 then ×0.25; a type unseen this segment pays ×1.5. */
@@ -660,7 +684,8 @@ var TUNING = {
      * he shakes them (they drop back for `backOff` s; a gear, a stumble and `net.slipRatings` lost), the second busts.
      */
     /** `slips`: catches shaken off before one busts him. 0 (Mike, 2026-11-17: "if they catch the giant once it's game over"). */
-    caught: { below: 4, from: 20, gap: 2.5, reach: 3.5, fill: 30, backOff: 2.5, runDown: 14, slips: 0 },
+    /** `escortGap`: the escort's lead cruiser runs him down to this centre-to-centre gap (m) while he crawls (2026-11-17). */
+    caught: { below: 4, from: 20, gap: 2.5, reach: 3.5, fill: 30, backOff: 2.5, runDown: 14, slips: 0, escortGap: 4.2 },
     /** Near-miss (§12): a pursuer passes within 1.5m without contact. */
     nearMiss: 1.5,
     /** A unit this far behind the giant has lost track (§12) and leaves. */
@@ -939,8 +964,11 @@ var HEAVY = ["car", "car", "van", "barricade"];
 var MIN_USABLE_LANE_WIDTH = 2.8;
 var smoothstep = (t) => t * t * (3 - 2 * t);
 var Track = class {
-  constructor(seed) {
+  constructor(seed, segment = 0) {
     this.seed = seed;
+    const Pc = TUNING.pacing;
+    this.gapScale = Pc.rowGapScale[Math.min(segment, Pc.rowGapScale.length - 1)];
+    this.landmarkScale = Pc.landmarkEveryScale[Math.min(segment, Pc.landmarkEveryScale.length - 1)];
     this.rng = new Rng((seed ^ 2135587861) >>> 0);
     const T = TUNING.track;
     this.nextMerge = T.runwaySegments + this.rng.int(T.mergeEvery[0], T.mergeEvery[1]);
@@ -978,6 +1006,10 @@ var Track = class {
   }
   propId = 0;
   rng;
+  /** Last row actually placed (m), for TUNING.pacing.maxEmpty. */
+  lastRowAt = TUNING.props.startAt;
+  gapScale;
+  landmarkScale;
   get end() {
     const last = this.segments[this.segments.length - 1];
     return last ? last.s0 + last.length : 0;
@@ -1051,7 +1083,7 @@ var Track = class {
         kind = "straight";
         h1 = h0;
         landmarkName = `${rng.pick(TUNING.zones.names.first)} ${TUNING.landmarks.suffix[landmark]}`;
-        this.nextLandmark = index + rng.int(TUNING.landmarks.every[0], TUNING.landmarks.every[1]);
+        this.nextLandmark = index + Math.max(3, Math.round(rng.int(TUNING.landmarks.every[0], TUNING.landmarks.every[1]) * this.landmarkScale));
       }
     }
     const overpass = !landmark && zone === "highway" && kind !== "merge" && index >= T.runwaySegments && rng.chance(Z.overpassChance);
@@ -1116,6 +1148,7 @@ var Track = class {
     this.zoneJustStarted = true;
     this.forceLanes = Z.lanes[zone];
     this.nextRowS = propsFrom;
+    this.lastRowAt = propsFrom;
   }
   /** A landmark that suits this zone (weighted), or none. */
   pickLandmark(zone) {
@@ -1195,9 +1228,9 @@ var Track = class {
   /** Lane props for one segment: rows that always leave at least one lane open. */
   addProps(seg) {
     const P = TUNING.props;
-    if (seg.index < TUNING.track.runwaySegments) return;
     if (seg.landmark) {
       this.addLandmarkProps(seg);
+      this.lastRowAt = seg.s0 + seg.length;
       this.nextRowS = Math.max(this.nextRowS, seg.s0 + seg.length + P.rowGap[0]);
       return;
     }
@@ -1205,11 +1238,15 @@ var Track = class {
     const end = seg.s0 + seg.length;
     while (this.nextRowS < end) {
       const rowS = this.nextRowS;
-      this.nextRowS += rng.range(P.rowGap[0], P.rowGap[1]);
-      if (rowS < seg.s0 || !rng.chance(P.rowChance)) continue;
-      if (!rng.chance(TUNING.zones.rowChance[seg.zone])) continue;
+      this.nextRowS += P.rowGap[0] + (rng.range(P.rowGap[0], P.rowGap[1]) - P.rowGap[0]) * this.gapScale;
+      this.nextRowS = Math.max(rowS + P.rowGap[0], Math.min(this.nextRowS, this.lastRowAt + TUNING.pacing.maxEmpty));
+      if (rowS < seg.s0) continue;
+      const overdue = rowS - this.lastRowAt >= TUNING.pacing.maxEmpty;
+      const skip = !rng.chance(P.rowChance) || !rng.chance(TUNING.zones.rowChance[seg.zone]);
+      if (skip && !overdue) continue;
       const lanes = Math.min(this.lanesAt(rowS - 6), this.lanesAt(rowS), this.lanesAt(Math.min(rowS + 6, end - 0.01)));
       if (lanes < 2) continue;
+      this.lastRowAt = rowS;
       const maxBlocked = Math.max(1, Math.min(lanes - 1, Math.floor(lanes * P.maxBlockedShare)));
       const k = rng.int(1, maxBlocked);
       const order = Array.from({ length: lanes }, (_, i) => i);
@@ -1360,7 +1397,18 @@ var Escort = class {
     return false;
   }
   /** Returns ids of cruisers that joined this tick. */
+  /**
+   * Caught, by the escort (Mike, 2026-11-17: "sometimes I can still hold down for 5-10s and not get caught"):
+   * only pursuit cruisers could catch him, and often none was near. Now while he crawls (under `caught.below`)
+   * the escort's lead cruiser runs him down to `escortGap` m behind, nose to his heels, and counts as on his tail.
+   */
+  tailing(g) {
+    const C = TUNING.pursuit.caught;
+    return this.cruisers.some((c) => c.active && g.s - c.s <= C.escortGap + C.reach && Math.abs(c.d - g.d) < TUNING.lanes.width);
+  }
   step(dt, time, g) {
+    const C = TUNING.pursuit.caught;
+    const crawl = g.speed < C.below && g.air <= 0;
     const E = TUNING.escort;
     const joined = [];
     const S = this.pathS;
@@ -1387,22 +1435,35 @@ var Escort = class {
         continue;
       }
       const gap = g.s - c.s;
-      const want = g.speed + clamp((gap - c.trail) / E.holdTau, -E.closeSpeed, E.closeSpeed);
+      const lead = crawl && c.id === this.leadId(g);
+      const trail = lead ? C.escortGap : c.trail;
+      const close = crawl ? C.runDown : E.closeSpeed;
+      const want = g.speed + clamp((gap - trail) / E.holdTau, -close, close);
       c.speed += (want - c.speed) * Math.min(1, dt / 0.25);
       c.speed = Math.max(0, c.speed);
       c.s += c.speed * dt;
-      if (g.s - c.s < E.minGap) {
-        c.s = g.s - E.minGap;
+      if (g.s - c.s < C.escortGap) {
+        c.s = g.s - C.escortGap;
         c.speed = Math.min(c.speed, g.speed);
-      }
+      } else if (!lead && g.s - c.s < E.minGap) c.speed = Math.min(c.speed, g.speed * 0.85);
       const base = this.pathAt(c.s);
-      const target = c.side !== 0 && !this.blocked(c.s, base + c.side) ? c.side : 0;
+      const target = !lead && c.side !== 0 && !this.blocked(c.s, base + c.side) ? c.side : 0;
       c.off += clamp(target - c.off, -E.sideSpeed * dt, E.sideSpeed * dt);
       if (c.off !== 0 && this.blocked(c.s, base + c.off)) c.off += clamp(-c.off, -E.sideSpeed * 2 * dt, E.sideSpeed * 2 * dt);
       const w = this.track.widthAt(c.s);
       c.d = clamp(base + c.off, 1.2, Math.max(1.2, w - 1.2));
     }
     return joined;
+  }
+  /** The active cruiser closest behind him. */
+  leadId(g) {
+    let id = -1;
+    let best = Infinity;
+    for (const c of this.cruisers) if (c.active && g.s - c.s < best) {
+      best = g.s - c.s;
+      id = c.id;
+    }
+    return id;
   }
 };
 
@@ -2677,7 +2738,7 @@ var Sim = class {
     this.seed = opts.seed;
     this.growth = opts.growth ?? false;
     this.rng = new Rng(opts.seed ^ 20973);
-    this.track = new Track(opts.seed);
+    this.track = new Track(opts.seed, opts.segment ?? 0);
     this.escort = new Escort(opts.seed, this.track);
     this.pursuit = new Pursuit(opts.seed, this);
     this.upgrades = new Set(opts.upgrades ?? []);
@@ -2895,7 +2956,7 @@ var Sim = class {
     const g = this.giant;
     const C = TUNING.pursuit.caught;
     if (g.speed >= C.below || g.air > 0) return false;
-    return this.pursuit.onHisTail().length > 0;
+    return this.pursuit.onHisTail().length > 0 || this.escort.tailing(g);
   }
   /** v0.3 box-in: both neighbouring lanes blocked and a unit within 8m ahead in yours. */
   boxedIn() {
@@ -3495,7 +3556,22 @@ var Sim = class {
         best = lane;
       }
     }
-    if (best >= 0 && room <= 0) return here;
+    if (best >= 0 && room <= 0) {
+      const force = (x) => {
+        x.alive = false;
+        this.emit({ type: "smash", propId: x.id, cls: x.cls, mat: x.mat, s: x.s, d: x.d, across: false, speed: g.speed });
+      };
+      if (!p.unit && p.cls !== "immovable" && p.alive) {
+        force(p);
+        return here;
+      }
+      if (this.pursuit.solidBetween(g.s - 10, g.s + 10).some((u) => u.unit === "net" && u.phase !== "leave")) return here;
+      const c = this.track.laneCenter(best);
+      const side = this.track.propsBetween(g.s - r0 - 4, g.s + r0 + 6).filter((x) => x.alive && Math.abs(x.d - c) < x.hw + r0);
+      if (side.some((x) => x.cls === "immovable") || this.pursuit.solidBetween(g.s - r0 - 4, g.s + r0 + 6).some((u) => Math.abs(u.d - c) < u.hw + r0 && u.phase !== "leave" && u.unit !== "cruiser" && u.unit !== "rolling")) return here;
+      for (const x of side) if (CLASS_RANK[x.cls] > this.smashRank()) force(x);
+      return best;
+    }
     return best >= 0 ? best : this.track.laneUsable(g.prevLane, g.s) && !solidBeside(g.prevLane) ? g.prevLane : here;
   }
   /** Metres of lane ahead of him before something he can't smash (props and police), up to 60m. */

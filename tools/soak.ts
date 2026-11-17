@@ -97,6 +97,12 @@ for (let seed = 1; seed <= seeds; seed++) {
   const cutsOff = OFF_SEEDS.has(seed);
   director.enabled = !cutsOff;
   const dt = sim.dt;
+  // Every broadcast opens on the opening angle (High Head-On), held like a cut-away, then swoops home.
+  const opening = director.open();
+  if (opening !== null) {
+    rig.cut(opening, director.side, target());
+    lastAway = 0;
+  }
 
   const seenUnits = new Set<number>();
   let segNets = 0;
@@ -267,7 +273,8 @@ for (let seed = 1; seed <= seeds; seed++) {
       if (!c.active) continue;
       const gap = g.s - c.s;
       esc.minGap = Math.min(esc.minGap, gap);
-      if (gap < TUNING.escort.minGap - 1e-6) {
+      // Caught: while he crawls the lead cruiser runs him down to `caught.escortGap` (then drops back to the trail).
+      if (gap < TUNING.pursuit.caught.escortGap - 0.05) {
         esc.ahead++;
         fail(`seed ${seed}: cruiser ${c.id} within ${gap.toFixed(2)}m at tick ${i}`);
       }

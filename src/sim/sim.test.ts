@@ -227,7 +227,9 @@ describe('lanes', () => {
       const sim = emptySim(3);
       const g = sim.giant;
       sim.track.ensure(2000);
-      const s = 600;
+      // A stretch with 3+ lanes from 30m before to 30m after (the track's RNG decides where).
+      let s = 600;
+      while ([-30, -12, 0, 12, 30].some((o) => sim.track.lanesAt(s + o) < 3)) s += 10;
       const lanes = sim.track.lanesAt(s);
       expect(lanes).toBeGreaterThanOrEqual(3);
       // His lane: a bulldozer; next lane over: a barrier (same row, lane 0 open). 7.8m on: cars in lanes 0 and 1 (lane 2 open).
