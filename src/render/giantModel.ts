@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { clone as cloneSkinned } from 'three/examples/jsm/utils/SkeletonUtils.js';
 import type { GaitFrame, Vec3 } from '../anim/gait';
-import { TUNING } from '../tuning';
+import { TUNING, type OutfitId } from '../tuning';
 import { PALETTE } from './palette';
 import { rimToonMap } from './toon';
 import runClips from '../assets/giant/runs.json';
@@ -73,6 +73,30 @@ export class GiantModel {
   readonly group = new THREE.Group();
   loaded = false;
   private bones = new Map<string, THREE.Bone>();
+  /** Outfits (Awards, 2026-11-17): the toon materials over the Meshy texture, and each recolored texture once made. */
+  private skins: { mat: THREE.MeshToonMaterial; original: THREE.Texture }[] = [];
+  private outfit: OutfitId = 'classic';
+
+  /** Wear an outfit: a recolor of the Meshy texture (purple → the outfit's hue; the bone plates optionally tinted). */
+  setOutfit(id: OutfitId) {
+    this.outfit = id;
+    for (const s of this.skins) {
+      let map = s.original;
+      if (id !== 'classic') {
+        // Made once per outfit and shared (every new broadcast builds a new giant view).
+        let m = OUTFIT_MAPS.get(id);
+        if (!m) {
+          m = recolor(s.original, TUNING.outfits[id]);
+          OUTFIT_MAPS.set(id, m);
+        }
+        map = m;
+      }
+      if (s.mat.map !== map) {
+        s.mat.map = map;
+        s.mat.needsUpdate = true;
+      }
+    }
+  }
   private rest = new Map<THREE.Bone, { local: THREE.Quaternion; world: THREE.Quaternion; dir: THREE.Vector3 }>();
   private legs: Chain[] = [];
   private arms: Chain[] = [];
@@ -194,6 +218,7 @@ export class GiantModel {
       const src = mesh.material as THREE.MeshStandardMaterial;
       if (src.map) src.map.colorSpace = THREE.SRGBColorSpace;
       const mat = src.map ? rimToonMap(src.map) : new THREE.MeshToonMaterial({ color: PALETTE.giantBody });
+      if (src.map) this.skins.push({ mat, original: src.map });
       mat.color.setScalar(M.tint); // §23: the giant stays the darkest thing on screen
       mesh.material = mat;
       mesh.frustumCulled = false;
@@ -219,6 +244,7 @@ export class GiantModel {
       hull.frustumCulled = false;
       mesh.parent!.add(hull);
     }
+    if (this.outfit !== 'classic') this.setOutfit(this.outfit); // chosen before the model finished loading
   }
 
   /** Set a bone's world rotation (parents already posed). */
@@ -321,4 +347,77 @@ export class GiantModel {
       c.lower.updateMatrixWorld(true);
     }
   }
+}
+
+
+const OUTFIT_MAPS = new Map<OutfitId, THREE.Texture>();
+
+/**
+ * Recolor the giant's texture for an outfit on a canvas (once per outfit): the plum body and cape (hues 250–335°)
+ * take the outfit's hue, saturation and lightness; the cream bone plates (pale, low saturation) blend toward `plate`
+ * when it's set. Skin, hair and everything else stay as painted.
+ */
+function recolor(src: THREE.Texture, o: { hue: number; sat: number; light: number; plate: number | null; plateMix: number }): THREE.Texture {
+  const img = src.image as CanvasImageSource & { width: number; height: number };
+  const c = document.createElement('canvas');
+  c.width = img.width;
+  c.height = img.height;
+  const x = c.getContext('2d', { willReadFrequently: true })!;
+  x.drawImage(img, 0, 0);
+  const d = x.getImageData(0, 0, c.width, c.height);
+  const px = d.data;
+  const pr = o.plate === null ? 0 : ((o.plate >> 16) & 255) / 255;
+  const pg = o.plate === null ? 0 : ((o.plate >> 8) & 255) / 255;
+  const pb = o.plate === null ? 0 : (o.plate & 255) / 255;
+  for (let i = 0; i < px.length; i += 4) {
+    const r = px[i] / 255;
+    const g = px[i + 1] / 255;
+    const b = px[i + 2] / 255;
+    const max = Math.max(r, g, b);
+    const min = Math.min(r, g, b);
+    const l = (max + min) / 2;
+    const dlt = max - min;
+    const s = dlt === 0 ? 0 : dlt / (1 - Math.abs(2 * l - 1));
+    let h = 0;
+    if (dlt) h = max === r ? 60 * (((g - b) / dlt + 6) % 6) : max === g ? 60 * ((b - r) / dlt + 2) : 60 * ((r - g) / dlt + 4);
+    let nr = r;
+    let ng = g;
+    let nb = b;
+    if (s > 0.12 && h >= 250 && h <= 335) {
+      // Purple cloth → the outfit's colour.
+      const [hr, hg, hb] = hsl(o.hue, Math.min(1, s * o.sat), Math.min(1, l * o.light));
+      nr = hr;
+      ng = hg;
+      nb = hb;
+    } else if (o.plate !== null && s < 0.6 && l > 0.6) {
+      // The bone plates → toward the plate colour, keeping their shading.
+      const k = o.plateMix;
+      nr = r * (1 - k) + pr * l * k * 1.15;
+      ng = g * (1 - k) + pg * l * k * 1.15;
+      nb = b * (1 - k) + pb * l * k * 1.15;
+    }
+    px[i] = Math.round(Math.min(1, nr) * 255);
+    px[i + 1] = Math.round(Math.min(1, ng) * 255);
+    px[i + 2] = Math.round(Math.min(1, nb) * 255);
+  }
+  x.putImageData(d, 0, 0);
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = src.colorSpace;
+  t.flipY = src.flipY;
+  t.wrapS = src.wrapS;
+  t.wrapT = src.wrapT;
+  t.magFilter = src.magFilter;
+  t.minFilter = src.minFilter;
+  t.anisotropy = src.anisotropy;
+  t.needsUpdate = true;
+  return t;
+}
+
+function hsl(h: number, s: number, l: number): [number, number, number] {
+  const c = (1 - Math.abs(2 * l - 1)) * s;
+  const hp = (((h % 360) + 360) % 360) / 60;
+  const x = c * (1 - Math.abs((hp % 2) - 1));
+  const [r, g, b] = hp < 1 ? [c, x, 0] : hp < 2 ? [x, c, 0] : hp < 3 ? [0, c, x] : hp < 4 ? [0, x, c] : hp < 5 ? [x, 0, c] : [c, 0, x];
+  const m = l - c / 2;
+  return [r + m, g + m, b + m];
 }

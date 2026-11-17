@@ -866,3 +866,37 @@ html.attract #ratings .bar i { animation: none; }
 html.briefing #prompt, html.title #prompt, html.replay #prompt, html.attract #prompt { display: none !important; }
 @media (prefers-reduced-motion: reduce) { #prompt.in { animation: none; } }
 @media (max-width: 760px) { #prompt { font-size: 14px; top: calc(150px + env(safe-area-inset-top)); } }
+
+/* Upgrade pool v2 (2026-11-17). Prime Time: the LIVE badge goes gold and the frame warms while it's on air. */
+html.prime #live { filter: sepia(1) saturate(4) hue-rotate(-12deg) brightness(1.15); }
+html.prime #hud::after { content: 'PRIME TIME'; position: absolute; left: 50%; top: calc(18px + env(safe-area-inset-top)); transform: translateX(-50%); padding: 4px 14px; background: #f2b632; color: #1a1020; font: italic 900 14px/1 var(--f-head); letter-spacing: 0.2em; clip-path: polygon(8px 0, 100% 0, calc(100% - 8px) 100%, 0 100%); zoom: var(--hs, 1); }
+html.title #hud::after, html.attract #hud::after { display: none; }
+/* Thick Skin: the gear strip flashes bone-white when a hit is shrugged off. */
+#gears.skin { animation: gearskin 0.6s steps(2) 1; }
+@keyframes gearskin { 0%, 50% { background: rgba(240, 232, 214, 0.95); color: #1a1020; } 25%, 75%, 100% { background: rgba(30, 24, 33, 0.78); } }
+@media (prefers-reduced-motion: reduce) { #gears.skin { animation: none; } }
+/* Meeting: a level-up card wears its level. */
+#recap .pitch.levelup .tag { background: #f2b632; color: #1a1020; }
+
+/* The Local News Awards (2026-11-17): a list with progress, then the outfit picker. */
+#recap .awards { max-width: 620px; }
+#recap .awards .aw { list-style: none; margin: 12px 0 10px; padding: 0; display: grid; gap: 6px; }
+#recap .awards .aw li { display: flex; gap: 12px; align-items: flex-start; padding: 8px 10px; background: rgba(0, 0, 0, 0.05); }
+#recap .awards .aw li > i { flex: none; width: 22px; height: 22px; display: grid; place-items: center; font-style: normal; font-weight: 900; border: 2px solid rgba(0, 0, 0, 0.2); color: #b8861c; }
+#recap .awards .aw li.won > i { background: #f2b632; border-color: #f2b632; color: #1a1020; }
+#recap .awards .aw li > div { flex: 1; min-width: 0; display: grid; gap: 3px; }
+#recap .awards .aw b { font: italic 900 15px/1.1 var(--f-head); }
+#recap .awards .aw span { font-size: 13px; opacity: 0.8; }
+#recap .awards .aw .bar { display: block; height: 5px; background: rgba(0, 0, 0, 0.12); }
+#recap .awards .aw .bar u { display: block; height: 100%; background: var(--c-red, #d62839); }
+#recap .awards .aw small { font-size: 11px; opacity: 0.65; }
+#recap .awards .kicker.sub { margin-top: 6px; }
+#recap .awards .outfits { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; margin: 10px 0; }
+#recap .awards .outfit { width: auto; margin: 0; display: flex; flex-direction: column; align-items: flex-start; gap: 2px; }
+#recap .awards .outfit.on { background: #f2b632; color: #1a1020; }
+#recap .awards .outfit small { font-size: 10px; font-style: normal; opacity: 0.7; letter-spacing: 0.04em; text-transform: none; }
+/* Recap: an award won this broadcast. */
+#recap .rc-award { margin-top: 14px; display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; padding: 10px 14px; background: rgba(242, 182, 50, 0.14); border-left: 4px solid #f2b632; }
+#recap .rc-award small { font: italic 900 12px/1 var(--f-head); letter-spacing: 0.2em; color: #f2b632; }
+#recap .rc-award b { font: italic 900 20px/1.1 var(--f-head); color: var(--c-text); }
+#recap .rc-award span { font: 600 14px/1.3 var(--f-head); color: var(--c-mute); flex-basis: 100%; }

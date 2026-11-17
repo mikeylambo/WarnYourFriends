@@ -24,6 +24,13 @@ export class Show {
   /** Phase 3 passives: Showman's fresh-type multiplier, Second Wind's Pin drain multiplier. */
   freshMult: number = TUNING.show.freshMult;
   pinDrainMult = 1;
+  /** Passives v2: Ratings multiplier per gain type (Slipstream: police crashes), and the drain multiplier at Rampage (Crowd Pleaser). */
+  gainMult: Partial<Record<GainType, number>> = {};
+  rampageDecayMult = 1;
+  /** Passives v2: spectacle points multiplier per stunt (Slipstream: police crashes). */
+  stuntMult: Partial<Record<StuntType, number>> = {};
+  /** Prime Time on air (the sim sets it): no drain, and smashes count `abilities.primeTime.mult` ×. */
+  prime = false;
   /** Time of the last gain, for decay. */
   private lastGain = 0;
   private seen = new Set<GainType>();
@@ -49,8 +56,10 @@ export class Show {
   gain(type: GainType, time: number, outnumbered: boolean, out: SimEvent[], base?: number): number {
     if (this.state !== 'live') return 0;
     const S = TUNING.show;
-    let amount: number = base ?? (type === 'pose' ? 0 : S.gain[type]);
-    if (type !== 'rampage' && type !== 'pose') {
+    let amount: number = base ?? S.gain[type];
+    amount *= this.gainMult[type] ?? 1;
+    if (this.prime && (type === 'medium' || type === 'heavy')) amount *= TUNING.abilities.primeTime.mult;
+    if (type !== 'rampage') {
       this.recent = this.recent.filter((r) => time - r.t <= S.repeatWindow);
       const repeats = this.recent.filter((r) => r.type === type).length;
       const mult = this.seen.has(type) ? S.repeatMult[Math.min(repeats, S.repeatMult.length - 1)] : this.freshMult;
@@ -92,8 +101,9 @@ export class Show {
         this.gain('rampage', time, outnumbered, out);
       }
     } else this.rampageAcc = 0;
-    if (time > S.decayGrace && time - Math.max(this.lastGain, S.decayGrace - S.decayAfter) > S.decayAfter) {
-      this.ratings = Math.max(0, this.ratings - S.decayRate[Math.min(this.segment, S.decayRate.length - 1)] * dt);
+    if (!this.prime && time > S.decayGrace && time - Math.max(this.lastGain, S.decayGrace - S.decayAfter) > S.decayAfter) {
+      const atRampage = tier === TUNING.tiers.length - 1;
+      this.ratings = Math.max(0, this.ratings - S.decayRate[Math.min(this.segment, S.decayRate.length - 1)] * (atRampage ? this.rampageDecayMult : 1) * dt);
     }
     if (this.chain.count > 0 && time - this.chain.last > TUNING.spectacle.window) this.endChain(false, out);
     if (time >= this.nextHeatT) {
@@ -138,17 +148,6 @@ export class Show {
   /** Police Net catches slipped this segment. */
   netSlips = 0;
 
-  /** Phase 3 Pose for the Camera: spend Heat, take a Ratings spike (the one way Heat falls). */
-  pose(time: number, out: SimEvent[]): number {
-    const P = TUNING.abilities.pose;
-    const gain = P.ratingsPerHeat * this.heat;
-    const before = this.heat;
-    const delta = this.gain('pose', time, false, out, gain);
-    this.heat = Math.max(1, this.heat - P.heatCost);
-    if (this.heat !== before) out.push({ type: 'heat', heat: this.heat });
-    return delta;
-  }
-
   /** Chain multiplier for a chain of `count` stunts. */
   static chainMult(count: number): number {
     const C = TUNING.spectacle;
@@ -160,7 +159,10 @@ export class Show {
     if (this.state !== 'live') return;
     const C = TUNING.spectacle;
     if (this.chain.count > 0 && time - this.chain.last > C.window) this.endChain(false, out);
-    const pts = (base ?? (C.points as Record<string, number>)[cause] ?? 0) * TUNING.show.bankMult[gear] * C.audienceMult[this.tier];
+    let pts = (base ?? (C.points as Record<string, number>)[cause] ?? 0) * TUNING.show.bankMult[gear] * C.audienceMult[this.tier];
+    // Passives and Prime Time pay the same way in points as in Ratings.
+    pts *= this.stuntMult[cause] ?? 1;
+    if (this.prime && (cause === 'medium' || cause === 'heavy' || cause === 'unit')) pts *= TUNING.abilities.primeTime.mult;
     if (pts <= 0) return;
     this.chain.count++;
     this.chain.pending += pts;

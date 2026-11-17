@@ -20,12 +20,12 @@ function playLogged(sim: Sim): SimInput[] {
   return log;
 }
 
-function botRun(seed: number): Submission {
-  const run = new RunState(seed);
+function botRun(seed: number, pool?: UpgradeId[]): Submission {
+  const run = new RunState(seed, pool);
   const segments: string[] = [];
   const buys: (UpgradeId | null)[] = [];
   while (run.phase === 'live') {
-    const sim = new Sim({ seed: run.segmentSeed(), segment: run.segment, upgrades: run.owned, growth: true });
+    const sim = new Sim({ seed: run.segmentSeed(), segment: run.segment, upgrades: run.owned, levels: run.levels, growth: true });
     segments.push(encodeInputs(playLogged(sim)));
     run.finishSegment(sim.show);
     if ((run.phase as string) === 'meeting') {
@@ -35,7 +35,7 @@ function botRun(seed: number): Submission {
       else run.nextSegment();
     }
   }
-  return { mode: 'run', seed, growth: true, segments, buys, claimed: Math.round(run.earned) };
+  return { mode: 'run', seed, growth: true, segments, buys, claimed: Math.round(run.earned), ...(pool ? { pool } : {}) };
 }
 
 describe('leaderboard inputs', () => {
@@ -70,6 +70,13 @@ describe('leaderboard verify', () => {
       expect(r.score).toBe(sub.claimed);
       expect(r.segments).toBe(sub.segments.length);
     }
+  });
+
+  it('a run played with locked upgrades replays with the same pool (Awards)', () => {
+    const pool: UpgradeId[] = ['leap', 'stare', 'primeTime', 'thickSkin', 'secondWind', 'crowdPleaser'];
+    const sub = botRun(84, pool);
+    const r = verify(sub);
+    expect(r.ok && r.score).toBe(sub.claimed);
   });
 
   it('a different seed, or tampered inputs, give a different score', () => {

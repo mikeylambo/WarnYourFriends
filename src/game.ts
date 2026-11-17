@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { TUNING, type UpgradeId } from './tuning';
+import { TUNING, type AbilityId, type UpgradeId } from './tuning';
 import { RunState, ABILITIES } from './sim/run';
 import { Sim } from './sim/sim';
 import { Bot } from './sim/bot';
@@ -27,6 +27,7 @@ import { readFlags } from './debug';
 import { encodeInputs, type Submission } from './leaderboard/verify';
 import { mountBoard } from './leaderboardClient';
 import { Onboarding, type PromptId } from './onboarding';
+import { AWARDS, loadProfile, outfitUnlocked, record, rewardLine, saveProfile, upgradePool, type Award } from './awards';
 import { GAME_SPEEDS, HUD_SIZES, loadSettings, saveSettings } from './settings';
 import { applyStoredTuning, mountTuningPanel, tuningChanged } from './tuningPanel';
 import { createGameApp, type InputDeviceFamily, type CoreSettings, type FrameAssembly, type GenreFrame, type RendererAdapter, type SLUWebShell } from '@slu/web-shell';
@@ -79,7 +80,9 @@ const chainPts = chainEl.querySelector('.pts') as HTMLElement;
 const chainCnt = chainEl.querySelector('.cnt') as HTMLElement;
 const chainClock = chainEl.querySelector('.clock i') as HTMLElement;
 /** Spectacle stunt names on the combo counter (what just counted, so the player learns the menu). */
-const STUNT_LABEL: Record<string, string> = { medium: 'SMASH', heavy: 'HEAVY SMASH', unit: 'POLICE CAR', policeCrash: 'POLICE CRASH', collateral: 'COLLATERAL', nearMiss: 'NEAR MISS', ramDodge: 'DODGED', lostTrack: 'SHOOK ONE', chopperShaken: 'LOST THE CHOPPER', leapLand: 'LANDING', hijackBail: 'BAIL OUT', pose: 'POSE' };
+/** Ability levels on cards and the chip. */
+const ROMAN = ['', 'I', 'II', 'III'];
+const STUNT_LABEL: Record<string, string> = { medium: 'SMASH', heavy: 'HEAVY SMASH', unit: 'POLICE CAR', policeCrash: 'POLICE CRASH', collateral: 'COLLATERAL', nearMiss: 'NEAR MISS', ramDodge: 'DODGED', lostTrack: 'SHOOK ONE', chopperShaken: 'LOST THE CHOPPER', leapLand: 'LANDING', breakawayLand: 'BREAKAWAY' };
 let chainResultT = 0;
 const gearPips = [...gearsEl.querySelectorAll('i')] as HTMLElement[];
 const gearName = gearsEl.querySelector('.nm') as HTMLElement;
@@ -187,6 +190,10 @@ if (flags.tune) tunePanel.toggle();
 let sim: Sim;
 let highway: HighwayView;
 let giant: GiantView;
+/** The Local News Awards: lifetime counters, awards won, the outfit worn (src/awards.ts). */
+const profile = loadProfile();
+/** Awards this broadcast just won (the recap shows them). */
+let newAwards: Award[] = [];
 let gait: Gait;
 let director: Director;
 let cruisers: CruiserView;
@@ -252,9 +259,6 @@ const onboarding = new Onboarding($('prompt'), (id: PromptId) => {
 });
 /** Phase 3: the five-segment run (null in a single broadcast or the attract loop). */
 let run: RunState | null = null;
-/** Phase 3: the hijacked car under the giant while he rides it. */
-let rideMesh: THREE.Group | null = null;
-let poseAnim = 0;
 let bulbT = 0;
 let bulbFrames = 0;
 
@@ -271,10 +275,10 @@ const recentEvents: SimEvent[] = [];
 const playLog = new PlayLog();
 let lastEntry: PlayEntry | null = null;
 // Recap REPLAY state (declared up here: newRun runs at boot). See startReplay below.
-let simOpts: { seed: number; segment: number; upgrades: UpgradeId[]; growth: boolean } = { seed: 0, segment: 0, upgrades: [], growth: false };
+let simOpts: { seed: number; segment: number; upgrades: UpgradeId[]; levels: Partial<Record<AbilityId, number>>; growth: boolean } = { seed: 0, segment: 0, upgrades: [], levels: {}, growth: false };
 const inputLog: SimInput[] = [];
 /** Leaderboard: this broadcast's (or run's) seed, each segment's inputs and the meeting buys, for the server to re-play. */
-let lb: { mode: 'run' | 'broadcast'; seed: number; segments: string[]; buys: (UpgradeId | null)[] } = { mode: 'broadcast', seed: 0, segments: [], buys: [] };
+let lb: { mode: 'run' | 'broadcast'; seed: number; segments: string[]; buys: (UpgradeId | null)[]; pool: UpgradeId[] } = { mode: 'broadcast', seed: 0, segments: [], buys: [], pool: [] };
 /** Why this browser's scores can't go on the board (a setting that changes the sim), or null. */
 const lbBlocked = () =>
   flags.bot || flags.seg !== null || flags.ability || flags.heat !== null || flags.nodecay || flags.god || (flags.size !== null && flags.size !== 'growth') || tuningChanged()
@@ -285,7 +289,7 @@ const lbBlocked = () =>
 let moment: { t: number; score: number; kind: string; event: SimEvent; headline: Headline | null } | null = null;
 let replayRate = 1;
 const replayEl = $('replay');
-type Parked = { sim: Sim; highway: HighwayView; gait: Gait; cruisers: CruiserView; units: UnitViews; director: Director; news: Newsroom; bot: Bot | null; rideMesh: THREE.Group | null; prev: typeof prev; runStats: typeof runStats; propKinds: Map<number, PropKind>; recent: SimEvent[] };
+type Parked = { sim: Sim; highway: HighwayView; gait: Gait; cruisers: CruiserView; units: UnitViews; director: Director; news: Newsroom; bot: Bot | null; prev: typeof prev; runStats: typeof runStats; propKinds: Map<number, PropKind>; recent: SimEvent[] };
 let replay: { sim: Sim; live: Parked; slowFrom: number; slowTo: number; end: number; armedAt: number; done: () => void; grab?: boolean } | null = null;
 
 const perf = { fps: 0, frames: 0, t: 0, simMs: 0 };
@@ -314,7 +318,7 @@ function targetAt(s: number, d: number): CameraTarget {
 const where = (s: number, d: number) => sim.track.posAt(s, d, { x: 0, z: 0 });
 const sirenRight = new THREE.Vector3();
 
-function newRun(seed: number, segment = 0, upgrades: UpgradeId[] = []) {
+function newRun(seed: number, segment = 0, upgrades: UpgradeId[] = [], levels: Partial<Record<AbilityId, number>> = {}) {
   if (replay) {
     // A new broadcast mid-replay: drop the replay (its views go below) and the parked live ones.
     replay = null;
@@ -329,9 +333,6 @@ function newRun(seed: number, segment = 0, upgrades: UpgradeId[] = []) {
   }
   if (cruisers) scene.remove(cruisers.group);
   if (units) scene.remove(units.group);
-  if (rideMesh) scene.remove(rideMesh);
-  rideMesh = null;
-  poseAnim = 0;
   endedFor = -1;
   recapShown = false;
   outro = null;
@@ -343,8 +344,8 @@ function newRun(seed: number, segment = 0, upgrades: UpgradeId[] = []) {
   $('coldts').textContent = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
   runSize = sizeMode();
   const growth = runSize === 'growth';
-  sim = new Sim({ seed, segment, upgrades, growth });
-  simOpts = { seed, segment, upgrades: [...upgrades], growth };
+  sim = new Sim({ seed, segment, upgrades, levels, growth });
+  simOpts = { seed, segment, upgrades: [...upgrades], levels: { ...levels }, growth };
   // A fresh giant space for the new road: no anchor carried over, his starting size outright.
   gScale = sizeFor(0);
   gAnchor.x = gAnchor.z = 0;
@@ -360,6 +361,7 @@ function newRun(seed: number, segment = 0, upgrades: UpgradeId[] = []) {
   highway.onHonk = (v, at) => audio.honk(v, at);
   highway.onBrush = (at) => audio.scrape(at);
   giant = new GiantView();
+  giant.setOutfit(profile.outfit);
   gait = new Gait();
   director = new Director(seed);
   director.enabled = settings.cameraCuts;
@@ -482,7 +484,7 @@ function glare(s0: number, d: number) {
   const verts = new Float32Array((N + 1) * 2 * 3);
   const p = new THREE.Vector3();
   for (let i = 0; i <= N; i++) {
-    const s = s0 + 3 + (A.reach * i) / N;
+    const s = s0 + 3 + (A.reach[Math.max(0, sim.abilityLevel - 1)] * i) / N;
     for (let k = 0; k < 2; k++) {
       sim.track.posAt(s, d + (k ? W : -W), p);
       verts.set([p.x, 0.12, p.z], (i * 2 + k) * 3);
@@ -576,6 +578,58 @@ function openBriefing(goLive: boolean): Promise<void> {
   });
 }
 
+/** The Local News Awards (main menu): every award, its progress and what it gives, and the outfit picker. */
+function openAwards(): Promise<void> {
+  const fmt = (n: number) => Math.round(n).toLocaleString();
+  const draw = () => {
+    const C = profile.counts;
+    const rows = AWARDS.map((a) => {
+      const won = profile.won.includes(a.id);
+      const have = Math.min(a.n, C[a.stat]);
+      const reward = rewardLine(a);
+      return `<li class="${won ? 'won' : ''}"><i>${won ? '★' : ''}</i><div><b>${esc(a.title)}</b><span>${esc(a.how)}${reward ? ` · ${esc(reward)}` : ''}</span>${won ? '' : `<em class="bar"><u style="width:${((have / a.n) * 100).toFixed(1)}%"></u></em><small>${fmt(have)} / ${fmt(a.n)}</small>`}</div></li>`;
+    }).join('');
+    const outfits = (Object.keys(TUNING.outfits) as (keyof typeof TUNING.outfits)[])
+      .map((id) => {
+        const open = outfitUnlocked(profile, id);
+        const by = AWARDS.find((a) => a.outfit === id);
+        return `<button class="go alt outfit${profile.outfit === id ? ' on' : ''}" data-o="${id}" ${open ? '' : 'disabled'}>${esc(TUNING.outfits[id].label)}${open ? '' : `<small>${esc(by?.title ?? '')}</small>`}</button>`;
+      })
+      .join('');
+    recapEl.innerHTML = `<div class="card briefing awards">
+      <div class="kicker">THE LOCAL NEWS AWARDS</div>
+      <ul class="aw">${rows}</ul>
+      <div class="kicker sub">OUTFIT</div>
+      <div class="outfits">${outfits}</div>
+      <div class="row"><button class="go" id="aw-back">Back</button></div>
+    </div>`;
+    for (const b of recapEl.querySelectorAll<HTMLButtonElement>('.outfit'))
+      b.onclick = () => {
+        profile.outfit = b.dataset.o as typeof profile.outfit;
+        saveProfile(profile);
+        giant.setOutfit(profile.outfit);
+        draw();
+        recapEl.querySelector<HTMLButtonElement>(`.outfit[data-o="${profile.outfit}"]`)?.focus();
+      };
+    $<HTMLButtonElement>('aw-back').onclick = () => close?.();
+  };
+  app?.ui.show('gameplay-placeholder');
+  recapEl.hidden = false;
+  recapArmedAt = performance.now() + 250;
+  document.documentElement.classList.add('briefing');
+  let close: (() => void) | null = null;
+  draw();
+  $<HTMLButtonElement>('aw-back').focus();
+  return new Promise((resolve) => {
+    close = briefingClose = () => {
+      briefingClose = null;
+      document.documentElement.classList.remove('briefing');
+      hideRecap();
+      resolve();
+    };
+  });
+}
+
 /** Settings → Controls: rebind the keyboard (accessibility, 2026-11-17). One key per action; a key taken by another action swaps. */
 function openControls(): Promise<void> {
   const NAMES: Record<KeyAction, string> = { left: 'Lane left', right: 'Lane right', brake: 'Brake', shoulder: 'Shoulder Check', ability: 'Ability' };
@@ -663,10 +717,16 @@ function showMeeting() {
     <div class="pitches">${offers
       .map((id) => {
         const u = TUNING.upgrades[id];
-        const swap = u.kind === 'ability' && held ? `<small class="swap">Replaces ${esc(TUNING.upgrades[held].label)}</small>` : '';
-        return `<button class="pitch ${u.kind}" data-id="${id}" ${r.canAfford(id) ? '' : 'disabled'}>
-          <span class="art"><img src="${UPGRADE_ART[id]}" alt="" /><span class="tag">${u.kind === 'ability' ? 'ABILITY' : 'PASSIVE'}</span></span>
-          <b>${esc(u.label)}</b><q class="said">${esc(u.pitch)}</q><span class="blurb">${esc(u.blurb)}</span>${swap}<span class="price">${u.price.toLocaleString()}</span>${r.canAfford(id) ? '' : `<small class="need">Need ${(u.price - r.purse).toLocaleString()} more</small>`}</button>`;
+        // The ability you hold comes back as its next level; another one replaces it.
+        const lv = u.kind === 'ability' ? r.levelOf(id as AbilityId) : 0;
+        const next = lv ? lv + 1 : 0;
+        const swap = u.kind === 'ability' && held && !lv ? `<small class="swap">Replaces ${esc(TUNING.upgrades[held].label)}${r.levelOf(held) > 1 ? ` ${ROMAN[r.levelOf(held)]}` : ''}</small>` : '';
+        const price = r.priceOf(id);
+        const title = next ? `${u.label} ${ROMAN[next]}` : u.label;
+        const blurb = next && u.levels ? u.levels[next - 1] : u.blurb;
+        return `<button class="pitch ${u.kind}${next ? ' levelup' : ''}" data-id="${id}" ${r.canAfford(id) ? '' : 'disabled'}>
+          <span class="art"><img src="${UPGRADE_ART[id]}" alt="" /><span class="tag">${next ? `LEVEL ${ROMAN[next]}` : u.kind === 'ability' ? 'ABILITY' : 'PASSIVE'}</span></span>
+          <b>${esc(title)}</b><q class="said">${esc(u.pitch)}</q><span class="blurb">${esc(blurb)}</span>${swap}<span class="price">${price.toLocaleString()}</span>${r.canAfford(id) ? '' : `<small class="need">Need ${(price - r.purse).toLocaleString()} more</small>`}</button>`;
       })
       .join('')}</div>
     <div class="row"><button class="go alt" id="skip">Skip</button></div>
@@ -681,7 +741,7 @@ function showMeeting() {
 /** The next segment of the run: a new road, Heat starts higher, the upgrades come along. */
 function nextSegment() {
   if (!run) return;
-  newRun(run.segmentSeed(), run.segment, run.owned);
+  newRun(run.segmentSeed(), run.segment, run.owned, run.levels);
   bot = flags.bot ? new Bot(sim) : null;
   menuGuard = 10;
 }
@@ -736,6 +796,7 @@ function showRecap() {
       <div class="rc-stamp"><span class="outcome ${cleared || won ? 'cleared' : ''}">${stamp}</span><span class="why">${why}</span></div>
       <div class="rc-hero">${hero.map(([k, v, c]) => `<div class="${c}"><small>${k}</small><b>${v}</b></div>`).join('')}</div>
       <div class="rc-tiles">${tiles.map(([k, v]) => `<div><b>${v}</b><small>${k}</small></div>`).join('')}</div>
+      ${newAwards.map((a) => `<div class="rc-award"><small>AWARD</small><b>${esc(a.title)}</b>${rewardLine(a) ? `<span>${esc(rewardLine(a))}</span>` : ''}</div>`).join('')}
     </section>
     <aside class="rc-side">
       ${shot}
@@ -764,7 +825,7 @@ function showRecap() {
     const blocked = lbBlocked();
     const sub: Submission | null = blocked || lb.segments.length === 0
       ? null
-      : { mode: lb.mode, seed: lb.seed, growth: simOpts.growth, segments: lb.segments, buys: lb.buys, claimed: Math.round(run ? run.earned : sim.show.banked) };
+      : { mode: lb.mode, seed: lb.seed, growth: simOpts.growth, segments: lb.segments, buys: lb.buys, pool: lb.pool, claimed: Math.round(run ? run.earned : sim.show.banked) };
     mountBoard(boardEl, lb.mode, sub, blocked ?? undefined);
   }
   // Playtest export: log this broadcast once, then copy everything logged so far.
@@ -933,7 +994,7 @@ function present(e: SimEvent) {
       break;
     }
     case 'ratings':
-      if (e.cause !== 'rampage' && e.cause !== 'pose' && e.delta > 0) gainFlash();
+      if (e.cause !== 'rampage' && e.delta > 0) gainFlash();
       break;
     case 'ram':
       if (!e.hit) runStats.dodged++;
@@ -1002,12 +1063,10 @@ function present(e: SimEvent) {
       endBroadcast(e.type);
       break;
     case 'ability':
-      if (!e.ok) {
-        audio.dud();
-        if (e.id === 'hijack') abilityPop('No car in reach', true);
-      }
-      else if (e.id === 'leap') {
-        audio.leap();
+      if (!e.ok) audio.dud();
+      else if (e.id === 'leap' || e.id === 'breakaway') {
+        if (e.id === 'leap') audio.leap();
+        else audio.breakaway();
         rig.jolt(1.5, 0.1);
         rig.tierUpPulse(); // the chopper pulls out so the arc reads
       }
@@ -1042,32 +1101,36 @@ function present(e: SimEvent) {
       abilityPop([e.moved.length ? `Road clears ×${e.moved.length}` : 'Road already clear', e.backedOff ? `Police back off ×${e.backedOff}` : ''].filter(Boolean).join(' · '));
       break;
     }
-    case 'hijack': {
-      audio.hijack();
-      const p = sim.track.props.find((q) => q.id === e.propId);
-      if (p) {
-        highway.drop(e.propId); // the parked view goes: it's under him now
-        rideMesh = highway.vehicleMesh(p);
-        scene.add(rideMesh);
-      }
-      rig.jolt(2, 0.12);
-      haptic(90, 0.6);
-      abilityPop('Car commandeered');
-      break;
-    }
-    case 'hijackBail': {
-      if (rideMesh) {
-        sim.track.posAt(e.s, e.d, pos);
-        highway.spawnDebris(pos.x, pos.z, Math.cos(h), Math.sin(h), g.speed, 16, rideMesh.userData.colors ?? [0x888888], [0.2, 0.55], 1.2);
-        scene.remove(rideMesh);
-        rideMesh = null;
-      }
-      audio.smash('heavy');
-      rig.jolt(TUNING.impact.heavy.shake, TUNING.camera.joltTime);
+    case 'breakawayLand': {
+      sim.track.posAt(e.s, e.d, pos);
+      highway.ring(pos.x, pos.z, 13, 0xffffff, 0.55, 0.9);
+      highway.ring(pos.x, pos.z, 7, PALETTE.dust, 0.7, 0.7);
+      highway.crack(pos.x, pos.z, h);
+      highway.spawnDebris(pos.x, pos.z, Math.cos(h), Math.sin(h), 6, 18, [PALETTE.dust, 0x8d8579], [0.15, 0.45], 1.6);
+      audio.land();
+      hitstop = Math.max(hitstop, TUNING.impact.heavy.hitstop);
+      rig.jolt(TUNING.impact.heavy.shake * 1.4, TUNING.camera.joltTime);
       flash(TUNING.impact.heavy.flashFrames);
-      haptic(120, 0.8);
+      haptic(170, 0.9);
+      pip.trigger(sim, sim.show.tier);
+      abilityPop([e.shaken ? `Police shaken ×${e.shaken}` : 'Clean getaway', e.smashed ? `Flattened ×${e.smashed}` : ''].filter(Boolean).join(' · '));
       break;
     }
+    case 'primeTime':
+      document.documentElement.classList.toggle('prime', e.on);
+      if (e.on) {
+        audio.primeTime();
+        pip.trigger(sim, sim.show.tier, true);
+        abilityPop(`Prime time · ${Math.round(e.time)}s · smashes ×${TUNING.abilities.primeTime.mult}`);
+      }
+      break;
+    case 'thickSkin':
+      audio.knock();
+      gearsEl.classList.remove('skin');
+      void gearsEl.offsetWidth;
+      gearsEl.classList.add('skin');
+      abilityPop('Thick Skin · no gear lost');
+      break;
     case 'ask': {
       renderAsks();
       if (e.done) {
@@ -1128,11 +1191,6 @@ function present(e: SimEvent) {
     }
     case 'spotlight':
       audio.spotlightLock();
-      break;
-    case 'pose':
-      audio.pose();
-      pip.trigger(sim, sim.show.tier, true);
-      abilityPop(`Ratings +${Math.round(e.gain)} · Heat −${TUNING.abilities.pose.heatCost}`);
       break;
     case 'laneChange':
       audio.capeWhip(0.5 + g.tier * 0.25);
@@ -1317,10 +1375,9 @@ function noteMoment(e: SimEvent) {
     case 'policeCrash': sc = S.policeCrash; break;
     case 'smash': sc = e.propId >= 1_000_000 ? S.unitSmash : e.cls === 'heavy' ? (e.across ? S.heavyAcross : S.heavy) : 0; break;
     case 'leapLand': sc = e.smashed > 0 ? S.leapLand + e.smashed : 0; break;
-    case 'hijackBail': sc = S.hijackBail; break;
+    case 'breakawayLand': sc = S.breakawayLand + e.smashed + e.shaken; break;
     case 'nearMiss': sc = S.nearMiss; break;
     case 'ram': sc = e.hit ? 0 : S.ramMiss; break;
-    case 'pose': sc = S.pose; break;
   }
   if (sc > 0 && (!moment || sc >= moment.score)) moment = { t: sim.time, score: sc, kind: e.type, event: e, headline: null };
 }
@@ -1335,9 +1392,8 @@ function startReplay(done: () => void) {
   const rs = new Sim(simOpts);
   const startTick = Math.round(Math.max(0, m.t - R.lead) / rs.dt);
   for (let i = 0; i < startTick && i < inputLog.length; i++) rs.step(inputLog[i]);
-  const live: Parked = { sim, highway, gait, cruisers, units, director, news, bot, rideMesh, prev: { ...prev }, runStats: { ...runStats }, propKinds: new Map(propKinds), recent: recentEvents.slice() };
+  const live: Parked = { sim, highway, gait, cruisers, units, director, news, bot, prev: { ...prev }, runStats: { ...runStats }, propKinds: new Map(propKinds), recent: recentEvents.slice() };
   scene.remove(highway.group, cruisers.group, units.group);
-  if (rideMesh) scene.remove(rideMesh);
   sim = rs;
   highway = new HighwayView(rs);
   highway.onHonk = (v, at) => audio.honk(v, at);
@@ -1349,7 +1405,6 @@ function startReplay(done: () => void) {
   units.reduceFlashes = settings.reduceFlashes;
   news = new Newsroom(simOpts.seed, rs.show.heat);
   director = new Director(simOpts.seed);
-  rideMesh = null;
   bot = null;
   scene.add(highway.group, cruisers.group, units.group);
   giant.reset();
@@ -1386,11 +1441,9 @@ function endReplay() {
   replay = null;
   replayRate = 1;
   scene.remove(highway.group, cruisers.group, units.group);
-  if (rideMesh) scene.remove(rideMesh);
   const L = r.live;
-  ({ sim, highway, gait, cruisers, units, director, news, bot, rideMesh } = L);
+  ({ sim, highway, gait, cruisers, units, director, news, bot } = L);
   scene.add(highway.group, cruisers.group, units.group);
-  if (rideMesh) scene.add(rideMesh);
   Object.assign(prev, L.prev);
   Object.assign(runStats, L.runStats);
   propKinds.clear();
@@ -1440,13 +1493,13 @@ function beginBroadcast(mode = 'broadcast') {
   document.documentElement.classList.remove('attract');
   const seed = nextSeed ?? (Math.random() * 1e9) | 0;
   nextSeed = null;
-  lb = { mode: mode === 'run' ? 'run' : 'broadcast', seed, segments: [], buys: [] };
+  lb = { mode: mode === 'run' ? 'run' : 'broadcast', seed, segments: [], buys: [], pool: upgradePool(profile) };
   if (mode === 'run') {
-    run = new RunState(seed);
+    run = new RunState(seed, lb.pool); // Awards unlock the rest of the pool
     newRun(run.segmentSeed(), 0, []);
   } else {
     run = null;
-    newRun(seed, Math.max(0, Math.min(TUNING.run.segments - 1, flags.seg ?? 0)), flags.ability ? [flags.ability] : []);
+    newRun(seed, Math.max(0, Math.min(TUNING.run.segments - 1, flags.seg ?? 0)), flags.ability ? [flags.ability] : [], flags.ability ? { [flags.ability]: flags.level } : {});
   }
   bot = flags.bot ? new Bot(sim) : null;
   // First broadcast ever: How to Play first, then the cold open.
@@ -1636,6 +1689,7 @@ app.ui.updateScreen('main-menu', {
     // One mode on the menu (Mike, 2026-11-17: Single Segment adds no challenge; maybe a daily mode later).
     // 'broadcast' (one segment) stays reachable by ?mode=broadcast for tests and evidence tools.
     { id: 'run', label: 'Go Live', description: 'Five segments, upgrades between them' },
+    { id: 'awards', label: 'Awards', description: 'Milestones, unlocks and outfits' },
     { id: 'howto', label: 'How to Play' },
     { id: 'settings', label: 'Settings' },
   ],
@@ -1645,6 +1699,7 @@ app.ui.updateScreen('main-menu', {
   const flowActivate = app.flow.onActivate.bind(app.flow);
   app.flow.onActivate = (screen: string, choice: string) => {
     if (screen === 'main-menu' && choice === 'howto') void openBriefing(false).then(() => app!.ui.show('main-menu'));
+    else if (screen === 'main-menu' && choice === 'awards') void openAwards().then(() => app!.ui.show('main-menu'));
     else if (screen === 'main-menu' && (choice === 'run' || choice === 'broadcast')) flowActivate('mode-select', choice);
     else flowActivate(screen, choice);
   };
@@ -1771,24 +1826,17 @@ function frame(now: number) {
         haptic(30, 0.15); // §27 light pulse per footfall at Rampage only
       }
     }
-    // Phase 3: Leap arc, standing on the hijacked car's roof, the pose.
+    // Phase 3: the Leap arc, and Breakaway's long low dive (in his space: they scale with him).
     const A = TUNING.abilities;
     const u = g.airDur > 0 && g.air > 0 ? 1 - g.air / g.airDur : 0;
-    const roof = rideMesh ? (rideMesh.userData.roof as number) : 0;
-    // In his space: a Leap scales with him; standing on a car roof keeps his feet on the roof.
-    const lift = u > 0 ? 4 * A.leap.height * u * (1 - u) : roof / gScale;
-    poseAnim += ((g.pose > 0 ? 1 : 0) - poseAnim) * Math.min(1, animDt / 0.08);
+    const lift = u > 0 ? 4 * (g.airKind === 'breakaway' ? A.breakaway.height : A.leap.height) * u * (1 - u) : 0;
     unplaceGiant();
-    giant.update(animDt, { x: lt.x, z: lt.z, heading, travel: t.travel, lateralVel, speed: g.speed, tier: g.tier, braking: g.braking, stumble: g.stumble, stepPos, lift, leap: u, pose: poseAnim }, gf);
+    giant.update(animDt, { x: lt.x, z: lt.z, heading, travel: t.travel, lateralVel, speed: g.speed, tier: g.tier, braking: g.braking, stumble: g.stumble, stepPos, lift, leap: u, pose: 0 }, gf);
     placeGiant();
-    if (rideMesh) {
-      rideMesh.position.set(t.x, 0, t.z);
-      rideMesh.rotation.y = -heading;
-    }
-    // Pose: flash bulbs from the crowd and the press. A soft pulse, at most 3 a second (photosensitivity).
+    // Prime Time: flash bulbs from the crowd and the press. A soft pulse, at most 3 a second (photosensitivity).
     bulbT = Math.max(0, bulbT - animDt);
     updateAbilityFx(animDt);
-    if (g.pose > 0 && bulbT === 0 && !settings.reduceFlashes) {
+    if (g.prime > 0 && bulbT === 0 && !settings.reduceFlashes) {
       bulbT = 1 / 3;
       bulbFrames = 3;
     }
@@ -1813,6 +1861,11 @@ function frame(now: number) {
     else {
       lb.segments.push(encodeInputs(inputLog));
       if (run) run.finishSegment(sim.show);
+      // The Local News Awards: this segment's tally (a player's, not the bot's).
+      newAwards = bot
+        ? []
+        : record(profile, { signedOff: sim.show.state === 'cleared', policeWrecked: runStats.crashes, objects: sim.stats.smashes + runStats.crashes, segment: run ? run.segment + 1 : 1, runWon: run?.phase === 'won' });
+      saveProfile(profile);
       if (run?.phase !== 'meeting') {
         app?.shell.session.setPhase('results');
         statsReady = recordStats();
@@ -2104,7 +2157,7 @@ function updateHud(dt: number) {
   abilBtn.disabled = !ab;
   if (ab) {
     const A = TUNING.abilities[ab];
-    const label = TUNING.upgrades[ab].label;
+    const label = TUNING.upgrades[ab].label + (sim.abilityLevel > 1 ? ` ${ROMAN[sim.abilityLevel]}` : '');
     if (abilName.textContent !== label) {
       abilName.textContent = label;
       abilIcon.src = UPGRADE_ART[ab];
@@ -2258,5 +2311,5 @@ window.__GAME = {
   /** Phase 3: the run (null in a single broadcast). */
   run: () => (run ? { segment: run.segment, phase: run.phase, purse: run.purse, earned: run.earned, owned: [...run.owned], offers: run.phase === 'meeting' ? run.offers() : [], results: run.results.slice() } : null),
   meeting: () => (recapEl.querySelector('.meeting') ? [...recapEl.querySelectorAll<HTMLButtonElement>('.pitch')].map((b) => ({ id: b.dataset.id, disabled: b.disabled })) : null),
-  ability: () => ({ id: sim.ability, cd: sim.giant.abilityCd, air: sim.giant.air, ride: sim.giant.ride, pose: sim.giant.pose, chip: !abilEl.hidden }),
+  ability: () => ({ id: sim.ability, level: sim.abilityLevel, cd: sim.giant.abilityCd, air: sim.giant.air, airKind: sim.giant.airKind, prime: sim.giant.prime, chip: !abilEl.hidden }),
 };

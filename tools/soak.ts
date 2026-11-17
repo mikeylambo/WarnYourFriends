@@ -50,7 +50,7 @@ const ndc = new THREE.Vector3();
 // A few seeds with cuts switched off: Chase High must hold the whole run.
 const OFF_SEEDS = new Set([7, 77, 177]);
 const swoop = { n: 0, frames: 0, maxLen: 0 };
-const p3 = { segments: [0, 0, 0, 0, 0], uses: {} as Record<string, number>, duds: 0, leapLands: 0, leapSmash: 0, stareMoved: 0, hijackBails: 0, poseGain: 0, maxPose: 0, maxAir: 0 };
+const p3 = { segments: [0, 0, 0, 0, 0], uses: {} as Record<string, number>, duds: 0, leapLands: 0, leapSmash: 0, stareMoved: 0, breakawayLands: 0, shaken: 0, primeTimes: 0, skins: 0, maxAir: 0 };
 const p2 = { tellsOffscreen: 0, spawns: {} as Record<string, number>, tells: {} as Record<string, number>, minSpawnDist: Infinity, spawnOnCamera: 0, maxTells: 0, ramHits: 0, ramMisses: 0, spotlights: 0, choppersShaken: 0, policeCrash: 0, crashOffAir: 0, policeSmash: 0, crashOffscreen: 0, spiked: 0, nearMiss: 0, dodges: 0, lostTrack: 0, maxPin: 0, ends: {} as Record<string, number>, endTime: 0, peak: 0, banked: 0 };
 /** The producer's asks: offered and finished, per ask. */
 const asksAgg: Record<string, { offered: number; done: number }> = {};
@@ -67,11 +67,12 @@ const t0 = performance.now();
 
 for (let seed = 1; seed <= seeds; seed++) {
   // Phase 3: every seed plays a segment of the run with an ability and a seeded set of passives.
-  const passives: UpgradeId[] = (['ironShins', 'secondWind', 'showman', 'tailwind'] as UpgradeId[]).filter((_, k) => ((seed >> 2) >> k) & 1);
+  const passives: UpgradeId[] = (['thickSkin', 'secondWind', 'crowdPleaser', 'slipstream'] as UpgradeId[]).filter((_, k) => ((seed >> 2) >> k) & 1);
   const loadout: UpgradeId[] = seed % 9 === 0 ? passives : [ABILITIES[seed % 4], ...passives];
   // Giant size: two in three seeds play with growth (the default), the rest at the fixed size.
   const growth = seed % 3 !== 0;
-  const sim = new Sim({ seed, segment: seed % TUNING.run.segments, upgrades: loadout, growth });
+  // Ability levels cycle I–III across seeds.
+  const sim = new Sim({ seed, segment: seed % TUNING.run.segments, upgrades: loadout, levels: { [ABILITIES[seed % 4]]: 1 + ((seed >> 4) % 3) }, growth });
   p3.segments[seed % TUNING.run.segments]++;
   if (sim.show.heat !== Math.min(5, 1 + (seed % TUNING.run.segments))) fail(`seed ${seed}: segment ${seed % 5} started at Heat ${sim.show.heat}`);
   const bot = new Bot(sim);
@@ -235,9 +236,10 @@ for (let seed = 1; seed <= seeds; seed++) {
     cam.maxScreenUp = Math.max(cam.maxScreenUp, Math.abs(info.screenUpDeg));
     cam.maxGiantY = Math.max(cam.maxGiantY, info.giantScreenY);
     cam.minAhead = Math.min(cam.minAhead, info.aheadSeconds);
-    if (info.aheadSeconds < TUNING.camera.minRoadAheadSeconds) {
+    // Airborne (a Leap or a Breakaway dive) he can't be hit, so the reaction-time rule waits for the landing.
+    if (info.aheadSeconds < TUNING.camera.minRoadAheadSeconds && g.air <= 0) {
       cam.aheadUnder2++;
-      const key = `${info.angle}/${TUNING.tiers[g.tier].name}${sim.laneBusy ? '/lane' : ''}${g.ride > 0 ? '/ride' : ''}${g.air > 0 ? '/air' : ''}${g.pose > 0 ? '/pose' : ''}${g.abilityCd > 0 ? '/cd:' + sim.ability : ''}`;
+      const key = `${info.angle}/${TUNING.tiers[g.tier].name}${sim.laneBusy ? '/lane' : ''}${g.air > 0 ? '/' + g.airKind : ''}${g.prime > 0 ? '/prime' : ''}${g.abilityCd > 0 ? '/cd:' + sim.ability : ''}`;
       aheadBy[key] = Math.min(aheadBy[key] ?? Infinity, info.aheadSeconds);
       if (process.env.SOAK_VERBOSE) console.log(`  ahead ${info.aheadSeconds.toFixed(2)}s seed ${seed} t=${sim.time.toFixed(2)} since fork ${(sim.time - lastForkAt).toFixed(2)}s zone ${sim.track.segmentAt(g.s).zone}`);
     }
@@ -306,8 +308,12 @@ for (let seed = 1; seed <= seeds; seed++) {
         p3.leapSmash += e.smashed;
       }
       if (e.type === 'stare') p3.stareMoved += e.moved.length;
-      if (e.type === 'hijackBail') p3.hijackBails++;
-      if (e.type === 'pose') p3.poseGain += e.gain;
+      if (e.type === 'breakawayLand') {
+        p3.breakawayLands++;
+        p3.shaken += e.shaken;
+      }
+      if (e.type === 'primeTime' && e.on) p3.primeTimes++;
+      if (e.type === 'thickSkin') p3.skins++;
       if (e.type === 'tell') {
         p2.tells[e.kind] = (p2.tells[e.kind] ?? 0) + 1;
         // A tell nobody can see isn't a tell: it must start inside the frame.
@@ -351,13 +357,10 @@ for (let seed = 1; seed <= seeds; seed++) {
     const sh = sim.show;
     if (sh.ratings < 0 || sh.ratings > 100 || sh.pin < 0 || sh.pin > 100 || !Number.isFinite(sh.banked)) fail(`seed ${seed}: meter out of range (ratings ${sh.ratings}, pin ${sh.pin})`);
     // Heat never falls within a segment (§12), except when Pose for the Camera spends it (§17).
-    if (sh.heat < lastHeat && !events.some((e) => e.type === 'pose')) fail(`seed ${seed}: Heat fell ${lastHeat} → ${sh.heat}`);
+    if (sh.heat < lastHeat) fail(`seed ${seed}: Heat fell ${lastHeat} → ${sh.heat}`);
     lastHeat = sh.heat;
     p2.maxPin = Math.max(p2.maxPin, sh.pin);
-    // Phase 3: the pose is a deliberate stop of at most 1s (§2) and never below the LOCKED floor.
-    p3.maxPose = Math.max(p3.maxPose, g.pose);
     p3.maxAir = Math.max(p3.maxAir, g.air);
-    if (g.pose > 1) fail(`seed ${seed}: pose held ${g.pose.toFixed(2)}s`);
     if (!inSwoop && Math.abs(info.screenUpDeg) > TUNING.camera.screenUpMaxDeg) fail(`seed ${seed}: screen-up law broken (${info.screenUpDeg.toFixed(1)}°, ${info.angle}) at tick ${i}`);
     if (!inSwoop && info.giantScreenY > TUNING.camera.giantMaxScreenY + 0.005) fail(`seed ${seed}: giant at ${info.giantScreenY.toFixed(3)} of screen (${info.angle}) at tick ${i}`);
   }
@@ -382,7 +385,10 @@ for (let seed = 1; seed <= seeds; seed++) {
   agg.bounces += st.bounces;
   agg.wallBumps += st.wallBumps;
   agg.laneChanges += st.laneChanges;
-  agg.merges += sim.track.segments.filter((s) => s.kind === 'merge').length > 0 ? 1 : 0;
+  // Merges he ran through (the track drops segments behind him, so count the events, not what's left in memory).
+  const hadMerge = sim.stats.merges > 0;
+  agg.merges += hadMerge ? 1 : 0;
+  if (!hadMerge && process.env.SOAK_VERBOSE) console.log(`  no merge: seed ${seed}, ended ${sim.time.toFixed(1)}s ${sim.show.state}:${sim.show.reason}, s=${sim.giant.s.toFixed(0)}`);
   for (const x of sim.asks.list) {
     asksAgg[x.id] ??= { offered: 0, done: 0 };
     asksAgg[x.id].offered++;
@@ -419,7 +425,7 @@ console.log(
     `spawns ${JSON.stringify(p2.spawns)}, nearest spawn ${p2.minSpawnDist.toFixed(1)}m, on camera ${p2.spawnOnCamera}; tells ${JSON.stringify(p2.tells)}, max at once ${p2.maxTells}, off screen ${p2.tellsOffscreen}; ` +
     `rams hit ${p2.ramHits} / missed ${p2.ramMisses}; spotlight locks ${p2.spotlights}, choppers shaken ${p2.choppersShaken}; police crashes ${p2.policeCrash} on air (${p2.crashOffscreen} outside the frame) + ${p2.crashOffAir} behind the frame, ploughed through ${p2.policeSmash}; spiked ${p2.spiked}; near-misses ${p2.nearMiss}; traffic dodges ${p2.dodges}; lost track ${p2.lostTrack}; max Pin ${p2.maxPin.toFixed(0)}`,
 );
-console.log(`  run (Phase 3): segments ${p3.segments.join('/')}; ability uses ${JSON.stringify(p3.uses)}, no-target presses ${p3.duds}; leap landings ${p3.leapLands} (smashed ${p3.leapSmash}); stare pulled over ${p3.stareMoved}; hijack bails ${p3.hijackBails}; pose Ratings +${p3.poseGain.toFixed(0)}`);
+console.log(`  run (Phase 3): segments ${p3.segments.join('/')}; ability uses ${JSON.stringify(p3.uses)}, no-target presses ${p3.duds}; leap landings ${p3.leapLands} (smashed ${p3.leapSmash}); stare pulled over ${p3.stareMoved}; breakaway landings ${p3.breakawayLands} (police shaken ${p3.shaken}); prime times ${p3.primeTimes}; thick skin saves ${p3.skins}`);
 console.log(`  forks: opened ${forks.opened}, taken ${forks.taken}, stayed ${forks.stayed}`);
 console.log(`  police net: ${nets.spawned} spawned, ${nets.tells} closed in, ${nets.escaped} escaped, ${nets.slipped} slipped (1st catch), ${nets.busted} busted (2nd); max ${nets.maxPerSegment} a segment`);
 console.log(`  car carrier: ${carriers.spawned} spawned, ${carriers.drops} drops (closest ${carriers.minLead.toFixed(2)}s ahead), ${carriers.smashed} carriers smashed`);

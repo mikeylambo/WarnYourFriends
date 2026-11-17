@@ -10,7 +10,9 @@ import type { Show } from './show';
  */
 export type RunPhase = 'live' | 'meeting' | 'won' | 'lost';
 
-export const ABILITIES: AbilityId[] = ['leap', 'stare', 'hijack', 'pose'];
+export const ABILITIES: AbilityId[] = ['leap', 'stare', 'breakaway', 'primeTime'];
+/** Every upgrade, in pool order (the offers draw from this, minus what's locked). */
+export const ALL_UPGRADES = Object.keys(TUNING.upgrades) as UpgradeId[];
 
 export class RunState {
   segment = 0;
@@ -18,13 +20,30 @@ export class RunState {
   earned = 0;
   spent = 0;
   owned: UpgradeId[] = [];
+  /** Ability levels I–III (the equipped one's level carries into each segment). */
+  levels: Partial<Record<AbilityId, number>> = {};
   /** Per-segment results, for the recap. */
   readonly results: { segment: number; cleared: boolean; banked: number; peak: number }[] = [];
   private rng: Rng;
   private offerCache: UpgradeId[] | null = null;
 
-  constructor(readonly seed: number) {
+  /**
+   * `pool`: the upgrades this player can be offered (Awards unlock the rest; src/awards.ts). The leaderboard
+   * replays a run with the same pool, so the offers match.
+   */
+  constructor(readonly seed: number, readonly pool: readonly UpgradeId[] = ALL_UPGRADES) {
     this.rng = new Rng((seed ^ 0x52554e) >>> 0);
+  }
+
+  /** Level an ability is at (0 if not held). */
+  levelOf(id: AbilityId): number {
+    return this.owned.includes(id) ? (this.levels[id] ?? 1) : 0;
+  }
+
+  /** What buying `id` costs now: an ability you hold levels up at `levelPrice` of its price. */
+  priceOf(id: UpgradeId): number {
+    const u = TUNING.upgrades[id];
+    return u.kind === 'ability' && this.owned.includes(id) ? Math.round(u.price * TUNING.levelPrice) : u.price;
   }
 
   get purse(): number {
@@ -56,22 +75,33 @@ export class RunState {
   /** §17: three pitches. Passives you own aren't offered again; neither is the ability you hold. */
   offers(): UpgradeId[] {
     if (this.offerCache) return this.offerCache;
-    const pool = (Object.keys(TUNING.upgrades) as UpgradeId[]).filter((u) => !this.owned.includes(u));
+    // Passives you own aren't offered again; the ability you hold comes back as its next level until it's maxed.
+    const pool = ALL_UPGRADES.filter((u) => this.pool.includes(u) && (TUNING.upgrades[u].kind === 'ability' ? this.levelOf(u as AbilityId) < TUNING.maxLevel : !this.owned.includes(u)));
     const out: UpgradeId[] = [];
     while (out.length < TUNING.run.offers && pool.length) out.push(pool.splice(this.rng.int(0, pool.length - 1), 1)[0]);
     return (this.offerCache = out);
   }
 
   canAfford(id: UpgradeId): boolean {
-    return this.purse >= TUNING.upgrades[id].price;
+    return this.purse >= this.priceOf(id);
   }
 
   /** Buy one pitch (abilities replace the equipped one, §17). Returns false if it can't. */
   buy(id: UpgradeId): boolean {
     if (this.phase !== 'meeting' || !this.offers().includes(id) || !this.canAfford(id)) return false;
-    this.spent += TUNING.upgrades[id].price;
-    if (TUNING.upgrades[id].kind === 'ability') this.owned = this.owned.filter((u) => !(ABILITIES as string[]).includes(u));
-    this.owned.push(id);
+    this.spent += this.priceOf(id);
+    if (TUNING.upgrades[id].kind === 'ability') {
+      const a = id as AbilityId;
+      const held = this.levelOf(a);
+      if (held) this.levels[a] = held + 1; // the one you hold levels up
+      else {
+        // A different ability replaces the one you hold (its levels go with it).
+        for (const x of ABILITIES) if (this.owned.includes(x)) delete this.levels[x];
+        this.owned = this.owned.filter((u) => !(ABILITIES as string[]).includes(u));
+        this.owned.push(id);
+        this.levels[a] = 1;
+      }
+    } else this.owned.push(id);
     return this.nextSegment();
   }
 

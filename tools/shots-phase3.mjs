@@ -1,4 +1,4 @@
-// Phase 3 evidence: each ability mid-action from the chopper, the meeting, and the HUD chip.
+// Phase 3 evidence: each ability mid-action from the chopper, the meeting, and the HUD chip (pool v2, 2026-11-17: ?level=).
 // Usage: npm run build && node tools/shots-phase3.mjs  (writes docs/evidence/phase3/*.png)
 import { createRequire } from 'node:module';
 const require = createRequire(import.meta.url);
@@ -14,20 +14,21 @@ const shots = [
   // [ability, warm-up ticks with the bot, ticks after pressing, file]
   ['leap', 900, 33, 'leap-airborne'],
   ['leap', 900, 70, 'leap-landed'],
-  ['hijack', 900, 40, 'hijack-ride'],
+  ['breakaway', 900, 30, 'breakaway-dive'],
+  ['breakaway', 900, 64, 'breakaway-landed'],
   ['stare', 900, 14, 'stare'],
-  ['pose', 900, 20, 'pose'],
+  ['primeTime', 900, 40, 'prime-time'],
 ];
 for (const [ab, warm, after, file] of shots) {
   const page = await browser.newPage({ viewport: { width: 1280, height: 720 }, deviceScaleFactor: 2 });
-  await page.goto(`${URL}?seed=4&step=1&autostart=1&ability=${ab}&seg=2&cuts=0&debug=0`);
+  await page.goto(`${URL}?seed=4&step=1&autostart=1&ability=${ab}&level=${process.env.LEVEL ?? 2}&seg=2&cuts=0&debug=0`);
   await page.waitForFunction(() => window.__GAME && window.__GAME.started, null, { timeout: 15000 });
   await page.waitForFunction(() => !window.__GAME.coverage().cold, null, { timeout: 15000 }); // cold open runs on wall-clock time
   const res = await page.evaluate(([warm, after]) => {
     const G = window.__GAME;
     G.setBot(true);
     G.step(warm);
-    // Press until it fires (hijack needs a car in reach).
+    // Press until it fires.
     let fired = false;
     for (let i = 0; i < 600 && !fired; i++) {
       G.step(1, { lane: 0, brake: false, shoulder: false, ability: true });

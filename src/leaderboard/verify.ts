@@ -1,5 +1,5 @@
 import { Sim } from '../sim/sim';
-import { RunState } from '../sim/run';
+import { ALL_UPGRADES, RunState } from '../sim/run';
 import { NO_INPUT, type SimInput } from '../sim/types';
 import { TUNING, type UpgradeId } from '../tuning';
 
@@ -21,6 +21,8 @@ export interface Submission {
   segments: string[];
   /** Full Broadcast: what was bought at each meeting (null = walked out). */
   buys: (UpgradeId | null)[];
+  /** The upgrades this player could be offered (Awards unlock the rest); absent = all. Must match the client's run. */
+  pool?: UpgradeId[];
   /** The score the client showed; only compared, never stored. */
   claimed: number;
 }
@@ -82,11 +84,12 @@ export function verify(sub: Submission): VerifyResult {
     return { ok: true, score: Math.round(sim.show.banked), segments: 1, won: sim.show.state === 'cleared' };
   }
 
-  const run = new RunState(sub.seed);
+  const pool = Array.isArray(sub.pool) ? sub.pool.filter((u) => (ALL_UPGRADES as string[]).includes(u)) : ALL_UPGRADES;
+  const run = new RunState(sub.seed, pool);
   const buys = Array.isArray(sub.buys) ? sub.buys : [];
   for (let i = 0; i < logs.length; i++) {
     if (run.phase !== 'live') return { ok: false, error: 'segments' };
-    const sim = new Sim({ seed: run.segmentSeed(), segment: run.segment, upgrades: run.owned, growth: !!sub.growth });
+    const sim = new Sim({ seed: run.segmentSeed(), segment: run.segment, upgrades: run.owned, levels: run.levels, growth: !!sub.growth });
     if (!playSegment(sim, logs[i]!)) return { ok: false, error: 'unfinished' };
     run.finishSegment(sim.show);
     if ((run.phase as string) === 'meeting') {

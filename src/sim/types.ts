@@ -75,13 +75,16 @@ export interface GiantState {
   // --- Phase 3 abilities ---
   abilityCd: number;
   abilityBuffer: number;
-  /** Leap: time left airborne (s), and its total. */
+  /** Leap / Breakaway: time left airborne (s), and its total; which one it is. */
   air: number;
   airDur: number;
-  /** Hijack Hop: time left riding (s). */
-  ride: number;
-  /** Pose for the Camera: time left holding the pose (s). */
-  pose: number;
+  airKind: 'leap' | 'breakaway';
+  /** Prime Time: time left on air (s). */
+  prime: number;
+  /** Thick Skin: gear-costing hits left to shrug off this segment. */
+  skin: number;
+  /** Second Wind: the highest gear he's had this segment. */
+  peakTier: number;
 }
 
 export interface SimInput {
@@ -96,7 +99,7 @@ export interface SimInput {
 
 export const NO_INPUT: SimInput = { lane: 0, brake: false, shoulder: false, ability: false };
 
-export type TierDropReason = 'impact' | 'brake';
+export type TierDropReason = 'impact' | 'brake' | 'slip';
 
 export type SimEvent =
   | { type: 'smash'; propId: number; cls: MassClass; mat: Material; s: number; d: number; across: boolean; speed: number }
@@ -140,19 +143,22 @@ export type SimEvent =
   /** The chain ended: banked `points` (pending × mult, or × 1 when `dropped`). */
   | { type: 'chainEnd'; count: number; mult: number; points: number; dropped: boolean }
   | { type: 'busted'; reason: BustReason }
-  /** Phase 3: an ability fired (ok) or the button was pressed with nothing to do (e.g. no car to hijack). */
-  | { type: 'ability'; id: AbilityId; ok: boolean }
+  /** Phase 3: an ability fired (ok) or the button was pressed with nothing to do. `level` I–III. */
+  | { type: 'ability'; id: AbilityId; ok: boolean; level: number }
   | { type: 'leapLand'; s: number; d: number; smashed: number }
-  | { type: 'stare'; moved: { id: number; from: number; to: number }[]; backedOff: number }
-  | { type: 'hijack'; propId: number; kind: PropKind; variant: number }
-  | { type: 'hijackBail'; s: number; d: number }
-  | { type: 'pose'; gain: number; heat: number }
+  | { type: 'stare'; moved: { id: number; from: number; to: number }[]; backedOff: number; crashed: number }
+  /** Breakaway landed: what the slam smashed, and how many police behind lost him. */
+  | { type: 'breakawayLand'; s: number; d: number; smashed: number; shaken: number }
+  /** Prime Time on air (and off again). */
+  | { type: 'primeTime'; on: boolean; time: number }
+  /** Thick Skin shrugged off a hit (no gear lost). */
+  | { type: 'thickSkin'; left: number }
   /** Police chopper spotlight locks onto the giant's lane (police arrive faster until shaken). */
   | { type: 'spotlight'; id: number; lane: number }
   /** A chasing cruiser ploughs through a Medium (or lighter) prop in its lane. */
   | { type: 'policeSmash'; id: number; propId: number; cls: MassClass; mat: Material; s: number; d: number; speed: number }
   /** A chasing cruiser crashes into something Heavy or immovable and is out of the chase; a Heavy prop goes with it. */
-  | { type: 'policeCrash'; id: number; propId: number; propKind: PropKind; propCls: MassClass; propSmashed: boolean; s: number; d: number; speed: number; /** In the chopper's frame: news (Ratings, stunt, headline). */ onAir: boolean; /** It ran over a spike strip. */ spikes?: boolean }
+  | { type: 'policeCrash'; id: number; propId: number; propKind: PropKind; propCls: MassClass; propSmashed: boolean; s: number; d: number; speed: number; /** In the chopper's frame: news (Ratings, stunt, headline). */ onAir: boolean; /** It ran over a spike strip. */ spikes?: boolean; /** It left the road (The Stare III): it hit nothing in particular. */ offRoad?: boolean }
   /** Phase 2 road variety: the giant enters a new stretch of road. */
   | { type: 'zone'; zone: 'highway' | 'avenue' | 'bridge' | 'tunnel'; name: string }
   | { type: 'landmark'; kind: LandmarkKind; name: string; s: number }
@@ -165,9 +171,9 @@ export type SimEvent =
 
 export type UnitKind = 'cruiser' | 'rolling' | 'roadblock' | 'spike' | 'chopper' | 'net' | 'carrier';
 /** §12 gain sources. */
-export type GainType = 'medium' | 'heavy' | 'nearMiss' | 'lostTrack' | 'rampage' | 'pose' | 'policeCrash' | 'collateral';
+export type GainType = 'medium' | 'heavy' | 'nearMiss' | 'lostTrack' | 'rampage' | 'policeCrash' | 'collateral';
 /** Spectacle stunts (score, not Ratings). */
-export type StuntType = 'medium' | 'heavy' | 'unit' | 'policeCrash' | 'collateral' | 'nearMiss' | 'ramDodge' | 'lostTrack' | 'chopperShaken' | 'leapLand' | 'hijackBail' | 'pose';
+export type StuntType = 'medium' | 'heavy' | 'unit' | 'policeCrash' | 'collateral' | 'nearMiss' | 'ramDodge' | 'lostTrack' | 'chopperShaken' | 'leapLand' | 'breakawayLand';
 export type BustReason = 'ratings' | 'pin' | 'missed';
 /** What filled the meter: boxed in by a Police Net, or caught crawling with police on his tail. */
 export type PinCause = 'net' | 'caught';

@@ -16,7 +16,7 @@
  */
 import { Sim } from '../src/sim/sim';
 import { Bot } from '../src/sim/bot';
-import { RunState, ABILITIES } from '../src/sim/run';
+import { RunState, ABILITIES, ALL_UPGRADES } from '../src/sim/run';
 import { TUNING, type UpgradeId } from '../src/tuning';
 
 const seeds = Number(process.argv[2] ?? 200);
@@ -38,10 +38,11 @@ const purseAtMeeting: number[] = [];
 const t0 = performance.now();
 
 for (let seed = 1; seed <= seeds; seed++) {
-  const run = new RunState(seed);
+  // POOL=start plays with the upgrades a new player has (Awards unlock Breakaway and Slipstream).
+  const run = new RunState(seed, process.env.POOL === 'start' ? ALL_UPGRADES.filter((u) => u !== 'breakaway' && u !== 'slipstream') : ALL_UPGRADES);
   while (run.phase === 'live') {
     const i = run.segment;
-    const sim = new Sim({ seed: run.segmentSeed(), segment: i, upgrades: run.owned, growth: true });
+    const sim = new Sim({ seed: run.segmentSeed(), segment: i, upgrades: run.owned, levels: run.levels, growth: true });
     const bot = new Bot(sim);
     const queue: ReturnType<Bot['input']>[] = [];
     const delay = Math.round(REACT * TUNING.sim.hz);

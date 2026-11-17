@@ -44,7 +44,7 @@ describe('headlines (§21)', () => {
     expect(compass(Math.PI)).toBe('West');
   });
 
-  const ABIL: UpgradeId[] = ['leap', 'stare', 'hijack', 'pose'];
+  const ABIL: UpgradeId[] = ['leap', 'stare', 'breakaway', 'primeTime'];
   for (const seed of [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]) {
     const ups: UpgradeId[] = seed > 8 ? [ABIL[seed - 9]] : [];
     it(`seed ${seed}${ups.length ? ` (${ups[0]}, segment 3)` : ''}: cadence, anti-repeat and the chyron never lies`, () => {
@@ -86,7 +86,7 @@ describe('headlines (§21)', () => {
       }
       // Heat only makes news going up (a Pose spends it).
       for (const { h } of out) if (h.sources[0]?.type === 'heat') expect((h.sources[0] as Extract<SimEvent, { type: 'heat' }>).heat).toBeGreaterThan(0);
-      if (ups.length && out.length > 10) expect(out.some(({ h }) => h.sources.some((e) => ['leapLand', 'stare', 'hijack', 'pose'].includes(e.type)))).toBe(true);
+      if (ups.length && out.length > 10) expect(out.some(({ h }) => h.sources.some((e) => ['leapLand', 'stare', 'breakawayLand', 'primeTime'].includes(e.type)))).toBe(true);
       // The broadcast ends with a sign-off or busted line, from the event that ended it.
       const final = out[out.length - 1].h;
       expect(["SIGN-OFF", "BUSTED"]).toContain(final.kicker);

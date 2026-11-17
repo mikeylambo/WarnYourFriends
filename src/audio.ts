@@ -418,15 +418,16 @@ export class Audio {
     this.tone(t, 0.9, 110, 104, 0.35, 'triangle');
     this.tone(t + 0.05, 0.9, 165, 156, 0.18, 'triangle');
   }
-  /** Hijack Hop: roof dent and an engine rev. */
-  hijack() {
+  /** Breakaway: a low rushing launch (the landing uses the Leap's land). */
+  breakaway() {
     if (!this.ready) return;
+    if (this.play('leap', 0.9, 0.8)) return;
     const t = this.ctx!.currentTime;
-    this.noise(t, 0.18, 'bandpass', 900, 2, 0.5);
-    this.tone(t + 0.1, 0.8, 80, 220, 0.25, 'sawtooth');
+    this.noise(t, 0.5, 'bandpass', 500, 0.8, 0.45, 2400);
+    this.tone(t, 0.4, 70, 140, 0.3, 'sawtooth');
   }
-  /** Pose for the Camera: a run of camera shutters and flashes charging. */
-  pose() {
+  /** Prime Time: a run of camera shutters and flashes charging (every station's cameras swing to him). */
+  primeTime() {
     if (!this.ready) return;
     const t = this.ctx!.currentTime;
     for (let i = 0; i < 6; i++) {

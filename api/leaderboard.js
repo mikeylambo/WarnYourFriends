@@ -317,7 +317,7 @@ var TUNING = {
     clipMin: 1.5,
     /** Between plays of the clip, the still (the moment as it lands) holds this long (s). Mike: "alternate photos and clips". */
     clipStillHold: 3,
-    score: { policeCrash: 10, unitSmash: 7, leapLand: 4, hijackBail: 5, heavyAcross: 6, heavy: 4, nearMiss: 4, ramMiss: 4, pose: 3 }
+    score: { policeCrash: 10, unitSmash: 7, leapLand: 4, breakawayLand: 5, heavyAcross: 6, heavy: 4, nearMiss: 4, ramMiss: 4 }
   },
   /**
    * Spectacle score (Mike, 2026-11-15; replaces §12 "banked = Ratings × gear per second", which sat at the
@@ -328,7 +328,7 @@ var TUNING = {
    * → it drops: the points bank at ×1, the multiplier is lost. Smash-across pays `acrossBonus`×.
    */
   spectacle: {
-    points: { medium: 100, heavy: 250, unit: 500, policeCrash: 750, collateral: 100, nearMiss: 200, ramDodge: 200, lostTrack: 250, chopperShaken: 300, leapLand: 150, hijackBail: 300, posePerHeat: 100 },
+    points: { medium: 100, heavy: 250, unit: 500, policeCrash: 750, collateral: 100, nearMiss: 200, ramDodge: 200, lostTrack: 250, chopperShaken: 300, leapLand: 150, breakawayLand: 250 },
     acrossBonus: 1.5,
     audienceMult: [1, 1.25, 1.5, 2],
     window: 2.5,
@@ -677,21 +677,24 @@ var TUNING = {
     offers: 3
   },
   /**
-   * §17 v1 upgrade pool (8). Abilities share the one ability slot (a new one replaces it);
-   * passives stack. Prices are paid from banked spectacle points (the run score is what you earned,
-   * spending doesn't lower it). Working default (×7.5 when spectacle points replaced per-second banking, 2026-11-15): a cleared segment banks ~180k median with the bot (p10 120k, p90 245k), so one
-   * segment affords the cheaper half; saving up for Leap/Hijack is a real choice.
+   * Upgrade pool v2 (Mike, 2026-11-17: "a winning set"; art from his sheet, each card's image reused). Abilities
+   * share the one slot; offered again, the one you hold levels up (I → III, `levels`) at `levelPrice` × its price;
+   * a different one replaces it. Passives stack. Prices are paid from banked spectacle points (spending never lowers
+   * the score). Breakaway and Slipstream start locked (Awards unlock them, src/awards.ts).
    */
   upgrades: {
-    leap: { kind: "ability", price: 195e3, label: "Leap", blurb: "Hop lanes of trouble. The landing flattens what you land on.", pitch: "Get a clean shot of him clearing the spike strip." },
-    stare: { kind: "ability", price: 16e4, label: "The Stare", blurb: "Traffic and police ahead pull out of your lane.", pitch: "Stay tight on the eyes. We have time." },
-    hijack: { kind: "ability", price: 225e3, label: "Hijack Hop", blurb: "Ride a car through everything, then bail at Rampage.", pitch: "Follow him across the car roofs. Keep it wide." },
-    pose: { kind: "ability", price: 16e4, label: "Pose for the Camera", blurb: "Stop for the cameras. Heat becomes a Ratings spike.", pitch: "Hold the close-up. He\u2019s giving us a usable still." },
-    ironShins: { kind: "passive", price: 125e3, label: "Iron Shins", blurb: "Medium objects never bounce you.", pitch: "Keep rolling. The street furniture won\u2019t slow him down." },
-    secondWind: { kind: "passive", price: 125e3, label: "Second Wind", blurb: "The box-in meter drains 50% faster.", pitch: "Stay with him. He\u2019s slipping out of the box-in faster." },
-    showman: { kind: "passive", price: 165e3, label: "Showman", blurb: "Something new on air pays double.", pitch: "Double the variety bonus when he gives us something we haven\u2019t aired." },
-    tailwind: { kind: "passive", price: 14e4, label: "Tailwind", blurb: "Tier up 30% sooner.", pitch: "Cue the wide shot. He\u2019s hitting the next speed tier 30% sooner." }
+    leap: { kind: "ability", price: 195e3, label: "Leap", blurb: "Hop lanes of trouble. The landing flattens what you land on.", pitch: "Get a clean shot of him clearing the spike strip.", levels: ["", "Longer jump, bigger landing.", "The landing flattens anything, armored trucks too."] },
+    stare: { kind: "ability", price: 16e4, label: "The Stare", blurb: "Traffic and police ahead pull out of your lane.", pitch: "Stay tight on the eyes. We have time.", levels: ["", "Reaches half again as far.", "Police that pull over crash out."] },
+    breakaway: { kind: "ability", price: 21e4, label: "Breakaway", blurb: "Dive over everything ahead. The police behind lose you.", pitch: "Get the long lens on him. He\u2019s about to leave them all behind.", levels: ["", "Longer dive, bigger slam.", "Lands straight into Rampage."] },
+    primeTime: { kind: "ability", price: 18e4, label: "Prime Time", blurb: "For a few seconds the audience can\u2019t drop and every smash counts double.", pitch: "Every station is taking our feed. Make it count.", levels: ["", "Lasts 8 seconds.", "Lasts 10 seconds."] },
+    thickSkin: { kind: "passive", price: 14e4, label: "Thick Skin", blurb: "Shrug off the first hit each segment: no gear lost.", pitch: "He walked through that like a turnstile." },
+    secondWind: { kind: "passive", price: 125e3, label: "Second Wind", blurb: "Gear back up 40% faster after losing one.", pitch: "He\u2019s catching his breath. Stay on him, he\u2019s coming back." },
+    crowdPleaser: { kind: "passive", price: 15e4, label: "Crowd Pleaser", blurb: "At Rampage the audience drains 40% slower.", pitch: "Keep rolling. Nobody can look away." },
+    slipstream: { kind: "passive", price: 16e4, label: "Slipstream", blurb: "Police crashes pay double: Ratings and points.", pitch: "Anyone chasing him ends up in the scenery. Keep it wide." }
   },
+  /** Ability level-up price, as a share of the ability's price; highest level. */
+  levelPrice: 0.8,
+  maxLevel: 3,
   /**
    * Leaderboard (§29: shared, server-side). Scores are re-simulated from the inputs on the server.
    */
@@ -716,6 +719,17 @@ var TUNING = {
    * road ahead of a police car alongside him.
    */
   onboarding: { quietStart: 4, blockedLead: 2.2, gearAfter: 14, audienceBelow: 12, kiteAhead: 30, gap: 7, hold: 4.5 },
+  /**
+   * Outfits (Awards, Mike 2026-11-17: "recolors for now"): the Meshy texture's plum cloth takes `hue` (deg) with
+   * saturation × `sat` and lightness × `light`; the bone plates blend `plateMix` toward `plate` (null = as painted).
+   * Every one stays dark against the road (§23: the giant is the darkest thing on screen).
+   */
+  outfits: {
+    classic: { label: "Classic", hue: 285, sat: 1, light: 1, plate: null, plateMix: 0, cape: null, band: null },
+    midnight: { label: "Midnight", hue: 218, sat: 0.95, light: 1.05, plate: 13160152, plateMix: 0.7, cape: 989747, band: 13160152 },
+    parade: { label: "Parade", hue: 356, sat: 1.25, light: 1.45, plate: null, plateMix: 0, cape: 5901590, band: null },
+    gold: { label: "Prime Time Gold", hue: 265, sat: 0.18, light: 0.55, plate: 14265404, plateMix: 0.85, cape: 1118229, band: 14265404 }
+  },
   /** Smash sample levels by class: the light/medium takes are ~16 dB quieter than heavy, so they play hotter. */
   sfxLevels: { light: 1.1, medium: 1.6, heavy: 1 },
   /**
@@ -736,26 +750,22 @@ var TUNING = {
   /** Phase 3 abilities (lane-runner versions of §17's pool). 5f input buffer (§8). */
   abilities: {
     bufferFrames: 5,
-    /** Leap: airborne this long (no collisions), apex height (m), landing shockwave radius (m) smashing up to Heavy. Mike's playtest: 3.2m / 0.9s didn't read from the chopper. */
-    leap: { time: 1.1, height: 5.5, shockRadius: 6.5, cooldown: 6 },
-    /** The Stare: the road parts this far ahead: his lane pulls over, the lanes either side move one further out; police winding up back off. */
-    stare: { reach: 90, lanesEitherSide: 1, time: 0.6, cooldown: 10, glareTime: 0.9 },
-    /** Hijack Hop: a vehicle within this far ahead (your lane or next to it); ride speed (just under Rampage top so every camera keeps ≥2s of road ahead), reached at `accel`, ride time, then bail at Rampage. */
-    hijack: { reach: 20, speed: 14, accel: 8, time: 3, cooldown: 12 },
-    /** Pose: speed held at the floor this long (a deliberate stop, §2: ≤1s); Ratings per Heat level; Heat spent. */
-    pose: { time: 0.8, ratingsPerHeat: 7, heatCost: 1, cooldown: 12 },
+    /** Never land inside something unflattenable: the flight stretches up to this much longer (s) to clear it. */
+    landExtendMax: 0.8,
+    /** Per-level numbers are [I, II, III]. Leap: airborne this long (no collisions), apex height (m), landing shockwave radius (m) smashing up to Heavy (III: anything). Mike's playtest: 3.2m / 0.9s didn't read from the chopper. */
+    leap: { time: [1.1, 1.3, 1.3], height: 5.5, shockRadius: [6.5, 9, 9], cooldown: 6 },
+    /** The Stare: the road parts this far ahead: his lane pulls over, the lanes either side move one further out; police winding up back off (III: they crash out). */
+    stare: { reach: [90, 135, 135], lanesEitherSide: 1, time: 0.6, cooldown: 10, glareTime: 0.9 },
+    /** Breakaway: a low forward dive, `boost` m/s over his speed, airborne (no collisions); a landing slam smashing up to Heavy; every police car behind him loses track. III lands in Rampage. */
+    breakaway: { time: [1, 1.3, 1.3], height: 3, boost: 4, shockRadius: [6, 8, 8], cooldown: 14 },
+    /** Prime Time: this long, the audience can't drop and smashes count `mult` × (Ratings and points). */
+    primeTime: { time: [6, 8, 10], mult: 2, cooldown: 30 },
+    // balance 2026-11-17: 8s every 20s was 40% uptime with no drain
     /** How long the "what it did" callout stays beside the ability chip (s). */
     popTime: 1.8
   },
-  /** Phase 3 passives. */
-  passives: {
-    /** Second Wind: Pin drain multiplier. */
-    secondWindDrain: 1.5,
-    /** Showman: a type unseen this segment pays this (instead of §12's ×1.5). */
-    showmanFresh: 2,
-    /** Tailwind: tier-up time multiplier. */
-    tailwindTierUp: 0.7
-  },
+  /** Passives v2 (2026-11-17). Thick Skin: gear-costing hits shrugged off per segment. Second Wind: tier-up time × this while below the gear he had. Crowd Pleaser: audience drain × this at Rampage. Slipstream: police crash Ratings and points × this. */
+  passives: { thickSkinHits: 1, secondWindTierUp: 0.6, crowdPleaserDecay: 0.6, slipstreamMult: 2 },
   /** Phase 0c traffic reactions (presentation): cars ahead brake, swerve and honk as he approaches. */
   traffic: {
     /** Brake lights and hazards come on when the giant is this close behind (m). */
@@ -1416,6 +1426,13 @@ var Show = class _Show {
   /** Phase 3 passives: Showman's fresh-type multiplier, Second Wind's Pin drain multiplier. */
   freshMult = TUNING.show.freshMult;
   pinDrainMult = 1;
+  /** Passives v2: Ratings multiplier per gain type (Slipstream: police crashes), and the drain multiplier at Rampage (Crowd Pleaser). */
+  gainMult = {};
+  rampageDecayMult = 1;
+  /** Passives v2: spectacle points multiplier per stunt (Slipstream: police crashes). */
+  stuntMult = {};
+  /** Prime Time on air (the sim sets it): no drain, and smashes count `abilities.primeTime.mult` ×. */
+  prime = false;
   /** Time of the last gain, for decay. */
   lastGain = 0;
   seen = /* @__PURE__ */ new Set();
@@ -1438,8 +1455,10 @@ var Show = class _Show {
   gain(type, time, outnumbered, out, base) {
     if (this.state !== "live") return 0;
     const S = TUNING.show;
-    let amount = base ?? (type === "pose" ? 0 : S.gain[type]);
-    if (type !== "rampage" && type !== "pose") {
+    let amount = base ?? S.gain[type];
+    amount *= this.gainMult[type] ?? 1;
+    if (this.prime && (type === "medium" || type === "heavy")) amount *= TUNING.abilities.primeTime.mult;
+    if (type !== "rampage") {
       this.recent = this.recent.filter((r) => time - r.t <= S.repeatWindow);
       const repeats = this.recent.filter((r) => r.type === type).length;
       const mult = this.seen.has(type) ? S.repeatMult[Math.min(repeats, S.repeatMult.length - 1)] : this.freshMult;
@@ -1477,8 +1496,9 @@ var Show = class _Show {
         this.gain("rampage", time, outnumbered, out);
       }
     } else this.rampageAcc = 0;
-    if (time > S.decayGrace && time - Math.max(this.lastGain, S.decayGrace - S.decayAfter) > S.decayAfter) {
-      this.ratings = Math.max(0, this.ratings - S.decayRate[Math.min(this.segment, S.decayRate.length - 1)] * dt);
+    if (!this.prime && time > S.decayGrace && time - Math.max(this.lastGain, S.decayGrace - S.decayAfter) > S.decayAfter) {
+      const atRampage = tier === TUNING.tiers.length - 1;
+      this.ratings = Math.max(0, this.ratings - S.decayRate[Math.min(this.segment, S.decayRate.length - 1)] * (atRampage ? this.rampageDecayMult : 1) * dt);
     }
     if (this.chain.count > 0 && time - this.chain.last > TUNING.spectacle.window) this.endChain(false, out);
     if (time >= this.nextHeatT) {
@@ -1518,16 +1538,6 @@ var Show = class _Show {
   }
   /** Police Net catches slipped this segment. */
   netSlips = 0;
-  /** Phase 3 Pose for the Camera: spend Heat, take a Ratings spike (the one way Heat falls). */
-  pose(time, out) {
-    const P = TUNING.abilities.pose;
-    const gain = P.ratingsPerHeat * this.heat;
-    const before = this.heat;
-    const delta = this.gain("pose", time, false, out, gain);
-    this.heat = Math.max(1, this.heat - P.heatCost);
-    if (this.heat !== before) out.push({ type: "heat", heat: this.heat });
-    return delta;
-  }
   /** Chain multiplier for a chain of `count` stunts. */
   static chainMult(count) {
     const C = TUNING.spectacle;
@@ -1538,7 +1548,9 @@ var Show = class _Show {
     if (this.state !== "live") return;
     const C = TUNING.spectacle;
     if (this.chain.count > 0 && time - this.chain.last > C.window) this.endChain(false, out);
-    const pts = (base ?? C.points[cause] ?? 0) * TUNING.show.bankMult[gear] * C.audienceMult[this.tier];
+    let pts = (base ?? C.points[cause] ?? 0) * TUNING.show.bankMult[gear] * C.audienceMult[this.tier];
+    pts *= this.stuntMult[cause] ?? 1;
+    if (this.prime && (cause === "medium" || cause === "heavy" || cause === "unit")) pts *= TUNING.abilities.primeTime.mult;
     if (pts <= 0) return;
     this.chain.count++;
     this.chain.pending += pts;
@@ -1645,6 +1657,37 @@ var Pursuit = class {
       u.alive = false;
     }
     this.closest.clear();
+    return n;
+  }
+  /**
+   * Breakaway landed: every police car behind him loses track (it drops back and leaves the chase; one
+   * lost-track award each, the chopper excepted: it can still see him).
+   */
+  loseAllBehind() {
+    const g = this.sim.giant;
+    let n = 0;
+    for (const u of this.units) {
+      if (!u.alive || u.lost || u.unit === "chopper" || u.unit === "spike" || u.unit === "roadblock" || u.unit === "carrier") continue;
+      if (u.s > g.s) continue;
+      u.lost = true;
+      u.hit = true;
+      if (u.phase !== "leave") this.setPhase(u, "leave");
+      n++;
+      this.sim.emitPublic({ type: "lostTrack", id: u.id, kind: u.unit });
+      if (n === 1) this.sim.award("lostTrack");
+    }
+    return n;
+  }
+  /** The Stare III: the cruisers that back off crash out (on air) instead of leaving. */
+  crashBackedOff() {
+    let n = 0;
+    for (const u of this.units) {
+      if (!u.alive || u.unit !== "cruiser" || u.phase !== "leave" || u.target !== -1 || u.lost) continue;
+      const g = this.sim.giant;
+      if (u.s < g.s - TUNING.pursuit.crash.visibleBehind || u.s > g.s + 40) continue;
+      this.crashOut(u, u, false, true, false, true);
+      n++;
+    }
     return n;
   }
   /** The Stare: cruisers closing in or winding up back off (they've lost their nerve, not him). */
@@ -2226,7 +2269,7 @@ var Pursuit = class {
       this.setPhase(u, "tell");
       sim.emitPublic({ type: "tell", id: u.id, kind: "spike", lane: u.lane, time: S.tell });
     } else if (u.phase === "tell" && u.phaseT >= S.tell) this.setPhase(u, "act");
-    if (u.phase === "act" && !u.hit && g.air <= 0 && g.ride <= 0 && Math.abs(g.s - u.s) < u.hl + 0.5 && Math.abs(g.d - u.d) < u.hw + 0.3) {
+    if (u.phase === "act" && !u.hit && g.air <= 0 && Math.abs(g.s - u.s) < u.hl + 0.5 && Math.abs(g.d - u.d) < u.hw + 0.3) {
       u.hit = true;
       sim.spikeHit(u);
     }
@@ -2425,11 +2468,11 @@ var Pursuit = class {
     }
   }
   /** A chasing cruiser is out of the chase against `p`; on air it's news (Ratings, stunt, headline). */
-  crashOut(u, p, smashed, onAir, spikes = false) {
+  crashOut(u, p, smashed, onAir, spikes = false, offRoad = false) {
     const sim = this.sim;
     u.alive = false;
     u.lost = true;
-    sim.emitPublic({ type: "policeCrash", id: u.id, propId: p.id, propKind: p.kind, propCls: p.cls, propSmashed: smashed, s: u.s, d: u.d, speed: Math.max(u.speed, sim.giant.speed), onAir, spikes });
+    sim.emitPublic({ type: "policeCrash", id: u.id, propId: p.id, propKind: p.kind, propCls: p.cls, propSmashed: smashed, s: u.s, d: u.d, speed: Math.max(u.speed, sim.giant.speed), onAir, spikes, offRoad });
     if (onAir) sim.award("policeCrash");
   }
   update(u, dt) {
@@ -2615,6 +2658,8 @@ var Sim = class {
   /** Phase 3: upgrades owned this run, and the one equipped ability (if any). */
   upgrades;
   ability;
+  /** The equipped ability's level (1–3; 0 with none). */
+  abilityLevel;
   /** Phase 2: the sign-off exit ramp, once open (v0.3 §4). */
   exit = null;
   /** A fork's exit ramp, once open (Mike, 2026-11-15). */
@@ -2636,11 +2681,16 @@ var Sim = class {
     this.escort = new Escort(opts.seed, this.track);
     this.pursuit = new Pursuit(opts.seed, this);
     this.upgrades = new Set(opts.upgrades ?? []);
-    this.ability = ["leap", "stare", "hijack", "pose"].find((a) => this.upgrades.has(a)) ?? null;
+    this.ability = ["leap", "stare", "breakaway", "primeTime"].find((a) => this.upgrades.has(a)) ?? null;
+    this.abilityLevel = this.ability ? Math.max(1, Math.min(TUNING.maxLevel, opts.levels?.[this.ability] ?? 1)) : 0;
     this.show.startSegment(opts.segment ?? 0);
     this.asks = new Asks(opts.seed, opts.segment ?? 0, this.track);
-    if (this.upgrades.has("showman")) this.show.freshMult = TUNING.passives.showmanFresh;
-    if (this.upgrades.has("secondWind")) this.show.pinDrainMult = TUNING.passives.secondWindDrain;
+    const PV = TUNING.passives;
+    if (this.upgrades.has("crowdPleaser")) this.show.rampageDecayMult = PV.crowdPleaserDecay;
+    if (this.upgrades.has("slipstream")) {
+      this.show.gainMult.policeCrash = PV.slipstreamMult;
+      this.show.stuntMult.policeCrash = PV.slipstreamMult;
+    }
     const lane = Math.floor(TUNING.lanes.start / 2);
     const d = this.track.laneCenter(lane);
     const speed = TUNING.giant.startSpeed;
@@ -2675,26 +2725,34 @@ var Sim = class {
       abilityBuffer: 0,
       air: 0,
       airDur: 0,
-      ride: 0,
-      pose: 0
+      airKind: "leap",
+      prime: 0,
+      skin: this.upgrades.has("thickSkin") ? TUNING.passives.thickSkinHits : 0,
+      peakTier: 0
     };
   }
   get tierTuning() {
     return TUNING.tiers[this.giant.tier];
+  }
+  /** Time at top speed to the next gear: Second Wind shortens it while he's below the gear he had. */
+  tierUpAfter() {
+    const g = this.giant;
+    const base = this.tierTuning.tierUpAfter;
+    return base * (this.upgrades.has("secondWind") && g.tier < g.peakTier ? TUNING.passives.secondWindTierUp : 1);
   }
   /** Progress toward the next gear, 0..1 (0 at top gear): the HUD pip and the build-up cue read it. */
   get tierUpProgress() {
     const g = this.giant;
     const t = this.tierTuning;
     if (!Number.isFinite(t.tierUpAfter)) return 0;
-    const after = t.tierUpAfter * (this.upgrades.has("tailwind") ? TUNING.passives.tailwindTierUp : 1);
+    const after = this.tierUpAfter();
     return clamp(g.tierTimer / after, 0, 1);
   }
   /** Seconds to the next gear if he keeps it up (Infinity at top gear). */
   get tierUpIn() {
     const t = this.tierTuning;
     if (!Number.isFinite(t.tierUpAfter)) return Infinity;
-    const after = t.tierUpAfter * (this.upgrades.has("tailwind") ? TUNING.passives.tailwindTierUp : 1);
+    const after = this.tierUpAfter();
     return Math.max(0, after - this.giant.tierTimer);
   }
   /** A lateral move (lane change, knock-back or wall bump) is in progress. */
@@ -2738,7 +2796,7 @@ var Sim = class {
     this.show.stepPin(dt, this.boxedIn(), this.caught(), this.giant.speed, this.events);
     if (this.show.netSlips > slipsBefore) {
       const g2 = this.giant;
-      if (g2.tier > 0) this.setTier(g2.tier - 1, "impact");
+      if (g2.tier > 0) this.setTier(g2.tier - 1, "slip");
       g2.stumble = TUNING.tierDrop.stumbleTime;
       if (this.show.pinCause === "net") this.pursuit.disperseNet();
       else this.pursuit.shakeOff();
@@ -3000,11 +3058,8 @@ var Sim = class {
       case "leapLand":
         if (e.smashed > 0) this.stunt("leapLand");
         break;
-      case "hijackBail":
-        this.stunt("hijackBail");
-        break;
-      case "pose":
-        this.stunt("pose", TUNING.spectacle.points.posePerHeat * Math.max(1, e.heat + 1));
+      case "breakawayLand":
+        this.stunt("breakawayLand");
         break;
       case "wallBump":
         st.wallBumps++;
@@ -3031,8 +3086,14 @@ var Sim = class {
     const next = clamp(tier, 0, TUNING.tiers.length - 1);
     if (next === g.tier) return;
     const up = next > g.tier;
+    if (!up && reason === "impact" && g.skin > 0) {
+      g.skin--;
+      this.emit({ type: "thickSkin", left: g.skin });
+      return;
+    }
     g.tier = next;
     g.tierTimer = 0;
+    g.peakTier = Math.max(g.peakTier, next);
     if (up) this.emit({ type: "tierUp", tier: next });
     else this.emit({ type: "tierDown", tier: next, reason: reason ?? "impact" });
   }
@@ -3141,65 +3202,93 @@ var Sim = class {
   stepAbility(input, dt) {
     const g = this.giant;
     const A2 = TUNING.abilities;
+    const L = this.abilityLevel - 1;
     g.abilityCd = Math.max(0, g.abilityCd - dt);
-    g.pose = Math.max(0, g.pose - dt);
+    if (g.prime > 0) {
+      g.prime = Math.max(0, g.prime - dt);
+      if (g.prime === 0) {
+        this.show.prime = false;
+        this.emit({ type: "primeTime", on: false, time: 0 });
+      }
+    }
     if (g.air > 0) {
       g.air = Math.max(0, g.air - dt);
-      if (g.air === 0) this.leapLand();
-    }
-    if (g.ride > 0) {
-      g.ride = Math.max(0, g.ride - dt);
-      if (g.ride === 0) {
-        this.setTier(TUNING.tiers.length - 1);
-        this.emit({ type: "hijackBail", s: g.s, d: g.d });
+      if (g.air === 0 && g.airDur - 0 < A2.landExtendMax + (g.airKind === "breakaway" ? A2.breakaway.time[2] : A2.leap.time[2]) && this.landingBlocked()) {
+        g.air = dt;
+        g.airDur += dt;
+      }
+      if (g.air === 0) {
+        if (g.airKind === "breakaway") this.breakawayLand();
+        else this.leapLand();
       }
     }
     if (input.ability) g.abilityBuffer = A2.bufferFrames;
     if (g.abilityBuffer <= 0 || !this.ability) return;
-    if (g.abilityCd > 0 || g.stumble > 0 || g.air > 0 || g.ride > 0 || g.pose > 0) {
+    if (g.abilityCd > 0 || g.stumble > 0 || g.air > 0) {
       g.abilityBuffer--;
       return;
     }
     g.abilityBuffer = 0;
     const id = this.ability;
-    let ok = true;
     if (id === "leap") {
-      g.air = g.airDur = A2.leap.time;
+      g.air = g.airDur = A2.leap.time[L];
+      g.airKind = "leap";
       g.abilityCd = A2.leap.cooldown;
     } else if (id === "stare") {
       this.stare();
       g.abilityCd = A2.stare.cooldown;
-    } else if (id === "hijack") {
-      ok = this.hijack();
-      if (ok) {
-        this.setTier(TUNING.tiers.length - 1);
-        g.ride = A2.hijack.time;
-        g.abilityCd = A2.hijack.cooldown;
-      }
-    } else if (id === "pose") {
-      g.pose = A2.pose.time;
-      g.abilityCd = A2.pose.cooldown;
-      const gain = this.show.pose(this.time, this.events);
-      this.emit({ type: "pose", gain, heat: this.show.heat });
+    } else if (id === "breakaway") {
+      g.air = g.airDur = A2.breakaway.time[L];
+      g.airKind = "breakaway";
+      g.abilityCd = A2.breakaway.cooldown;
+    } else if (id === "primeTime") {
+      g.prime = A2.primeTime.time[L];
+      this.show.prime = true;
+      g.abilityCd = A2.primeTime.cooldown;
+      this.emit({ type: "primeTime", on: true, time: g.prime });
     }
-    this.emit({ type: "ability", id, ok });
+    this.emit({ type: "ability", id, ok: true, level: this.abilityLevel });
   }
-  /** Leap landing: the shockwave smashes everything up to Heavy around the landing (never land inside a car). */
-  leapLand() {
+  /** Would he land inside something the landing can't flatten? */
+  landingBlocked() {
     const g = this.giant;
-    const R = TUNING.abilities.leap.shockRadius;
+    const r = this.radius();
+    const all = g.airKind === "leap" && this.abilityLevel >= 3;
+    const near = [...this.track.propsBetween(g.s - r - 4, g.s + r + 4), ...this.pursuit.solidBetween(g.s - r - 4, g.s + r + 4)];
+    return near.some((p) => p.alive && (p.cls === "immovable" || p.ram) && !all && Math.abs(p.s - g.s) < p.hl + r && Math.abs(p.d - g.d) < p.hw + r);
+  }
+  /** A landing shockwave: smashes everything within `R` up to Heavy (or anything, `all`), never landing inside a car. */
+  slam(R, all) {
+    const g = this.giant;
     let smashed = 0;
     const near = [...this.track.propsBetween(g.s - R - 3, g.s + R + 3), ...this.pursuit.solidBetween(g.s - R - 3, g.s + R + 3)];
     for (const p of near) {
-      if (!p.alive || CLASS_RANK[p.cls] > CLASS_RANK.heavy) continue;
+      if (!p.alive || !all && CLASS_RANK[p.cls] > CLASS_RANK.heavy) continue;
       const ds = Math.max(0, Math.abs(p.s - g.s) - p.hl);
       const dd = Math.max(0, Math.abs(p.d - g.d) - p.hw);
       if (Math.hypot(ds, dd) > R) continue;
       p.alive = false;
       smashed++;
-      this.emit({ type: "smash", propId: p.id, cls: p.cls, mat: p.mat, s: p.s, d: p.d, across: false, speed: g.speed });
+      this.emit({ type: "smash", propId: p.id, cls: p.cls === "immovable" ? "heavy" : p.cls, mat: p.mat, s: p.s, d: p.d, across: false, speed: g.speed });
     }
+    return smashed;
+  }
+  /** Leap landing: the shockwave (III flattens anything, armored trucks and bulldozers too). */
+  leapLand() {
+    const g = this.giant;
+    const L = this.abilityLevel - 1;
+    const smashed = this.slam(TUNING.abilities.leap.shockRadius[L], this.abilityLevel >= 3);
     this.emit({ type: "leapLand", s: g.s, d: g.d, smashed });
+  }
+  /** Breakaway landing: a slam, every police car behind him loses track, and at III he lands in Rampage. */
+  breakawayLand() {
+    const g = this.giant;
+    const L = this.abilityLevel - 1;
+    const smashed = this.slam(TUNING.abilities.breakaway.shockRadius[L], false);
+    g.speed = Math.min(g.speed, this.tierTuning.topSpeed);
+    const shaken = this.pursuit.loseAllBehind();
+    if (this.abilityLevel >= 3) this.setTier(TUNING.tiers.length - 1);
+    this.emit({ type: "breakawayLand", s: g.s, d: g.d, smashed, shaken });
   }
   /**
    * The Stare: the road parts. Traffic ahead in his lane pulls over, and traffic in the lanes
@@ -3213,7 +3302,7 @@ var Sim = class {
     const moved = [];
     const myC = this.track.laneCenter(g.lane);
     const free = (p, c) => !this.track.propsBetween(p.s - p.hl - 3, p.s + p.hl + 3).some((q) => q !== p && Math.abs(q.d - c) < q.hw + p.hw + 0.4);
-    const props = this.track.propsBetween(g.s, g.s + A2.reach).filter((p) => p.alive && p.cls !== "immovable" && Math.abs(p.d - myC) <= W * A2.lanesEitherSide + p.hw);
+    const props = this.track.propsBetween(g.s, g.s + A2.reach[this.abilityLevel - 1]).filter((p) => p.alive && p.cls !== "immovable" && Math.abs(p.d - myC) <= W * A2.lanesEitherSide + p.hw);
     props.sort((a, b) => Math.abs(b.d - myC) - Math.abs(a.d - myC));
     for (const p of props) {
       const lanes = this.track.lanesAt(p.s);
@@ -3230,29 +3319,15 @@ var Sim = class {
       }
     }
     const backedOff = this.pursuit.backOff();
-    this.emit({ type: "stare", moved, backedOff });
-  }
-  /** Hijack Hop: take the nearest vehicle just ahead (his lane or next to it). */
-  hijack() {
-    const g = this.giant;
-    const A2 = TUNING.abilities.hijack;
-    let best = null;
-    for (const p of this.track.propsBetween(g.s - 1, g.s + A2.reach)) {
-      if (p.kind !== "car" && p.kind !== "van") continue;
-      if (Math.abs(p.d - g.d) > TUNING.lanes.width * 1.5) continue;
-      if (!best || p.s < best.s) best = p;
-    }
-    if (!best) return false;
-    best.alive = false;
-    this.emit({ type: "hijack", propId: best.id, kind: best.kind, variant: best.variant });
-    return true;
+    const crashed = this.abilityLevel >= 3 ? this.pursuit.crashBackedOff() : 0;
+    this.emit({ type: "stare", moved, backedOff, crashed });
   }
   // --- Speed and gait ----------------------------------------------------------
   stepSpeed(input, dt) {
     const g = this.giant;
     const tier = this.tierTuning;
     const top = tier.topSpeed + (g.shoulderT > 0 ? TUNING.shoulderCheck.burstSpeed : 0);
-    const brake = input.brake && g.ride <= 0;
+    const brake = input.brake && g.air <= 0;
     g.braking = brake;
     if (brake) {
       g.speed -= TUNING.brake.decel * dt;
@@ -3274,13 +3349,12 @@ var Sim = class {
     g.speed = Math.max(TUNING.giant.speedFloor, g.speed);
     g.stumble = Math.max(0, g.stumble - dt);
     const t = this.tierTuning;
-    if (!brake && g.stumble <= 0 && g.pose <= 0 && g.speed >= t.topSpeed * TUNING.giant.topSpeedEpsilon) {
+    if (!brake && g.stumble <= 0 && g.speed >= t.topSpeed * TUNING.giant.topSpeedEpsilon) {
       g.tierTimer += dt;
-      const after = t.tierUpAfter * (this.upgrades.has("tailwind") ? TUNING.passives.tailwindTierUp : 1);
+      const after = this.tierUpAfter();
       if (g.tierTimer >= after) this.setTier(g.tier + 1);
     }
-    if (g.pose > 0) g.speed = Math.max(TUNING.giant.speedFloor, g.speed - TUNING.brake.decel * 2 * dt);
-    if (g.ride > 0) g.speed = Math.min(TUNING.abilities.hijack.speed, g.speed + TUNING.abilities.hijack.accel * dt);
+    if (g.air > 0 && g.airKind === "breakaway") g.speed = Math.max(g.speed, t.topSpeed + TUNING.abilities.breakaway.boost);
   }
   advance(dt) {
     const g = this.giant;
@@ -3314,8 +3388,6 @@ var Sim = class {
     const g = this.giant;
     const base = this.tierTuning.smashes ? CLASS_RANK[this.tierTuning.smashes] : -1;
     let rank = Math.min(base + (g.shoulderT > 0 ? 1 : 0), CLASS_RANK.heavy);
-    if (this.upgrades.has("ironShins")) rank = Math.max(rank, CLASS_RANK.medium);
-    if (g.ride > 0) rank = CLASS_RANK.heavy;
     return rank;
   }
   /** Is `lane` free of things the giant can't smash over [s0, s1]? */
@@ -3375,6 +3447,12 @@ var Sim = class {
       g.laneQueue = 0;
       const toLane = this.knockLane(p);
       if (g.tier > 0) this.setTier(g.tier - 1, "impact");
+      if (toLane === g.lane && !unit && p.cls !== "immovable" && g.move !== "change") {
+        p.alive = false;
+        this.emit({ type: "bounce", propId: p.id, cls: p.cls, s: p.s, d: p.d, toLane, speed: g.speed });
+        this.emit({ type: "smash", propId: p.id, cls: p.cls, mat: p.mat, s: p.s, d: p.d, across: false, speed: g.speed });
+        continue;
+      }
       this.beginMove("knock", toLane, TUNING.lanes.knockbackTime);
       this.emit({ type: "bounce", propId: p.id, cls: p.cls, s: p.s, d: p.d, toLane, speed: g.speed });
     }
@@ -3389,8 +3467,14 @@ var Sim = class {
     candidates.push(g.prevLane);
     const here = g.lane;
     for (let k = 1; k <= TUNING.lanes.max; k++) candidates.push(here - k, here + k);
+    const r0 = this.radius();
+    const solidBeside = (lane) => {
+      const c = this.track.laneCenter(lane);
+      return this.track.propsBetween(g.s - r0 - 4, g.s + r0 + 4).some((q) => q.alive && q.cls === "immovable" && Math.abs(q.d - c) < q.hw + 1 && Math.abs(q.s - g.s) < q.hl + r0);
+    };
     const crossesUnit = (lane) => {
       for (let l = Math.min(lane, here) + 1; l < Math.max(lane, here); l++) {
+        if (solidBeside(l)) return true;
         const c = this.track.laneCenter(l);
         if (this.pursuit.solidBetween(g.s - 8, g.s + 8).some((u) => u.unit === "net" && u.phase !== "leave" && Math.abs(u.d - c) < u.hw + 1 && Math.abs(u.s - g.s) < u.hl + 4)) return true;
       }
@@ -3404,7 +3488,7 @@ var Sim = class {
     let best = -1;
     let room = -Infinity;
     for (const lane of [here - 1, here + 1]) {
-      if (!this.track.laneUsable(lane, g.s)) continue;
+      if (!this.track.laneUsable(lane, g.s) || solidBeside(lane)) continue;
       const r = this.roomAhead(lane);
       if (r > room) {
         room = r;
@@ -3412,7 +3496,7 @@ var Sim = class {
       }
     }
     if (best >= 0 && room <= 0) return here;
-    return best >= 0 ? best : this.track.laneUsable(g.prevLane, g.s) ? g.prevLane : here;
+    return best >= 0 ? best : this.track.laneUsable(g.prevLane, g.s) && !solidBeside(g.prevLane) ? g.prevLane : here;
   }
   /** Metres of lane ahead of him before something he can't smash (props and police), up to 60m. */
   roomAhead(lane) {
@@ -3429,22 +3513,40 @@ var Sim = class {
 };
 
 // src/sim/run.ts
-var ABILITIES = ["leap", "stare", "hijack", "pose"];
+var ABILITIES = ["leap", "stare", "breakaway", "primeTime"];
+var ALL_UPGRADES = Object.keys(TUNING.upgrades);
 var RunState = class {
-  constructor(seed) {
+  /**
+   * `pool`: the upgrades this player can be offered (Awards unlock the rest; src/awards.ts). The leaderboard
+   * replays a run with the same pool, so the offers match.
+   */
+  constructor(seed, pool = ALL_UPGRADES) {
     this.seed = seed;
+    this.pool = pool;
     this.rng = new Rng((seed ^ 5395790) >>> 0);
   }
   seed;
+  pool;
   segment = 0;
   phase = "live";
   earned = 0;
   spent = 0;
   owned = [];
+  /** Ability levels I–III (the equipped one's level carries into each segment). */
+  levels = {};
   /** Per-segment results, for the recap. */
   results = [];
   rng;
   offerCache = null;
+  /** Level an ability is at (0 if not held). */
+  levelOf(id) {
+    return this.owned.includes(id) ? this.levels[id] ?? 1 : 0;
+  }
+  /** What buying `id` costs now: an ability you hold levels up at `levelPrice` of its price. */
+  priceOf(id) {
+    const u = TUNING.upgrades[id];
+    return u.kind === "ability" && this.owned.includes(id) ? Math.round(u.price * TUNING.levelPrice) : u.price;
+  }
   get purse() {
     return Math.floor(this.earned - this.spent);
   }
@@ -3470,20 +3572,29 @@ var RunState = class {
   /** §17: three pitches. Passives you own aren't offered again; neither is the ability you hold. */
   offers() {
     if (this.offerCache) return this.offerCache;
-    const pool = Object.keys(TUNING.upgrades).filter((u) => !this.owned.includes(u));
+    const pool = ALL_UPGRADES.filter((u) => this.pool.includes(u) && (TUNING.upgrades[u].kind === "ability" ? this.levelOf(u) < TUNING.maxLevel : !this.owned.includes(u)));
     const out = [];
     while (out.length < TUNING.run.offers && pool.length) out.push(pool.splice(this.rng.int(0, pool.length - 1), 1)[0]);
     return this.offerCache = out;
   }
   canAfford(id) {
-    return this.purse >= TUNING.upgrades[id].price;
+    return this.purse >= this.priceOf(id);
   }
   /** Buy one pitch (abilities replace the equipped one, §17). Returns false if it can't. */
   buy(id) {
     if (this.phase !== "meeting" || !this.offers().includes(id) || !this.canAfford(id)) return false;
-    this.spent += TUNING.upgrades[id].price;
-    if (TUNING.upgrades[id].kind === "ability") this.owned = this.owned.filter((u) => !ABILITIES.includes(u));
-    this.owned.push(id);
+    this.spent += this.priceOf(id);
+    if (TUNING.upgrades[id].kind === "ability") {
+      const a = id;
+      const held = this.levelOf(a);
+      if (held) this.levels[a] = held + 1;
+      else {
+        for (const x of ABILITIES) if (this.owned.includes(x)) delete this.levels[x];
+        this.owned = this.owned.filter((u) => !ABILITIES.includes(u));
+        this.owned.push(id);
+        this.levels[a] = 1;
+      }
+    } else this.owned.push(id);
     return this.nextSegment();
   }
   /** Leave the meeting (with or without buying) for the next segment. */
@@ -3528,11 +3639,12 @@ function verify(sub) {
     if (!playSegment(sim, logs[0])) return { ok: false, error: "unfinished" };
     return { ok: true, score: Math.round(sim.show.banked), segments: 1, won: sim.show.state === "cleared" };
   }
-  const run = new RunState(sub.seed);
+  const pool = Array.isArray(sub.pool) ? sub.pool.filter((u) => ALL_UPGRADES.includes(u)) : ALL_UPGRADES;
+  const run = new RunState(sub.seed, pool);
   const buys = Array.isArray(sub.buys) ? sub.buys : [];
   for (let i = 0; i < logs.length; i++) {
     if (run.phase !== "live") return { ok: false, error: "segments" };
-    const sim = new Sim({ seed: run.segmentSeed(), segment: run.segment, upgrades: run.owned, growth: !!sub.growth });
+    const sim = new Sim({ seed: run.segmentSeed(), segment: run.segment, upgrades: run.owned, levels: run.levels, growth: !!sub.growth });
     if (!playSegment(sim, logs[i])) return { ok: false, error: "unfinished" };
     run.finishSegment(sim.show);
     if (run.phase === "meeting") {

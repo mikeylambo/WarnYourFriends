@@ -23,11 +23,16 @@ export class Bot {
         return trapped;
       case 'stare':
         return here <= -100;
-      case 'hijack':
-        return g.tier < 2 && sim.track.propsBetween(g.s, g.s + 12).some((p) => (p.kind === 'car' || p.kind === 'van') && Math.abs(p.d - g.d) < 6);
-      case 'pose': {
-        const calm = !sim.pursuit.units.some((u) => u.alive && Math.abs(u.s - g.s) < 40);
-        return sim.show.heat >= 3 && sim.show.ratings < 80 && calm && here > -60;
+      case 'breakaway': {
+        // Out of trouble, or out from under the police on his tail.
+        const tail = sim.pursuit.units.some((u) => u.alive && u.unit === 'cruiser' && !u.lost && u.s < g.s && u.s > g.s - 15);
+        return trapped || here <= -100 || tail;
+      }
+      case 'primeTime': {
+        // On air when there's plenty to smash just ahead and he can smash it.
+        const rank = sim.smashRank();
+        const ahead = sim.track.propsBetween(g.s, g.s + g.speed * 3).filter((p) => p.alive && CLASS_RANK[p.cls] <= rank).length;
+        return g.tier === 2 && (ahead >= 3 || sim.show.ratings < 30);
       }
     }
   }

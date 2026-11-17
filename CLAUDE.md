@@ -4,7 +4,7 @@ This file is the law for anyone (human or agent) building this repo. The design 
 
 ## Current phase
 
-**Phase 3 — Depth**: the five-segment run with the Producer's Meeting, and the §17 upgrade pool (Leap, The Stare, Hijack Hop, Pose for the Camera; Iron Shins, Second Wind, Showman, Tailwind). Phase 2 (one full broadcast: pursuit, Ratings/Heat/Pin, sign-off, busted, recap), broadcast escalation and road variety are done. The 0c feel check passed (Mike, 2026-11-12). Phase 1 Foundation: the game now runs inside the SLU Web Shell (private repo, pinned by commit; see DECISIONS 2026-11-13). The shell's AGENTS.md constitution applies. Never vendor the shell into this public repo.
+**Phase 3 — Depth**: the five-segment run with the Producer's Meeting, and the upgrade pool v2 (DECISIONS 2026-11-17: Leap, The Stare, Breakaway, Prime Time, levels I–III; Thick Skin, Second Wind, Crowd Pleaser, Slipstream), with the Local News Awards unlocking Breakaway, Slipstream and outfits. Phase 2 (one full broadcast: pursuit, Ratings/Heat/Pin, sign-off, busted, recap), broadcast escalation and road variety are done. The 0c feel check passed (Mike, 2026-11-12). Phase 1 Foundation: the game now runs inside the SLU Web Shell (private repo, pinned by commit; see DECISIONS 2026-11-13). The shell's AGENTS.md constitution applies. Never vendor the shell into this public repo.
 
 ## Rules
 
@@ -30,6 +30,7 @@ src/broadcast/       headline generator (§21) + headlines.json word bank (pure 
 src/audio.ts         Web Audio, music/sfx/voice buses: authored SFX (assets/sfx, ElevenLabs) with synth fallback
 src/input.ts         KBM, gamepad, touch → SimInput; rebindable keys, brake toggle
 src/onboarding.ts    one-time control prompts at the moment they matter
+src/awards.ts        the Local News Awards: lifetime counters, milestones, unlocks (upgrades, outfits)
 src/glyphs.ts        button labels per device family (PS4: L1/R1/L2/✕), via the shell's glyph registry
 src/leaderboard/     submission encode + server-side re-simulation (pure, shared with the API)
 src/leaderboardClient.ts  the recap's board: post, top 10, your rank
@@ -41,7 +42,7 @@ tools/soak.ts        headless N-seed soak: sim + gait + camera invariants (caden
 tools/e2e-smoke.mjs  headless Chromium smoke against the production build (E2E_URL= for a deployed URL)
 tools/shots.mjs      evidence screenshots + silhouette numbers per angle and look
 tools/shots-phase2.mjs  Phase 2 evidence: tells, zones, exit, recap
-tools/shots-phase3.mjs  Phase 3 evidence: each ability mid-action
+tools/shots-phase3.mjs  Phase 3 evidence: each ability mid-action (LEVEL=1–3)
 tools/modelsheet.mjs    giant turnaround (side / Chase High / top down × tiers), dev page in tools/modelsheet/
 tools/strip.mjs         stride strip: one tier, eight moments of a stride (side / chase); GREYBOX=1 for the old rig
 tools/clips.mjs         compare candidate run clips (GLBs) on the giant, eight moments each
@@ -63,6 +64,7 @@ tools/shots-hud.mjs     HUD (Direction D) in both palettes: desktop, phone lands
 tools/shots-landmarks.mjs  Landmarks: toll plaza, night market, roadworks, rush hour on approach (ONLY=, SEED_FROM=)
 tools/shots-size.mjs    Giant size: growth at each gear, fixed and big at Rampage
 tools/shots-vehicles.mjs  Vehicle sheet: every prop and police body from the chopper and side-on (dev page tools/modelsheet/vehicles.html)
+tools/shots-awards.mjs  Awards screen, and the giant in each outfit (side-on)
 tools/shots-a11y.mjs    HUD in play, a control prompt, Settings → Controls, HUD Size 130%
 tools/shots-bridge.mjs  Bridge furniture: a merge sign and lamps on the parapet, not over the water
 tools/shots-events.mjs  Traffic events: Police Net closing (BOXED IN meter), Rolling Blockade with the armored truck, Car Carrier dropping cars (ONLY=)

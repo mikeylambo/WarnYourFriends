@@ -258,6 +258,7 @@
     ],
     "rampageFallback": "Giant: Full Rampage",
     "spikeStrip": "Own Spike Strip",
+    "guardrail": "The Guardrail",
     "mergeFallback": "{lanes} Lanes Ahead",
     "ratingsTier": [
       [],
@@ -503,34 +504,6 @@
         "Officers Hesitate; Giant Did Not Blink"
       ]
     ],
-    "hijack": [
-      [
-        "Boards",
-        "{subject} Boards {noun} {place}"
-      ],
-      [
-        "Rides",
-        "{subject} Rides {noun} Like A Surfboard"
-      ],
-      [
-        "Hitches",
-        "{subject} Hitches Ride On Roof Of {noun}"
-      ]
-    ],
-    "pose": [
-      [
-        "Poses",
-        "{subject} Stops To Pose For Cameras"
-      ],
-      [
-        "Pauses",
-        "{subject} Pauses {place}, Looks Directly At Chopper"
-      ],
-      [
-        "Strikes",
-        "{subject} Strikes A Pose; Police Unsure Of Protocol"
-      ]
-    ],
     "tellChopper": [
       [
         "Sweeps",
@@ -707,6 +680,34 @@
       [
         "Shrugs Off",
         "Giant Shrugs Off Police Net"
+      ]
+    ],
+    "breakaway": [
+      [
+        "Dives",
+        "{subject} Dives Clear Of Pursuit {place}"
+      ],
+      [
+        "Leaves",
+        "{subject} Leaves Police Behind In Single Bound"
+      ],
+      [
+        "Breaks Away",
+        "{subject} Breaks Away {place}; Police Regroup"
+      ]
+    ],
+    "primeTime": [
+      [
+        "Goes Wall To Wall",
+        "Coverage Goes Wall To Wall As Giant Hits Prime Time"
+      ],
+      [
+        "Takes",
+        "Every Station Takes WYF 6 Feed"
+      ],
+      [
+        "Interrupts",
+        "Regular Programming Interrupted {place}"
       ]
     ]
   }

@@ -49,13 +49,13 @@ export interface Headline {
   at?: NewsContext;
 }
 
-type Kind = 'zone' | 'spotted' | 'ratingsTier' | 'tierUp' | 'tierDown' | 'smash' | 'bounce' | 'wall' | 'merge' | 'escort' | 'ramHit' | 'ramMiss' | 'lostTrack' | 'spiked' | 'heat' | 'tell' | 'exitOpen' | 'end' | 'leap' | 'stare' | 'hijack' | 'pose' | 'spotlight' | 'chopperLost' | 'policeCrash' | 'policeSmash' | 'forkZone' | 'landmark' | 'netSlip' | 'netEscape';
+type Kind = 'zone' | 'spotted' | 'ratingsTier' | 'tierUp' | 'tierDown' | 'smash' | 'bounce' | 'wall' | 'merge' | 'escort' | 'ramHit' | 'ramMiss' | 'lostTrack' | 'spiked' | 'heat' | 'tell' | 'exitOpen' | 'end' | 'leap' | 'stare' | 'breakaway' | 'primeTime' | 'spotlight' | 'chopperLost' | 'policeCrash' | 'policeSmash' | 'forkZone' | 'landmark' | 'netSlip' | 'netEscape';
 /** `at`: where he was when it happened (places come from here, not from publish time). */
 type Item = { kind: Kind; t: number; prio: number; events: SimEvent[]; at?: NewsContext };
 
-const PRIO: Partial<Record<Kind, number>> = { netSlip: 96, netEscape: 74, landmark: 60, zone: 66, spotted: 95, ratingsTier: 100, end: 200, exitOpen: 90, tell: 75, ramHit: 65, ramMiss: 58, lostTrack: 57, spiked: 62, heat: 52, escort: 60, merge: 55, leap: 86, stare: 84, hijack: 87, pose: 88, forkZone: 98, spotlight: 63, chopperLost: 59, policeCrash: 70, policeSmash: 35, tierUp: 50, bounce: 45, tierDown: 40, wall: 10 };
+const PRIO: Partial<Record<Kind, number>> = { netSlip: 96, netEscape: 74, landmark: 60, zone: 66, spotted: 95, ratingsTier: 100, end: 200, exitOpen: 90, tell: 75, ramHit: 65, ramMiss: 58, lostTrack: 57, spiked: 62, heat: 52, escort: 60, merge: 55, leap: 86, stare: 84, breakaway: 87, primeTime: 88, forkZone: 98, spotlight: 63, chopperLost: 59, policeCrash: 70, policeSmash: 35, tierUp: 50, bounce: 45, tierDown: 40, wall: 10 };
 /** The player's own ability moments: kept queued longer so they get their headline. */
-const ABILITY_NEWS: Kind[] = ['leap', 'stare', 'hijack', 'pose'];
+const ABILITY_NEWS: Kind[] = ['leap', 'stare', 'breakaway', 'primeTime'];
 /** These break in immediately, ignoring the 4s cadence (§21: tier changes; and the end of the broadcast). */
 /** These break in now; `forkZone` is the new road after a fork (the cut needs its chyron). */
 const IMMEDIATE: Kind[] = ['ratingsTier', 'end', 'exitOpen', 'forkZone'];
@@ -134,8 +134,8 @@ export class Newsroom {
         break;
       }
       case 'stare': if (e.moved.length || e.backedOff) add('stare'); break;
-      case 'hijack': add('hijack'); break;
-      case 'pose': add('pose'); break;
+      case 'breakawayLand': add('breakaway'); break;
+      case 'primeTime': if (e.on) add('primeTime'); break;
       case 'tell': if (e.kind !== 'cruiser') add('tell'); break;
       case 'exitOpen': add('exitOpen'); break;
       case 'fork':
@@ -295,7 +295,7 @@ export class Newsroom {
         const line = this.freshLine(L[q.kind]);
         if (!line) return null;
         const place = line[1].includes('{place}') ? this.freshPlace(ctx) : null;
-        const noun = e.type === 'policeCrash' && e.spikes ? L.spikeStrip : BANK.nouns[kind][0];
+        const noun = e.type === 'policeCrash' && e.spikes ? L.spikeStrip : e.type === 'policeCrash' && e.offRoad ? L.guardrail : BANK.nouns[kind][0];
         return mk(this.fill(line[1], { noun, place }), line[0], place);
       }
       case 'netSlip': {
@@ -442,15 +442,9 @@ export class Newsroom {
         const place = line[1].includes('{place}') ? this.freshPlace(ctx) : null;
         return mk(this.fill(line[1], { place }), line[0], place);
       }
-      case 'hijack': {
-        const e = q.events[0] as Extract<SimEvent, { type: 'hijack' }>;
-        const line = this.freshLine(L.hijack);
-        if (!line) return null;
-        const place = line[1].includes('{place}') ? this.freshPlace(ctx) : null;
-        return mk(this.fill(line[1], { subject: this.subject(ctx.tier), noun: BANK.nouns[e.kind][0], place }), line[0], place);
-      }
-      case 'pose': {
-        const line = this.freshLine(L.pose);
+      case 'breakaway':
+      case 'primeTime': {
+        const line = this.freshLine(L[q.kind]);
         if (!line) return null;
         const place = line[1].includes('{place}') ? this.freshPlace(ctx) : null;
         return mk(this.fill(line[1], { subject: this.subject(ctx.tier), place }), line[0], place);

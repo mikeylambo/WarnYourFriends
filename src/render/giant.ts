@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { TUNING } from '../tuning';
+import { TUNING, type OutfitId } from '../tuning';
 import type { GaitFrame, Vec3 } from '../anim/gait';
 import { PALETTE } from './palette';
 import { blobTexture, rimToon, rimToonMap } from './toon';
@@ -27,18 +27,18 @@ const PAULDRON_SIDE = -1;
 const OUTLINE_WIDTH = 0.06;
 
 /** Mike's sheet: a plum cape with a cream Greek-key band along the hem. */
-function capeTexture(): THREE.CanvasTexture {
+function capeTexture(cloth: number = PALETTE.giantCape, band: number = PALETTE.giantBone): THREE.CanvasTexture {
   const W = 128, H = 256;
   const c = document.createElement('canvas');
   c.width = W;
   c.height = H;
   const g = c.getContext('2d')!;
   const hex = (n: number) => `#${n.toString(16).padStart(6, '0')}`;
-  g.fillStyle = hex(PALETTE.giantCape);
+  g.fillStyle = hex(cloth);
   g.fillRect(0, 0, W, H);
   // Band: a cream rule, a stepped key, a cream rule at the very edge.
   const top = H * (1 - TUNING.giantModel.capeHemShare);
-  g.fillStyle = hex(PALETTE.giantBone);
+  g.fillStyle = hex(band);
   g.fillRect(0, top, W, 5);
   g.fillRect(0, H - 6, W, 6);
   const step = W / 4, mid = top + (H - top) / 2;
@@ -101,6 +101,17 @@ export class GiantView {
   private capeGeo: THREE.BufferGeometry;
   /** The Meshy giant, skinned over this (never drawn) greybox rig. */
   readonly model = new GiantModel();
+
+  /** Wear an outfit (Awards): the model's texture recolor, and the cape's cloth and hem band. */
+  setOutfit(id: OutfitId) {
+    this.model.setOutfit(id);
+    if (typeof document === 'undefined' || !this.cape) return;
+    const o = TUNING.outfits[id];
+    const mat = this.cape.material as THREE.MeshToonMaterial;
+    mat.map?.dispose();
+    mat.map = capeTexture(o.cape ?? PALETTE.giantCape, o.band ?? PALETTE.giantBone);
+    mat.needsUpdate = true;
+  }
   /** Resolves true when the Meshy model is showing (false without a window, or if it failed). */
   readonly ready: Promise<boolean>;
   private capeAngle = 0;

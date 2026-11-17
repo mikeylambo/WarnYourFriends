@@ -108,6 +108,41 @@ export class Pursuit {
     return n;
   }
 
+  /**
+   * Breakaway landed: every police car behind him loses track (it drops back and leaves the chase; one
+   * lost-track award each, the chopper excepted: it can still see him).
+   */
+  loseAllBehind(): number {
+    const g = this.sim.giant;
+    let n = 0;
+    for (const u of this.units) {
+      if (!u.alive || u.lost || u.unit === 'chopper' || u.unit === 'spike' || u.unit === 'roadblock' || u.unit === 'carrier') continue;
+      if (u.s > g.s) continue;
+      u.lost = true;
+      u.hit = true; // not also a near-miss
+      if (u.phase !== 'leave') this.setPhase(u, 'leave');
+      n++;
+      this.sim.emitPublic({ type: 'lostTrack', id: u.id, kind: u.unit });
+      // One getaway is one story: the Ratings pay once, however many cars it shook (balance 2026-11-17).
+      if (n === 1) this.sim.award('lostTrack');
+    }
+    return n;
+  }
+
+  /** The Stare III: the cruisers that back off crash out (on air) instead of leaving. */
+  crashBackedOff(): number {
+    let n = 0;
+    for (const u of this.units) {
+      if (!u.alive || u.unit !== 'cruiser' || u.phase !== 'leave' || u.target !== -1 || u.lost) continue;
+      // Only the ones in the chopper's frame (every destruction is readable, §1): beside him or ahead.
+      const g = this.sim.giant;
+      if (u.s < g.s - TUNING.pursuit.crash.visibleBehind || u.s > g.s + 40) continue;
+      this.crashOut(u, u, false, true, false, true);
+      n++;
+    }
+    return n;
+  }
+
   /** The Stare: cruisers closing in or winding up back off (they've lost their nerve, not him). */
   backOff(): number {
     let n = 0;
@@ -729,7 +764,7 @@ export class Pursuit {
       sim.emitPublic({ type: 'tell', id: u.id, kind: 'spike', lane: u.lane, time: S.tell });
     } else if (u.phase === 'tell' && u.phaseT >= S.tell) this.setPhase(u, 'act');
     // Leaping over it or riding a hijacked car through it: no effect.
-    if (u.phase === 'act' && !u.hit && g.air <= 0 && g.ride <= 0 && Math.abs(g.s - u.s) < u.hl + 0.5 && Math.abs(g.d - u.d) < u.hw + 0.3) {
+    if (u.phase === 'act' && !u.hit && g.air <= 0 && Math.abs(g.s - u.s) < u.hl + 0.5 && Math.abs(g.d - u.d) < u.hw + 0.3) {
       u.hit = true;
       sim.spikeHit(u);
     }
@@ -954,11 +989,11 @@ export class Pursuit {
   }
 
   /** A chasing cruiser is out of the chase against `p`; on air it's news (Ratings, stunt, headline). */
-  private crashOut(u: Unit, p: Prop, smashed: boolean, onAir: boolean, spikes = false) {
+  private crashOut(u: Unit, p: Prop, smashed: boolean, onAir: boolean, spikes = false, offRoad = false) {
     const sim = this.sim;
     u.alive = false;
     u.lost = true;
-    sim.emitPublic({ type: 'policeCrash', id: u.id, propId: p.id, propKind: p.kind, propCls: p.cls, propSmashed: smashed, s: u.s, d: u.d, speed: Math.max(u.speed, sim.giant.speed), onAir, spikes });
+    sim.emitPublic({ type: 'policeCrash', id: u.id, propId: p.id, propKind: p.kind, propCls: p.cls, propSmashed: smashed, s: u.s, d: u.d, speed: Math.max(u.speed, sim.giant.speed), onAir, spikes, offRoad });
     if (onAir) sim.award('policeCrash');
   }
 

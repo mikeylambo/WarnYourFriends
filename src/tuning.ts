@@ -11,8 +11,9 @@
  */
 
 export type MassClass = 'light' | 'medium' | 'heavy' | 'immovable';
-export type UpgradeId = 'leap' | 'stare' | 'hijack' | 'pose' | 'ironShins' | 'secondWind' | 'showman' | 'tailwind';
-export type AbilityId = 'leap' | 'stare' | 'hijack' | 'pose';
+export type UpgradeId = 'leap' | 'stare' | 'breakaway' | 'primeTime' | 'thickSkin' | 'secondWind' | 'crowdPleaser' | 'slipstream';
+export type AbilityId = 'leap' | 'stare' | 'breakaway' | 'primeTime';
+export type OutfitId = 'classic' | 'midnight' | 'parade' | 'gold';
 
 export interface TierTuning {
   name: 'Jog' | 'Stride' | 'Rampage';
@@ -411,7 +412,7 @@ export const TUNING = {
     clipFps: 30, clipBitrate: 2_500_000, clipMin: 1.5,
     /** Between plays of the clip, the still (the moment as it lands) holds this long (s). Mike: "alternate photos and clips". */
     clipStillHold: 3,
-    score: { policeCrash: 10, unitSmash: 7, leapLand: 4, hijackBail: 5, heavyAcross: 6, heavy: 4, nearMiss: 4, ramMiss: 4, pose: 3 },
+    score: { policeCrash: 10, unitSmash: 7, leapLand: 4, breakawayLand: 5, heavyAcross: 6, heavy: 4, nearMiss: 4, ramMiss: 4 },
   },
 
   /**
@@ -423,7 +424,7 @@ export const TUNING = {
    * → it drops: the points bank at ×1, the multiplier is lost. Smash-across pays `acrossBonus`×.
    */
   spectacle: {
-    points: { medium: 100, heavy: 250, unit: 500, policeCrash: 750, collateral: 100, nearMiss: 200, ramDodge: 200, lostTrack: 250, chopperShaken: 300, leapLand: 150, hijackBail: 300, posePerHeat: 100 },
+    points: { medium: 100, heavy: 250, unit: 500, policeCrash: 750, collateral: 100, nearMiss: 200, ramDodge: 200, lostTrack: 250, chopperShaken: 300, leapLand: 150, breakawayLand: 250 },
     acrossBonus: 1.5,
     audienceMult: [1, 1.25, 1.5, 2],
     window: 2.5,
@@ -758,21 +759,24 @@ export const TUNING = {
   },
 
   /**
-   * §17 v1 upgrade pool (8). Abilities share the one ability slot (a new one replaces it);
-   * passives stack. Prices are paid from banked spectacle points (the run score is what you earned,
-   * spending doesn't lower it). Working default (×7.5 when spectacle points replaced per-second banking, 2026-11-15): a cleared segment banks ~180k median with the bot (p10 120k, p90 245k), so one
-   * segment affords the cheaper half; saving up for Leap/Hijack is a real choice.
+   * Upgrade pool v2 (Mike, 2026-11-17: "a winning set"; art from his sheet, each card's image reused). Abilities
+   * share the one slot; offered again, the one you hold levels up (I → III, `levels`) at `levelPrice` × its price;
+   * a different one replaces it. Passives stack. Prices are paid from banked spectacle points (spending never lowers
+   * the score). Breakaway and Slipstream start locked (Awards unlock them, src/awards.ts).
    */
   upgrades: {
-    leap: { kind: 'ability', price: 195000, label: 'Leap', blurb: 'Hop lanes of trouble. The landing flattens what you land on.', pitch: 'Get a clean shot of him clearing the spike strip.' },
-    stare: { kind: 'ability', price: 160000, label: 'The Stare', blurb: 'Traffic and police ahead pull out of your lane.', pitch: 'Stay tight on the eyes. We have time.' },
-    hijack: { kind: 'ability', price: 225000, label: 'Hijack Hop', blurb: 'Ride a car through everything, then bail at Rampage.', pitch: 'Follow him across the car roofs. Keep it wide.' },
-    pose: { kind: 'ability', price: 160000, label: 'Pose for the Camera', blurb: 'Stop for the cameras. Heat becomes a Ratings spike.', pitch: 'Hold the close-up. He’s giving us a usable still.' },
-    ironShins: { kind: 'passive', price: 125000, label: 'Iron Shins', blurb: 'Medium objects never bounce you.', pitch: 'Keep rolling. The street furniture won’t slow him down.' },
-    secondWind: { kind: 'passive', price: 125000, label: 'Second Wind', blurb: 'The box-in meter drains 50% faster.', pitch: 'Stay with him. He’s slipping out of the box-in faster.' },
-    showman: { kind: 'passive', price: 165000, label: 'Showman', blurb: 'Something new on air pays double.', pitch: 'Double the variety bonus when he gives us something we haven’t aired.' },
-    tailwind: { kind: 'passive', price: 140000, label: 'Tailwind', blurb: 'Tier up 30% sooner.', pitch: 'Cue the wide shot. He’s hitting the next speed tier 30% sooner.' },
-  } as Record<UpgradeId, { kind: 'ability' | 'passive'; price: number; label: string; blurb: string; /** The producer's line on the meeting card (flavour). */ pitch: string }>,
+    leap: { kind: 'ability', price: 195000, label: 'Leap', blurb: 'Hop lanes of trouble. The landing flattens what you land on.', pitch: 'Get a clean shot of him clearing the spike strip.', levels: ['', 'Longer jump, bigger landing.', 'The landing flattens anything, armored trucks too.'] },
+    stare: { kind: 'ability', price: 160000, label: 'The Stare', blurb: 'Traffic and police ahead pull out of your lane.', pitch: 'Stay tight on the eyes. We have time.', levels: ['', 'Reaches half again as far.', 'Police that pull over crash out.'] },
+    breakaway: { kind: 'ability', price: 210000, label: 'Breakaway', blurb: 'Dive over everything ahead. The police behind lose you.', pitch: 'Get the long lens on him. He’s about to leave them all behind.', levels: ['', 'Longer dive, bigger slam.', 'Lands straight into Rampage.'] },
+    primeTime: { kind: 'ability', price: 180000, label: 'Prime Time', blurb: 'For a few seconds the audience can’t drop and every smash counts double.', pitch: 'Every station is taking our feed. Make it count.', levels: ['', 'Lasts 8 seconds.', 'Lasts 10 seconds.'] },
+    thickSkin: { kind: 'passive', price: 140000, label: 'Thick Skin', blurb: 'Shrug off the first hit each segment: no gear lost.', pitch: 'He walked through that like a turnstile.' },
+    secondWind: { kind: 'passive', price: 125000, label: 'Second Wind', blurb: 'Gear back up 40% faster after losing one.', pitch: 'He’s catching his breath. Stay on him, he’s coming back.' },
+    crowdPleaser: { kind: 'passive', price: 150000, label: 'Crowd Pleaser', blurb: 'At Rampage the audience drains 40% slower.', pitch: 'Keep rolling. Nobody can look away.' },
+    slipstream: { kind: 'passive', price: 160000, label: 'Slipstream', blurb: 'Police crashes pay double: Ratings and points.', pitch: 'Anyone chasing him ends up in the scenery. Keep it wide.' },
+  } as Record<UpgradeId, { kind: 'ability' | 'passive'; price: number; label: string; blurb: string; /** The producer's line on the meeting card (flavour). */ pitch: string; /** Abilities: what levels II and III add ([0] unused). */ levels?: string[] }>,
+  /** Ability level-up price, as a share of the ability's price; highest level. */
+  levelPrice: 0.8,
+  maxLevel: 3,
 
   /**
    * Leaderboard (§29: shared, server-side). Scores are re-simulated from the inputs on the server.
@@ -800,6 +804,18 @@ export const TUNING = {
    */
   onboarding: { quietStart: 4, blockedLead: 2.2, gearAfter: 14, audienceBelow: 12, kiteAhead: 30, gap: 7, hold: 4.5 },
 
+  /**
+   * Outfits (Awards, Mike 2026-11-17: "recolors for now"): the Meshy texture's plum cloth takes `hue` (deg) with
+   * saturation × `sat` and lightness × `light`; the bone plates blend `plateMix` toward `plate` (null = as painted).
+   * Every one stays dark against the road (§23: the giant is the darkest thing on screen).
+   */
+  outfits: {
+    classic: { label: 'Classic', hue: 285, sat: 1, light: 1, plate: null, plateMix: 0, cape: null, band: null },
+    midnight: { label: 'Midnight', hue: 218, sat: 0.95, light: 1.05, plate: 0xc8ced8, plateMix: 0.7, cape: 0x0f1a33, band: 0xc8ced8 },
+    parade: { label: 'Parade', hue: 356, sat: 1.25, light: 1.45, plate: null, plateMix: 0, cape: 0x5a0d16, band: null },
+    gold: { label: 'Prime Time Gold', hue: 265, sat: 0.18, light: 0.55, plate: 0xd9ac3c, plateMix: 0.85, cape: 0x111015, band: 0xd9ac3c },
+  } as Record<OutfitId, { label: string; hue: number; sat: number; light: number; plate: number | null; plateMix: number; /** Cape cloth and hem band (null = the classic plum and cream). */ cape: number | null; band: number | null }>,
+
   /** Smash sample levels by class: the light/medium takes are ~16 dB quieter than heavy, so they play hotter. */
   sfxLevels: { light: 1.1, medium: 1.6, heavy: 1 },
 
@@ -822,27 +838,22 @@ export const TUNING = {
   /** Phase 3 abilities (lane-runner versions of §17's pool). 5f input buffer (§8). */
   abilities: {
     bufferFrames: 5,
-    /** Leap: airborne this long (no collisions), apex height (m), landing shockwave radius (m) smashing up to Heavy. Mike's playtest: 3.2m / 0.9s didn't read from the chopper. */
-    leap: { time: 1.1, height: 5.5, shockRadius: 6.5, cooldown: 6 },
-    /** The Stare: the road parts this far ahead: his lane pulls over, the lanes either side move one further out; police winding up back off. */
-    stare: { reach: 90, lanesEitherSide: 1, time: 0.6, cooldown: 10, glareTime: 0.9 },
-    /** Hijack Hop: a vehicle within this far ahead (your lane or next to it); ride speed (just under Rampage top so every camera keeps ≥2s of road ahead), reached at `accel`, ride time, then bail at Rampage. */
-    hijack: { reach: 20, speed: 14, accel: 8, time: 3, cooldown: 12 },
-    /** Pose: speed held at the floor this long (a deliberate stop, §2: ≤1s); Ratings per Heat level; Heat spent. */
-    pose: { time: 0.8, ratingsPerHeat: 7, heatCost: 1, cooldown: 12 },
+    /** Never land inside something unflattenable: the flight stretches up to this much longer (s) to clear it. */
+    landExtendMax: 0.8,
+    /** Per-level numbers are [I, II, III]. Leap: airborne this long (no collisions), apex height (m), landing shockwave radius (m) smashing up to Heavy (III: anything). Mike's playtest: 3.2m / 0.9s didn't read from the chopper. */
+    leap: { time: [1.1, 1.3, 1.3], height: 5.5, shockRadius: [6.5, 9, 9], cooldown: 6 },
+    /** The Stare: the road parts this far ahead: his lane pulls over, the lanes either side move one further out; police winding up back off (III: they crash out). */
+    stare: { reach: [90, 135, 135], lanesEitherSide: 1, time: 0.6, cooldown: 10, glareTime: 0.9 },
+    /** Breakaway: a low forward dive, `boost` m/s over his speed, airborne (no collisions); a landing slam smashing up to Heavy; every police car behind him loses track. III lands in Rampage. */
+    breakaway: { time: [1.0, 1.3, 1.3], height: 3, boost: 4, shockRadius: [6, 8, 8], cooldown: 14 },
+    /** Prime Time: this long, the audience can't drop and smashes count `mult` × (Ratings and points). */
+    primeTime: { time: [6, 8, 10], mult: 2, cooldown: 30 }, // balance 2026-11-17: 8s every 20s was 40% uptime with no drain
     /** How long the "what it did" callout stays beside the ability chip (s). */
     popTime: 1.8,
   },
 
-  /** Phase 3 passives. */
-  passives: {
-    /** Second Wind: Pin drain multiplier. */
-    secondWindDrain: 1.5,
-    /** Showman: a type unseen this segment pays this (instead of §12's ×1.5). */
-    showmanFresh: 2.0,
-    /** Tailwind: tier-up time multiplier. */
-    tailwindTierUp: 0.7,
-  },
+  /** Passives v2 (2026-11-17). Thick Skin: gear-costing hits shrugged off per segment. Second Wind: tier-up time × this while below the gear he had. Crowd Pleaser: audience drain × this at Rampage. Slipstream: police crash Ratings and points × this. */
+  passives: { thickSkinHits: 1, secondWindTierUp: 0.6, crowdPleaserDecay: 0.6, slipstreamMult: 2 },
 
   /** Phase 0c traffic reactions (presentation): cars ahead brake, swerve and honk as he approaches. */
   traffic: {
