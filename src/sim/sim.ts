@@ -60,6 +60,8 @@ export interface SimOptions {
   levels?: Partial<Record<AbilityId, number>>;
   /** Giant size: he grows with his gear, hit-box included (TUNING.growth). Off = the fixed 3.6m giant. */
   growth?: boolean;
+  /** First broadcast ever (2026-11-17 onboarding): a calm opening (TUNING.guided). Part of the leaderboard submission. */
+  guided?: boolean;
 }
 
 const smoothstep = (t: number) => t * t * (3 - 2 * t);
@@ -102,17 +104,22 @@ export class Sim {
   /** Giant size grows with gear (SimOptions.growth). */
   readonly growth: boolean;
 
+  /** First broadcast ever: a calm opening (no drain or police for `guided.calmFor` s, nothing unbreakable for `guided.clearFor` m). */
+  readonly guided: boolean;
+
   constructor(opts: SimOptions) {
     this.seed = opts.seed;
     this.growth = opts.growth ?? false;
     this.rng = new Rng(opts.seed ^ 0x51ed);
-    this.track = new Track(opts.seed, opts.segment ?? 0);
+    this.guided = !!opts.guided;
+    this.track = new Track(opts.seed, opts.segment ?? 0, this.guided);
     this.escort = new Escort(opts.seed, this.track);
     this.pursuit = new Pursuit(opts.seed, this);
     this.upgrades = new Set(opts.upgrades ?? []);
-    this.ability = (['leap', 'stare', 'breakaway', 'primeTime'] as AbilityId[]).find((a) => this.upgrades.has(a)) ?? null;
+    this.ability = (['leap', 'stare', 'breakaway', 'primeTime', 'shoulder'] as AbilityId[]).find((a) => this.upgrades.has(a)) ?? null;
     this.abilityLevel = this.ability ? Math.max(1, Math.min(TUNING.maxLevel, opts.levels?.[this.ability] ?? 1)) : 0;
     this.show.startSegment(opts.segment ?? 0);
+    if (this.guided) this.show.decayGrace = TUNING.guided.calmFor;
     this.asks = new Asks(opts.seed, opts.segment ?? 0, this.track);
     const PV = TUNING.passives;
     if (this.upgrades.has('crowdPleaser')) this.show.rampageDecayMult = PV.crowdPleaserDecay;
@@ -329,7 +336,7 @@ export class Sim {
     for (const p of this.track.propsBetween(g.s - r - 12, g.s)) {
       if (!p.alive || p.judged || p.s + p.hl > g.s - r) continue;
       p.judged = true;
-      if (CLASS_RANK[p.cls] <= rank || g.air > 0) continue;
+      if (this.rankOf(p) <= rank || g.air > 0) continue;
       const gap = Math.abs(p.d - g.d) - p.hw - r;
       if (gap < 0 || gap > TUNING.collision.dodgeGap) continue;
       this.emit({ type: 'dodge', propId: p.id, s: p.s, d: p.d, gap });
@@ -374,7 +381,7 @@ export class Sim {
     const blocked = (lane: number) => {
       if (!this.track.laneUsable(lane, g.s)) return true;
       if (units.some((u) => Math.abs(u.s - g.s) < u.hl + 4 && inLane(lane, u))) return true;
-      return this.track.propsBetween(g.s - 3, g.s + 4).some((p) => CLASS_RANK[p.cls] > rank && inLane(lane, p));
+      return this.track.propsBetween(g.s - 3, g.s + 4).some((p) => this.rankOf(p) > rank && inLane(lane, p));
     };
     return blocked(g.lane - 1) && blocked(g.lane + 1);
   }
@@ -450,7 +457,11 @@ export class Sim {
       const at = Math.max(this.track.end, g.s + Math.min(g.speed, TUNING.tiers[1].topSpeed) * X.planAhead + X.exitDistance[0] - 30);
       this.track.reserveExit(at, at + X.planLength);
     }
-    if (!this.exit && !this.fork && now >= X.exitOpensAt && now < X.length + X.grace) this.openExit();
+    if (!this.exit && !this.fork && now >= X.exitOpensAt && now < X.length + X.grace) {
+      this.openExit();
+      // Difficulty curve: the last segment's way out runs through a police roadblock (Rampage it, or take the gap).
+      if (this.exit && TUNING.difficulty.finaleRoadblock && this.show.segment >= TUNING.run.segments - 1) this.pursuit.spawnFinale();
+    }
     if (this.exit && g.s >= this.exit.gore) {
       if (this.onRampLane(this.exit.gore)) {
         const n = this.events.length;
@@ -541,6 +552,11 @@ export class Sim {
     }
   }
 
+  /** A prop's rank against his: rampOnly things (concrete, police roadblocks) count as unbreakable outside Rampage. */
+  rankOf(p: Prop): number {
+    return p.rampOnly && !this.inRampage && this.giant.shoulderT <= 0 ? CLASS_RANK.immovable : CLASS_RANK[p.cls];
+  }
+
   /** In Rampage (the burst), not just at top speed. */
   get inRampage(): boolean {
     return this.giant.rampT > 0;
@@ -569,10 +585,12 @@ export class Sim {
   private startRampage() {
     const g = this.giant;
     g.meter = 0;
-    g.rampT = TUNING.rampage.duration;
+    g.rampT = TUNING.rampage.duration + (this.upgrades.has('overdrive') ? TUNING.passives.overdriveTime : 0);
     g.rampElapsed = 0;
     this.setTier(TUNING.tiers.length - 1);
     this.emit({ type: 'rampageStart', time: g.rampT });
+    // Ground Zero: going Rampage flattens everything around him (bulldozers and police included).
+    if (this.upgrades.has('groundZero')) this.emit({ type: 'groundZero', s: g.s, d: g.d, smashed: this.slam(TUNING.passives.groundZeroRadius, true) });
   }
 
   private endRampage() {
@@ -588,11 +606,16 @@ export class Sim {
     const g = this.giant;
     const R = TUNING.rampage;
     if (this.inRampage) {
-      if (cause === 'medium' || cause === 'heavy' || cause === 'unit') g.rampT = Math.min(g.rampT + R.perSmash, Math.max(0, R.maxDuration - g.rampElapsed));
+      const cap = R.maxDuration + (this.upgrades.has('overdrive') ? TUNING.passives.overdriveTime : 0);
+      if (cause === 'medium' || cause === 'heavy' || cause === 'unit') g.rampT = Math.min(g.rampT + R.perSmash, Math.max(0, cap - g.rampElapsed));
       return;
     }
     if (g.meter >= 100) return;
-    g.meter = Math.min(100, g.meter + (R.gain[cause] ?? 0));
+    const D = TUNING.difficulty;
+    let add = (R.gain[cause] ?? 0) * D.meterGain[Math.min(this.show.segment, D.meterGain.length - 1)] * (this.upgrades.has('shortFuse') ? TUNING.passives.shortFuseMult : 1);
+    // Shoulder Check III: smashes in the charge fill the meter too.
+    if (g.shoulderT > 0 && this.ability === 'shoulder' && this.abilityLevel >= 3 && (cause === 'medium' || cause === 'heavy' || cause === 'unit')) add += TUNING.abilities.shoulder.meterPerSmash;
+    g.meter = Math.min(100, g.meter + add);
     if (g.meter >= 100) this.emit({ type: 'meterFull' });
   }
 
@@ -731,6 +754,7 @@ export class Sim {
     const A = TUNING.abilities;
     const L = this.abilityLevel - 1; // index into the per-level numbers
     g.abilityCd = Math.max(0, g.abilityCd - dt);
+    g.shoulderT = Math.max(0, g.shoulderT - dt);
     if (g.prime > 0) {
       g.prime = Math.max(0, g.prime - dt);
       if (g.prime === 0) {
@@ -774,6 +798,12 @@ export class Sim {
       this.show.prime = true;
       g.abilityCd = A.primeTime.cooldown;
       this.emit({ type: 'primeTime', on: true, time: g.prime });
+    } else if (id === 'shoulder') {
+      // Shoulder Check (the ability): a short charge that breaks concrete and police lines (rankOf), never bulldozers.
+      g.shoulderT = A.shoulder.time[L];
+      g.speed += A.shoulder.burst;
+      g.abilityCd = A.shoulder.cooldown;
+      this.emit({ type: 'shoulder', s: g.s, d: g.d });
     }
     this.emit({ type: 'ability', id, ok: true, level: this.abilityLevel });
   }
@@ -943,11 +973,11 @@ export class Sim {
     const r = this.radius();
     const rank = this.smashRank();
     for (const p of this.track.propsBetween(s0, s1)) {
-      if (CLASS_RANK[p.cls] <= rank) continue;
+      if (this.rankOf(p) <= rank) continue;
       if (Math.abs(p.d - c) < p.hw + r) return false;
     }
     for (const u of this.pursuit.solidBetween(s0, s1)) {
-      if (CLASS_RANK[u.cls] <= rank) continue;
+      if (this.rankOf(u) <= rank) continue;
       // Knock-backs ignore moving police cars: he shoves past them, so a lane is never sealed by traffic.
       if (!moving && (u.unit === 'cruiser' || u.unit === 'rolling')) continue;
       if (Math.abs(u.d - c) < u.hw + r) return false;
@@ -974,8 +1004,8 @@ export class Sim {
       const u = p as Unit;
       // A cruiser mid-ram is driving into him: it can't be shrugged off at Rampage (only a Shoulder Check flattens it).
       const ramming = u.unit === 'cruiser' && u.phase === 'act' && TUNING.pursuit.cruiser.ramBeatsRampage && this.giant.shoulderT <= 0 && !this.inRampage;
-      const cls = ramming ? 'immovable' : u.ram && this.giant.shoulderT > 0 ? 'heavy' : p.cls;
-      if (CLASS_RANK[cls] <= rank) {
+      const pr = ramming ? CLASS_RANK.immovable : u.ram && this.giant.shoulderT > 0 ? CLASS_RANK.heavy : this.rankOf(p);
+      if (pr <= rank) {
         // Smash, forward or across: the same class rule either way (v0.3 smash-across).
         p.alive = false;
         g.speed = Math.max(TUNING.giant.speedFloor, g.speed * (1 - TUNING.collision.smashSpeedLoss[p.cls]));
@@ -1083,7 +1113,7 @@ export class Sim {
       const c = this.track.laneCenter(best);
       const side = this.track.propsBetween(g.s - r0 - 4, g.s + r0 + 6).filter((x) => x.alive && Math.abs(x.d - c) < x.hw + r0);
       if (side.some((x) => x.cls === 'immovable') || this.pursuit.solidBetween(g.s - r0 - 4, g.s + r0 + 6).some((u) => Math.abs(u.d - c) < u.hw + r0 && u.phase !== 'leave' && u.unit !== 'cruiser' && u.unit !== 'rolling')) return here;
-      for (const x of side) if (CLASS_RANK[x.cls] > this.smashRank()) force(x);
+      for (const x of side) if (this.rankOf(x) > this.smashRank()) force(x);
       return best;
     }
     return best >= 0 ? best : this.track.laneUsable(g.prevLane, g.s) && !solidBeside(g.prevLane) ? g.prevLane : here;
@@ -1097,7 +1127,7 @@ export class Sim {
     const rank = this.smashRank();
     let room = 60;
     // Only what's beside him or ahead counts: something ending behind his shoulders isn't in the way.
-    const inWay = (x: Prop) => CLASS_RANK[x.cls] > rank && Math.abs(x.d - c) < x.hw + r && x.s + x.hl > g.s - r;
+    const inWay = (x: Prop) => this.rankOf(x) > rank && Math.abs(x.d - c) < x.hw + r && x.s + x.hl > g.s - r;
     for (const p of this.track.propsBetween(g.s - 6, g.s + 60)) if (inWay(p)) room = Math.min(room, p.s - p.hl - g.s);
     // Police alongside or ahead in that lane (a Net's flanker alongside means no way out on that side).
     for (const u of this.pursuit.solidBetween(g.s - 6, g.s + 60)) if (u.unit !== 'cruiser' && u.unit !== 'rolling' && u.phase !== 'leave' && inWay(u)) room = Math.min(room, u.s - u.hl - g.s);

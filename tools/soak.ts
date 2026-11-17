@@ -67,12 +67,12 @@ const t0 = performance.now();
 
 for (let seed = 1; seed <= seeds; seed++) {
   // Phase 3: every seed plays a segment of the run with an ability and a seeded set of passives.
-  const passives: UpgradeId[] = (['thickSkin', 'secondWind', 'crowdPleaser', 'slipstream'] as UpgradeId[]).filter((_, k) => ((seed >> 2) >> k) & 1);
-  const loadout: UpgradeId[] = seed % 9 === 0 ? passives : [ABILITIES[seed % 4], ...passives];
+  const passives: UpgradeId[] = (['thickSkin', 'secondWind', 'crowdPleaser', 'slipstream', 'overdrive', 'shortFuse', 'groundZero'] as UpgradeId[]).filter((_, k) => ((seed >> 1) >> k) & 1);
+  const loadout: UpgradeId[] = seed % 9 === 0 ? passives : [ABILITIES[seed % ABILITIES.length], ...passives];
   // Giant size: two in three seeds play with growth (the default), the rest at the fixed size.
   const growth = seed % 3 !== 0;
   // Ability levels cycle I–III across seeds.
-  const sim = new Sim({ seed, segment: seed % TUNING.run.segments, upgrades: loadout, levels: { [ABILITIES[seed % 4]]: 1 + ((seed >> 4) % 3) }, growth });
+  const sim = new Sim({ seed, segment: seed % TUNING.run.segments, upgrades: loadout, levels: { [ABILITIES[seed % ABILITIES.length]]: 1 + ((seed >> 4) % 3) }, growth });
   p3.segments[seed % TUNING.run.segments]++;
   if (sim.show.heat !== Math.min(5, 1 + (seed % TUNING.run.segments))) fail(`seed ${seed}: segment ${seed % 5} started at Heat ${sim.show.heat}`);
   const bot = new Bot(sim);

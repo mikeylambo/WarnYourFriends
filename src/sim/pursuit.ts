@@ -192,8 +192,9 @@ export class Pursuit {
     const sim = this.sim;
     const P = TUNING.pursuit;
     if (sim.show.state !== 'live') return;
+    this.stepFinale();
     // Spawning (§19 by Heat).
-    if (sim.time >= P.firstAt) {
+    if (sim.time >= (sim.guided ? Math.max(P.firstAt, TUNING.guided.calmFor) : P.firstAt)) {
       const H = P.byHeat[sim.show.heat - 1];
       this.spawnT += dt * (this.marked ? P.chopper.spawnBoost : 1);
       const active = this.units.filter((u) => u.alive && !u.lost).length;
@@ -233,6 +234,8 @@ export class Pursuit {
 
   private allowed(k: UnitKind): boolean {
     const sim = this.sim;
+    // A roadblock still ahead of him (the finale's included) owns the next tell: nothing else joins until it's passed.
+    if (this.units.some((u) => u.alive && u.unit === 'roadblock' && u.s > sim.giant.s)) return false;
     if (k === 'net') {
       const N = TUNING.pursuit.net;
       if (this.nets >= N.perSegment[sim.show.heat - 1] || sim.time - this.netAt < N.minGap) return false;
@@ -254,6 +257,33 @@ export class Pursuit {
     const fk = sim.fork;
     if (fk && fk.gore - sim.giant.s < TUNING.forks.clearOfExit && fk.gore > sim.giant.s) return false;
     return true;
+  }
+
+  /**
+   * Finale (last segment): a roadblock on the way to the exit. Queued when the exit opens and placed as soon as
+   * no other tell is live (one tell at a time); dropped if the gore gets within `finaleGiveUp` m (too late to read).
+   */
+  private finalePending = false;
+  spawnFinale() {
+    this.finalePending = true;
+  }
+  private stepFinale() {
+    if (!this.finalePending) return;
+    const sim = this.sim;
+    const ex = sim.exit;
+    if (!ex || ex.gore - sim.giant.s < TUNING.difficulty.finaleGiveUp) {
+      this.finalePending = false;
+      return;
+    }
+    // A roadblock already waiting ahead is the finale.
+    if (this.units.some((u) => u.alive && u.unit === 'roadblock' && u.s > sim.giant.s)) {
+      this.finalePending = false;
+      return;
+    }
+    if (this.tellActive || this.units.some((u) => u.alive && (u.phase === 'tell' || u.unit === 'net' || u.unit === 'rolling'))) return;
+    // Same as any threat ahead: not while a cruiser is closing in or winding up (one tell at a time).
+    if (this.units.some((u) => u.alive && u.unit === 'cruiser' && !u.lost && u.phase !== 'leave' && u.s > sim.giant.s - 40)) return;
+    if (this.spawnRoadblock()) this.finalePending = false;
   }
 
   private spawn(k: UnitKind): boolean {
@@ -663,6 +693,8 @@ export class Pursuit {
     const cruise = g.speed * R.cruiseFactor;
     lanes.forEach((lane, i) => {
       const u = this.make(i === weak ? 'compact' : i === armored ? 'armored' : 'cruiser', 'rolling', s, track.laneCenter(lane), lane);
+      // Rampage timing: the blockade's cruisers only break in Rampage; the compact is still the weak link.
+      if (i !== weak) u.rampOnly = true;
       u.group = grp;
       u.speed = cruise;
     });
@@ -795,6 +827,7 @@ export class Pursuit {
         const left = lane < gap;
         const park = left ? -3.2 : w + 3.2;
         const u = this.make('cruiser', 'roadblock', s + (lane - gap) * 0.6, park, lane);
+        u.rampOnly = true; // Rampage timing: a roadblock only breaks in Rampage (or take the gap)
         u.group = grp;
         u.fromD = park;
         u.toD = track.laneCenter(lane);

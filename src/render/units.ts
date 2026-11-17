@@ -150,6 +150,21 @@ export class UnitViews {
       v.tails.push(th);
       v.blink.push(bl);
     }
+    // Rampage-only police (roadblock and blockade cruisers): a hazard-yellow roof and a heavy push bar, so from the
+    // chopper they don't read as the ordinary cruisers Stride flattens.
+    if (u.rampOnly) {
+      const hazard = toon(0xf2c200, { emissive: 0x3a2c00 });
+      const roofPanel = new THREE.Mesh(BOX, hazard);
+      roofPanel.scale.set(L * 0.42, 0.06, W * 0.86);
+      roofPanel.position.set(-0.2, roof + 0.02, 0);
+      const pushBar = new THREE.Mesh(BOX, toon(0x1a1a1f));
+      pushBar.scale.set(0.35, 0.55, W * 1.08);
+      pushBar.position.set(L / 2 + 0.15, 0.55, 0);
+      const stripe = new THREE.Mesh(BOX, hazard);
+      stripe.scale.set(0.37, 0.14, W * 1.1);
+      stripe.position.set(L / 2 + 0.15, 0.62, 0);
+      body.add(roofPanel, pushBar, stripe);
+    }
     // One glowing gap per roadblock row.
     if (u.unit === 'roadblock' && ![...this.views.values()].some((o) => o.glow && o.group === u.group)) {
       const glow = new THREE.Mesh(DISC, GAP_GLOW);

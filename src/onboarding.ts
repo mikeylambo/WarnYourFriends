@@ -1,5 +1,5 @@
 import { TUNING } from './tuning';
-import { CLASS_RANK, type Sim } from './sim/sim';
+import type { Sim } from './sim/sim';
 import type { SimEvent } from './sim/types';
 
 /**
@@ -8,7 +8,7 @@ import type { SimEvent } from './sim/types';
  * instructions with the button on them, never a voice or a quote (the producer notes were cut on 2026-11-16).
  * At most one on screen, `gap` s apart. Presentation only: reads the sim, never writes it.
  */
-export type PromptId = 'blocked' | 'meter' | 'ready' | 'hit' | 'ram' | 'rampage' | 'audience' | 'kite' | 'boxed' | 'caught' | 'exit' | 'ability';
+export type PromptId = 'lanes' | 'blocked' | 'concrete' | 'meter' | 'ready' | 'hit' | 'ram' | 'rampage' | 'audience' | 'kite' | 'boxed' | 'caught' | 'exit' | 'ability';
 
 /** v2: the Rampage loop (2026-11-17) teaches new lessons, so everyone sees them once. */
 const STORE = 'wyf.prompts.v2';
@@ -58,6 +58,12 @@ export class Onboarding {
     if (e.type === 'tell' && e.kind === 'cruiser') this.want('ram');
     else if (e.type === 'tell' && e.kind === 'net') this.want('boxed');
     else if (e.type === 'meterFull') this.want('ready');
+    // Changed lanes without being told: that lesson is learned.
+    else if (e.type === 'laneChange' && !this.seen.has('lanes')) {
+      this.seen.add('lanes');
+      this.save();
+      if (this.queued === 'lanes') this.queued = null;
+    }
     else if (e.type === 'rampageStart') {
       // Fired it without being told: the "ready" lesson is learned; now what Rampage does.
       if (!this.seen.has('ready')) {
@@ -80,14 +86,19 @@ export class Onboarding {
     }
     const g = sim.giant;
     // Something he can't smash at this gear in his lane, a second or two out.
-    if (!this.seen.has('blocked') && sim.time > O.quietStart) {
+    if ((!this.seen.has('blocked') || !this.seen.has('concrete')) && sim.time > O.quietStart) {
       const rank = sim.smashRank();
       const c = sim.track.laneCenter(g.lane);
       const ahead = sim.track.propsBetween(g.s + g.speed * 0.8, g.s + g.speed * O.blockedLead);
-      if (ahead.some((p) => p.alive && CLASS_RANK[p.cls] > rank && Math.abs(p.d - c) < p.hw + 1)) this.want('blocked');
+      const inWay = ahead.filter((p) => p.alive && sim.rankOf(p) > rank && Math.abs(p.d - c) < p.hw + 1);
+      const police = sim.pursuit.units.some((u) => u.alive && u.rampOnly && u.s > g.s && u.s < g.s + g.speed * O.blockedLead + 10);
+      if (inWay.some((p) => p.rampOnly) || police) this.want('concrete');
+      else if (inWay.length) this.want('blocked');
     }
+    // The first lesson: lanes, a moment after the cold open (unless he's already changed lanes).
+    if (!this.seen.has('lanes') && sim.time > O.lanesAfter) this.want('lanes');
     // The meter's first fill: what it is (once he's smashed something, so the bar is moving when he looks).
-    if (!this.seen.has('meter') && g.meter > 0 && sim.time > O.quietStart) this.want('meter');
+    if (!this.seen.has('meter') && this.seen.has('lanes') && g.meter > 0 && sim.time > O.quietStart) this.want('meter');
     // The audience draining with nothing happening.
     if (sim.show.ratings < O.audienceBelow && sim.time > TUNING.show.decayGrace) this.want('audience');
     // A police car alongside him with something solid ahead in its lane: kite it.

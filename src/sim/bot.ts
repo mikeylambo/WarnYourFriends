@@ -1,4 +1,4 @@
-import { CLASS_RANK, type Sim } from './sim';
+import type { Sim } from './sim';
 import type { SimInput } from './types';
 
 /**
@@ -31,16 +31,39 @@ export class Bot {
       case 'primeTime': {
         // On air when there's plenty to smash just ahead and he can smash it.
         const rank = sim.smashRank();
-        const ahead = sim.track.propsBetween(g.s, g.s + g.speed * 3).filter((p) => p.alive && CLASS_RANK[p.cls] <= rank).length;
+        const ahead = sim.track.propsBetween(g.s, g.s + g.speed * 3).filter((p) => p.alive && sim.rankOf(p) <= rank).length;
         return g.tier === 2 && (ahead >= 3 || sim.show.ratings < 30);
+      }
+      case 'shoulder': {
+        // Charge through concrete or a police line in his lane, a moment out (not in Rampage: no need).
+        if (sim.inRampage) return false;
+        const c = sim.track.laneCenter(g.lane);
+        const near = (p: { s: number; d: number; hw: number; alive: boolean; rampOnly?: boolean }) => p.alive && p.rampOnly && p.s > g.s && p.s < g.s + g.speed * 0.5 + 3 && Math.abs(p.d - c) < p.hw + 1;
+        return sim.track.propsBetween(g.s, g.s + 15).some(near) || sim.pursuit.units.some(near);
       }
     }
   }
 
-  /** Rampage loop: the bot fires Rampage the moment the meter is full. */
+  /** Seconds the meter has sat full. */
+  private fullFor = 0;
+
+  /**
+   * Rampage timing (2026-11-17): with a full meter the bot waits for something only Rampage breaks (concrete,
+   * a bulldozer, a police line) within 3s ahead, or fires anyway after 5s full.
+   */
   input(): SimInput {
-    const g = this.sim.giant;
-    return { ...this.decide(), shoulder: g.meter >= 100 && !this.sim.inRampage };
+    const sim = this.sim;
+    const g = sim.giant;
+    const full = g.meter >= 100 && !sim.inRampage;
+    this.fullFor = full ? this.fullFor + sim.dt : 0;
+    let fire = false;
+    if (full) {
+      const ahead = (p: { s: number; alive: boolean }) => p.alive && p.s > g.s && p.s < g.s + g.speed * 3;
+      const hard = sim.track.propsBetween(g.s, g.s + g.speed * 3).some((p) => ahead(p) && (p.rampOnly || p.cls === 'immovable'))
+        || sim.pursuit.units.some((u) => ahead(u) && (u.rampOnly || u.unit === 'net'));
+      fire = hard || this.fullFor > 5;
+    }
+    return { ...this.decide(), shoulder: fire };
   }
 
   private decide(): SimInput {
@@ -105,7 +128,7 @@ export class Bot {
       // Prefer lanes with things to smash once we can.
       const c = track.laneCenter(lane);
       for (const p of track.propsBetween(s0, s1)) {
-        if (Math.abs(p.d - c) < p.hw + this.sim.radius() && CLASS_RANK[p.cls] <= rank) sc += 2;
+        if (Math.abs(p.d - c) < p.hw + this.sim.radius() && this.sim.rankOf(p) <= rank) sc += 2;
       }
       if (spotted && lane !== g.lane) sc += 3;
       return sc - Math.abs(lane - g.lane) * 0.5;

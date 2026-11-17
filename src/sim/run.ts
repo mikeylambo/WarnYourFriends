@@ -10,7 +10,7 @@ import type { Show } from './show';
  */
 export type RunPhase = 'live' | 'meeting' | 'won' | 'lost';
 
-export const ABILITIES: AbilityId[] = ['leap', 'stare', 'breakaway', 'primeTime'];
+export const ABILITIES: AbilityId[] = ['leap', 'stare', 'breakaway', 'primeTime', 'shoulder'];
 /** Every upgrade, in pool order (the offers draw from this, minus what's locked). */
 export const ALL_UPGRADES = Object.keys(TUNING.upgrades) as UpgradeId[];
 

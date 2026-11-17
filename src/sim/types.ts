@@ -26,6 +26,8 @@ export interface Prop {
   judged?: boolean;
   /** Segment index it belongs to (for streaming). */
   segment: number;
+  /** Rampage timing (2026-11-17): breaks only in Rampage (concrete, police roadblocks); unbreakable until then. */
+  rampOnly?: boolean;
 }
 
 export type LaneMove = 'change' | 'knock' | 'wallBump' | null;
@@ -120,6 +122,8 @@ export type SimEvent =
   | { type: 'meterFull' }
   | { type: 'rampageStart'; time: number }
   | { type: 'rampageEnd' }
+  /** Ground Zero (passive): the blast when Rampage fires, and how much it flattened. */
+  | { type: 'groundZero'; s: number; d: number; smashed: number }
   | { type: 'meterLoss'; amount: number; reason: TierDropReason }
   /** Phase 0c: the giant enters a merge segment (lane count changes from `from` to `to`). */
   | { type: 'merge'; from: number; to: number; s: number }

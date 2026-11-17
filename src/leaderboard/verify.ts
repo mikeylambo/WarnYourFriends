@@ -23,6 +23,8 @@ export interface Submission {
   buys: (UpgradeId | null)[];
   /** The upgrades this player could be offered (Awards unlock the rest); absent = all. Must match the client's run. */
   pool?: UpgradeId[];
+  /** The guided first broadcast (its first segment opens calm, TUNING.guided). */
+  guided?: boolean;
   /** The score the client showed; only compared, never stored. */
   claimed: number;
 }
@@ -79,7 +81,7 @@ export function verify(sub: Submission): VerifyResult {
 
   if (sub.mode === 'broadcast') {
     if (logs.length !== 1) return { ok: false, error: 'segments' };
-    const sim = new Sim({ seed: sub.seed, segment: 0, upgrades: [], growth: !!sub.growth });
+    const sim = new Sim({ seed: sub.seed, segment: 0, upgrades: [], growth: !!sub.growth, guided: !!sub.guided });
     if (!playSegment(sim, logs[0]!)) return { ok: false, error: 'unfinished' };
     return { ok: true, score: Math.round(sim.show.banked), segments: 1, won: sim.show.state === 'cleared' };
   }
@@ -89,7 +91,7 @@ export function verify(sub: Submission): VerifyResult {
   const buys = Array.isArray(sub.buys) ? sub.buys : [];
   for (let i = 0; i < logs.length; i++) {
     if (run.phase !== 'live') return { ok: false, error: 'segments' };
-    const sim = new Sim({ seed: run.segmentSeed(), segment: run.segment, upgrades: run.owned, levels: run.levels, growth: !!sub.growth });
+    const sim = new Sim({ seed: run.segmentSeed(), segment: run.segment, upgrades: run.owned, levels: run.levels, growth: !!sub.growth, guided: !!sub.guided && i === 0 });
     if (!playSegment(sim, logs[i]!)) return { ok: false, error: 'unfinished' };
     run.finishSegment(sim.show);
     if ((run.phase as string) === 'meeting') {

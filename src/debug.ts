@@ -30,8 +30,8 @@ export interface Flags {
   time: 'night' | 'dusk' | 'day' | null;
   /** Phase 3: which mode ?autostart/?bot launches: 'run' (five segments) or 'broadcast' (one). */
   mode: 'run' | 'broadcast';
-  /** Phase 3 dev: equip an ability in a single broadcast (?ability=leap|stare|breakaway|primeTime), at ?level=1–3. */
-  ability: 'leap' | 'stare' | 'breakaway' | 'primeTime' | null;
+  /** Phase 3 dev: equip an ability in a single broadcast (?ability=leap|stare|breakaway|primeTime|shoulder), at ?level=1–3. */
+  ability: 'leap' | 'stare' | 'breakaway' | 'primeTime' | 'shoulder' | null;
   level: number;
   /** Giant size override (?size=growth|fixed|big), for side-by-side playtests. */
   size: 'growth' | 'fixed' | 'big' | null;
@@ -55,7 +55,7 @@ export function readFlags(search: string): Flags {
   const seed = num(q, 'seed');
   return {
     mode: q.get('mode') === 'run' ? 'run' : 'broadcast',
-    ability: (['leap', 'stare', 'breakaway', 'primeTime'] as const).find((a) => a === q.get('ability')) ?? null,
+    ability: (['leap', 'stare', 'breakaway', 'primeTime', 'shoulder'] as const).find((a) => a === q.get('ability')) ?? null,
     level: Math.max(1, Math.min(3, Math.round(num(q, 'level') ?? 1))),
     seed: seed ?? (Math.random() * 1e9) | 0,
     seedFixed: seed !== null,

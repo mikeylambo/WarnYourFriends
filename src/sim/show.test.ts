@@ -23,11 +23,13 @@ describe('show (§12 Ratings, Heat, Pin)', () => {
     const sh = new Show();
     const ev: SimEvent[] = [];
     expect(sh.ratings).toBe(20);
-    expect(sh.gain('heavy', 1, false, ev)).toBeCloseTo(7.5);
-    expect(sh.gain('heavy', 2, false, ev)).toBeCloseTo(2.5);
-    expect(sh.gain('heavy', 3, false, ev)).toBeCloseTo(1.25);
-    expect(sh.gain('heavy', 20, false, ev)).toBeCloseTo(5); // window passed
-    expect(sh.gain('medium', 21, true, ev)).toBeCloseTo(2 * 1.5 * 1.25); // outnumbered
+    const H = TUNING.show.gain.heavy;
+    const M = TUNING.show.gain.medium;
+    expect(sh.gain('heavy', 1, false, ev)).toBeCloseTo(H * 1.5);
+    expect(sh.gain('heavy', 2, false, ev)).toBeCloseTo(H * 0.5);
+    expect(sh.gain('heavy', 3, false, ev)).toBeCloseTo(H * 0.25);
+    expect(sh.gain('heavy', 20, false, ev)).toBeCloseTo(H); // window passed
+    expect(sh.gain('medium', 21, true, ev)).toBeCloseTo(M * 1.5 * 1.25); // outnumbered
   });
 
   it('decays after 3s without a gain and busts at 0 (network cuts to commercial)', () => {

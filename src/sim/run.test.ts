@@ -197,3 +197,68 @@ describe('abilities and passives (§17)', () => {
     expect(crash(['slipstream'])).toBeCloseTo(crash([]) * 2, 5);
   });
 });
+
+describe('Rampage upgrades (2026-11-17)', () => {
+  const NO = { lane: 0, brake: false, shoulder: false };
+  const fire = (ups: UpgradeId[]) => {
+    const sim = new Sim({ seed: 1, upgrades: ups });
+    sim.track.props.length = 0;
+    (sim.track as unknown as { addProps: () => void }).addProps = () => {};
+    sim.giant.meter = 100;
+    const ev = sim.step({ ...NO, shoulder: true });
+    return { sim, ev };
+  };
+  it('Overdrive: Rampage lasts 3s longer', () => {
+    expect(fire(['overdrive']).sim.giant.rampT - fire([]).sim.giant.rampT).toBeCloseTo(TUNING.passives.overdriveTime, 5);
+  });
+  it('Short Fuse: the meter fills 25% faster', () => {
+    const fill = (ups: UpgradeId[]) => {
+      const sim = new Sim({ seed: 1, upgrades: ups });
+      (sim as unknown as { fillMeter: (c: string) => void }).fillMeter('heavy');
+      return sim.giant.meter;
+    };
+    expect(fill(['shortFuse'])).toBeCloseTo(fill([]) * TUNING.passives.shortFuseMult, 5);
+  });
+  it('Ground Zero: going Rampage flattens what is around him, bulldozers included', () => {
+    const sim = new Sim({ seed: 1, upgrades: ['groundZero'] });
+    sim.track.props.length = 0;
+    (sim.track as unknown as { addProps: () => void }).addProps = () => {};
+    const g = sim.giant;
+    sim.track.props.push({ id: 9001, kind: 'dozer', cls: 'immovable', mat: 'metal', s: g.s + 6, d: g.d, hl: 2.3, hw: 1.35, h: 2, variant: 0, alive: true, segment: 0 });
+    g.meter = 100;
+    const ev = sim.step({ ...NO, shoulder: true });
+    expect(ev.some((e) => e.type === 'groundZero' && e.smashed >= 1)).toBe(true);
+    expect(sim.track.props[0].alive).toBe(false);
+  });
+  it('Shoulder Check (ability): its charge breaks concrete without Rampage', () => {
+    const sim = new Sim({ seed: 1, upgrades: ['shoulder'] });
+    sim.track.props.length = 0;
+    (sim.track as unknown as { addProps: () => void }).addProps = () => {};
+    const g = sim.giant;
+    for (let i = 0; i < 120; i++) sim.step(NO);
+    sim.track.props.push({ id: 9002, kind: 'barricade', cls: 'heavy', mat: 'concrete', s: g.s + 5, d: g.d, hl: 0.35, hw: 1.8, h: 1, variant: 0, alive: true, segment: 0, rampOnly: true });
+    expect(sim.rankOf(sim.track.props[0])).toBeGreaterThan(sim.smashRank());
+    const ev = sim.step({ ...NO, ability: true });
+    for (let i = 0; i < 30; i++) ev.push(...sim.step(NO));
+    expect(ev.some((e) => e.type === 'smash' && e.propId === 9002)).toBe(true);
+    expect(ev.some((e) => e.type === 'bounce')).toBe(false);
+  });
+});
+
+describe('guided first broadcast (2026-11-17)', () => {
+  it('opens calm: nothing unbreakable early, no police or drain for calmFor seconds', () => {
+    for (const seed of [1, 2, 3, 4, 5]) {
+      const sim = new Sim({ seed, guided: true });
+      const bot = new Bot(sim);
+      let unitsEarly = 0;
+      while (sim.time < TUNING.guided.calmFor - 0.5) {
+        sim.step(bot.input());
+        if (sim.pursuit.units.length) unitsEarly++;
+      }
+      expect(unitsEarly).toBe(0);
+      expect(sim.show.ratings).toBeGreaterThanOrEqual(TUNING.show.startRatings - 1e-9);
+      const early = sim.track.props.filter((p) => p.s < TUNING.guided.clearFor && (p.cls === 'immovable' || p.rampOnly) && !sim.track.segmentAt(p.s).landmark);
+      expect(early.length).toBe(0);
+    }
+  });
+});

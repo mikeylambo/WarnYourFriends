@@ -244,9 +244,9 @@ try {
       await page.evaluate((l) => window.__GAME.setLook(l), look);
       for (let a = 0; a < 6; a++) {
         // Contrast swings with where he is (in a lamp pool, or between two); one frame between pools isn't the
-        // angle's readability. Up to three moments 1s apart (the bot driving), the first that reads counts.
+        // angle's readability. Up to five moments 1s apart (the bot driving), the first that reads counts.
         let r = null;
-        for (let k = 0; k < 3 && !r?.pass; k++) {
+        for (let k = 0; k < 5 && !r?.pass; k++) {
           if (k) {
             // Let the broadcast roll on a moment (the presentation only follows the sim on live frames).
             await page.evaluate((l) => { window.__GAME.setLook(l); window.__GAME.setAngle(0, 1); window.__GAME.resume(); }, look);

@@ -64,8 +64,10 @@ function updateRampageFx(dt: number, now: number) {
   if (rampK === 0) rimBaseStrength = RIM.strength.value; // the look owns it while he's not in Rampage
   else {
     const throb = settings.reduceFlashes ? 1 : 1 + F.pulseAmp * Math.sin(now * Math.PI * 2 * F.pulseHz);
-    // Boosted from the look's own level, never below `rimFloor` (the day look's rim is faint, the tell isn't).
-    const hot = Math.max(rimBaseStrength * F.rimBoost, F.rimFloor) * throb;
+    // At night the rim heats right up; at dusk and in daylight it only tints (a bright rim there lifts his dark
+    // silhouette off the bright road: the readability check caught it at 2.5:1). The edges and the swell carry it.
+    const boost = lighting.mode === 'night' ? Math.max(rimBaseStrength * F.rimBoost, F.rimFloor) : rimBaseStrength * F.rimBoostLit;
+    const hot = boost * throb;
     RIM.strength.value = rimBaseStrength + (hot - rimBaseStrength) * rampK;
   }
   RIM.color.value.copy(rimBaseColor).lerp(rimHot, rampK);
@@ -268,7 +270,9 @@ const onboarding = new Onboarding($('prompt'), (id: PromptId) => {
   const ab = sim.ability ? TUNING.upgrades[sim.ability] : null;
   const fire = settings.autoRampage ? 'it fires by itself' : `press ${k('shoulder')}`;
   const lines: Record<PromptId, string> = {
+    lanes: `Change lanes ${k('lanes')} and smash the traffic`,
     blocked: `Bulldozers and armored trucks don't break. Change lanes ${k('lanes')}`,
+    concrete: `Concrete and yellow-roof police lines only break in <b>RAMPAGE</b>. Save it, or go round`,
     meter: `Smash and dodge to fill the <b>RAMPAGE</b> meter`,
     ready: `<b>RAMPAGE READY</b> ${settings.autoRampage ? 'Here it goes' : `Press ${k('shoulder')}`}`,
     hit: `Hits cost Rampage meter`,
@@ -301,10 +305,10 @@ const recentEvents: SimEvent[] = [];
 const playLog = new PlayLog();
 let lastEntry: PlayEntry | null = null;
 // Recap REPLAY state (declared up here: newRun runs at boot). See startReplay below.
-let simOpts: { seed: number; segment: number; upgrades: UpgradeId[]; levels: Partial<Record<AbilityId, number>>; growth: boolean } = { seed: 0, segment: 0, upgrades: [], levels: {}, growth: false };
+let simOpts: { seed: number; segment: number; upgrades: UpgradeId[]; levels: Partial<Record<AbilityId, number>>; growth: boolean; guided?: boolean } = { seed: 0, segment: 0, upgrades: [], levels: {}, growth: false };
 const inputLog: SimInput[] = [];
 /** Leaderboard: this broadcast's (or run's) seed, each segment's inputs and the meeting buys, for the server to re-play. */
-let lb: { mode: 'run' | 'broadcast'; seed: number; segments: string[]; buys: (UpgradeId | null)[]; pool: UpgradeId[] } = { mode: 'broadcast', seed: 0, segments: [], buys: [], pool: [] };
+let lb: { mode: 'run' | 'broadcast'; seed: number; segments: string[]; buys: (UpgradeId | null)[]; pool: UpgradeId[]; guided?: boolean } = { mode: 'broadcast', seed: 0, segments: [], buys: [], pool: [] };
 /** Why this browser's scores can't go on the board (a setting that changes the sim), or null. */
 const lbBlocked = () =>
   flags.bot || flags.seg !== null || flags.ability || flags.heat !== null || flags.nodecay || flags.god || (flags.size !== null && flags.size !== 'growth') || tuningChanged()
@@ -344,7 +348,7 @@ function targetAt(s: number, d: number): CameraTarget {
 const where = (s: number, d: number) => sim.track.posAt(s, d, { x: 0, z: 0 });
 const sirenRight = new THREE.Vector3();
 
-function newRun(seed: number, segment = 0, upgrades: UpgradeId[] = [], levels: Partial<Record<AbilityId, number>> = {}) {
+function newRun(seed: number, segment = 0, upgrades: UpgradeId[] = [], levels: Partial<Record<AbilityId, number>> = {}, guided = false) {
   if (replay) {
     // A new broadcast mid-replay: drop the replay (its views go below) and the parked live ones.
     replay = null;
@@ -370,8 +374,8 @@ function newRun(seed: number, segment = 0, upgrades: UpgradeId[] = [], levels: P
   $('coldts').textContent = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
   runSize = sizeMode();
   const growth = runSize === 'growth';
-  sim = new Sim({ seed, segment, upgrades, levels, growth });
-  simOpts = { seed, segment, upgrades: [...upgrades], levels: { ...levels }, growth };
+  sim = new Sim({ seed, segment, upgrades, levels, growth, guided });
+  simOpts = { seed, segment, upgrades: [...upgrades], levels: { ...levels }, growth, guided };
   // A fresh giant space for the new road: no anchor carried over, his starting size outright.
   gScale = sizeFor(0);
   gAnchor.x = gAnchor.z = 0;
@@ -582,11 +586,25 @@ function openBriefing(goLive: boolean): Promise<void> {
   const k = (a: GlyphAction) => (glyph(a) ? `<kbd>${esc(glyph(a))}</kbd>` : '');
   const at = TUNING.segment.exitOpensAt;
   const clock = `${Math.floor(at / 60)}:${String(at % 60).padStart(2, '0')}`;
-  recapEl.innerHTML = `<div class="card briefing">
+  // First time (Mike, 2026-11-17: the first-time experience): three essentials, then the guided broadcast teaches
+  // the rest as it happens. From the menu, the full How to Play.
+  if (goLive) {
+    recapEl.innerHTML = `<div class="card briefing first">
+    <div class="kicker">YOU'RE GOING LIVE</div>
+    <ol class="steps">
+      <li><b>Run.</b> He never stops. ${k('lanes')} change lanes.</li>
+      <li><b>Smash.</b> Run through the traffic. Go round bulldozers.</li>
+      <li><b>Rampage.</b> Smashing fills the meter. Full? ${settings.autoRampage ? 'It fires by itself' : `Press ${k('shoulder')}`} and he runs through everything.</li>
+    </ol>
+    <p class="how">The producer will tell you the rest as it happens. Full rules: How to Play, on the menu.</p>
+    <div class="row"><button class="go" id="brief-go">Go live</button></div>
+  </div>`;
+  } else
+    recapEl.innerHTML = `<div class="card briefing">
     <div class="kicker">HOW TO PLAY</div>
     <ol class="steps">
       <li><b>Run.</b> He never stops. ${k('lanes')} change lanes, ${k('brake')} brake.</li>
-      <li><b>Smash.</b> He flattens cars, carts and police cars. Bulldozers, armored trucks and a police car swerving into you don't break: go round. Hitting one costs Rampage meter.</li>
+      <li><b>Smash.</b> He flattens cars, carts and police cars. Bulldozers, armored trucks and a police car swerving into you don't break: go round. Concrete and yellow-roof police lines break only in Rampage. Hitting any of them costs Rampage meter.</li>
       <li><b>Rampage.</b> Smashes, close calls and combos fill the Rampage meter. When it's full, ${settings.autoRampage ? 'Rampage fires by itself' : `press ${k('shoulder')}`}: for 8 seconds he runs through everything, at double score. Keep smashing to make it last.</li>
       <li><b>Keep them watching.</b> Smashes, close calls and combos fill the audience bar. Empty, they cut to commercial.</li>
       <li><b>Lose the police.</b> Run a car beside you into whatever is in its lane. Slow down and they catch you: busted. Boxed in by the armored truck, brake out the back or Rampage through it.</li>
@@ -856,7 +874,7 @@ function showRecap() {
     const blocked = lbBlocked();
     const sub: Submission | null = blocked || lb.segments.length === 0
       ? null
-      : { mode: lb.mode, seed: lb.seed, growth: simOpts.growth, segments: lb.segments, buys: lb.buys, pool: lb.pool, claimed: Math.round(run ? run.earned : sim.show.banked) };
+      : { mode: lb.mode, seed: lb.seed, growth: simOpts.growth, segments: lb.segments, buys: lb.buys, pool: lb.pool, ...(lb.guided ? { guided: true } : {}), claimed: Math.round(run ? run.earned : sim.show.banked) };
     mountBoard(boardEl, lb.mode, sub, blocked ?? undefined);
   }
   // Playtest export: log this broadcast once, then copy everything logged so far.
@@ -1106,6 +1124,17 @@ function present(e: SimEvent) {
       void abilEl.offsetWidth;
       abilEl.classList.add('fire');
       break;
+    case 'groundZero': {
+      // Ground Zero (passive): the blast as Rampage fires, twelve metres round.
+      sim.track.posAt(e.s, e.d, pos);
+      const R = TUNING.passives.groundZeroRadius;
+      highway.ring(pos.x, pos.z, R * 1.1, 0xffb070, 0.6, 0.9);
+      highway.ring(pos.x, pos.z, R * 0.6, 0xffffff, 0.5, 0.8);
+      highway.crack(pos.x, pos.z, h);
+      audio.land();
+      if (!attract) abilityPop(e.smashed ? `Ground Zero · flattened ×${e.smashed}` : 'Ground Zero');
+      break;
+    }
     case 'leapLand': {
       sim.track.posAt(e.s, e.d, pos);
       highway.ring(pos.x, pos.z, 11, 0xffffff, 0.55, 0.9);
@@ -1553,13 +1582,15 @@ function beginBroadcast(mode = 'broadcast') {
   document.documentElement.classList.remove('attract');
   const seed = nextSeed ?? (Math.random() * 1e9) | 0;
   nextSeed = null;
-  lb = { mode: mode === 'run' ? 'run' : 'broadcast', seed, segments: [], buys: [], pool: upgradePool(profile) };
+  // The very first broadcast a player goes live in is the guided one (TUNING.guided): its first segment opens calm.
+  const guided = !flags.bot && !flags.autostart && !briefingSeen();
+  lb = { mode: mode === 'run' ? 'run' : 'broadcast', seed, segments: [], buys: [], pool: upgradePool(profile), ...(guided ? { guided } : {}) };
   if (mode === 'run') {
     run = new RunState(seed, lb.pool); // Awards unlock the rest of the pool
-    newRun(run.segmentSeed(), 0, []);
+    newRun(run.segmentSeed(), 0, [], {}, guided);
   } else {
     run = null;
-    newRun(seed, Math.max(0, Math.min(TUNING.run.segments - 1, flags.seg ?? 0)), flags.ability ? [flags.ability] : [], flags.ability ? { [flags.ability]: flags.level } : {});
+    newRun(seed, Math.max(0, Math.min(TUNING.run.segments - 1, flags.seg ?? 0)), flags.ability ? [flags.ability] : [], flags.ability ? { [flags.ability]: flags.level } : {}, guided);
   }
   bot = flags.bot ? new Bot(sim) : null;
   // First broadcast ever: How to Play first, then the cold open.

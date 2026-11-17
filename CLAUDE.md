@@ -4,7 +4,7 @@ This file is the law for anyone (human or agent) building this repo. The design 
 
 ## Current phase
 
-**Phase 3 — Depth**: the five-segment run with the Producer's Meeting, and the upgrade pool v2 (DECISIONS 2026-11-17: Leap, The Stare, Breakaway, Prime Time, levels I–III; Thick Skin, Second Wind, Crowd Pleaser, Slipstream), with the Local News Awards unlocking Breakaway, Slipstream and outfits. Phase 2 (one full broadcast: pursuit, Ratings/Heat/Pin, sign-off, busted, recap), broadcast escalation and road variety are done. The 0c feel check passed (Mike, 2026-11-12). Phase 1 Foundation: the game now runs inside the SLU Web Shell (private repo, pinned by commit; see DECISIONS 2026-11-13). The shell's AGENTS.md constitution applies. Never vendor the shell into this public repo.
+**Phase 3 — Depth**: the five-segment run with the Producer's Meeting, and the upgrade pool (DECISIONS 2026-11-17: abilities Leap, The Stare, Breakaway, Prime Time, Shoulder Check, levels I–III; passives Thick Skin, Second Wind, Crowd Pleaser, Slipstream, Overdrive, Short Fuse, Ground Zero), with the Local News Awards unlocking Breakaway, Slipstream and outfits. The core loop is the Rampage loop (Stride base gear, a meter cashed in for Rampage; DECISIONS 2026-11-17), with a difficulty curve by segment and a guided first broadcast. Phase 2 (one full broadcast: pursuit, Ratings/Heat/Pin, sign-off, busted, recap), broadcast escalation and road variety are done. The 0c feel check passed (Mike, 2026-11-12). Phase 1 Foundation: the game now runs inside the SLU Web Shell (private repo, pinned by commit; see DECISIONS 2026-11-13). The shell's AGENTS.md constitution applies. Never vendor the shell into this public repo.
 
 ## Rules
 
@@ -51,6 +51,7 @@ tools/shots-title.mjs   title screen (desktop, phone, glide)
 tools/filmstrip.mjs     slow-motion strip of an impact (smash-heavy, bounce, bounce-immovable)
 tools/shots-onboarding.mjs  live budget, recap and meeting
 tools/shots-recap.mjs   The 11 O'Clock Recap: through the real replay (its picture) and stepped, desktop and phones (ONLY=, SEED=)
+tools/shots-cards.mjs   Card art for the Rampage upgrades (in-engine placeholders) → src/assets/upgrades/
 tools/shots-rampage.mjs Rampage loop: the SA2-style opening, the meter filling / ready / in Rampage
 tools/shots-caught.mjs  Caught: Brake held with police behind, the CAUGHT meter, then busted
 tools/shots-signoff.mjs Sign-off outro: on the ramp, the swivel to Head-On, the cut to the replay

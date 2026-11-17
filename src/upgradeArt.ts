@@ -7,10 +7,15 @@ import thickSkin from './assets/upgrades/thickSkin.webp';
 import secondWind from './assets/upgrades/secondWind.webp';
 import crowdPleaser from './assets/upgrades/crowdPleaser.webp';
 import slipstream from './assets/upgrades/slipstream.webp';
+import shoulder from './assets/upgrades/shoulder.webp';
+import overdrive from './assets/upgrades/overdrive.webp';
+import shortFuse from './assets/upgrades/shortFuse.webp';
+import groundZero from './assets/upgrades/groundZero.webp';
 
 /**
  * Card art for the Producer's Meeting and the ability chip (Mike's sheet, docs/refs/broadcast-and-upgrades-sheet.webp).
  * Pool v2 (2026-11-17) reads each image afresh: flying over traffic → Breakaway, the camera on him → Prime Time, the
  * armored shin → Thick Skin, the breath → Second Wind, the filmstrip → Crowd Pleaser, the cape in the wind → Slipstream.
  */
-export const UPGRADE_ART: Record<UpgradeId, string> = { leap, stare, breakaway, primeTime, thickSkin, secondWind, crowdPleaser, slipstream };
+/** Rampage upgrades (2026-11-17): in-engine placeholder art (tools/shots-cards.mjs) until painted cards exist. */
+export const UPGRADE_ART: Record<UpgradeId, string> = { leap, stare, breakaway, primeTime, shoulder, thickSkin, secondWind, crowdPleaser, slipstream, overdrive, shortFuse, groundZero };

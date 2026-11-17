@@ -53,6 +53,7 @@ interface PropDef {
   hw: number;
   h: number;
   variants: number;
+  rampOnly?: boolean;
 }
 
 /** Lane props: Medium and Heavy (v0.3), plus the immovable dozer (impact pass). */
@@ -63,7 +64,8 @@ export const PROP_DEFS: Record<PropKind, PropDef> = {
   scooter: { cls: 'medium', mat: 'metal', hl: 0.9, hw: 0.35, h: 1.1, variants: 3 },
   car: { cls: 'heavy', mat: 'metal', hl: 2.2, hw: 0.95, h: 1.5, variants: 5 },
   van: { cls: 'heavy', mat: 'metal', hl: 2.7, hw: 1.1, h: 2.3, variants: 3 },
-  barricade: { cls: 'heavy', mat: 'concrete', hl: 0.35, hw: 1.8, h: 0.95, variants: 1 },
+  // Rampage timing (2026-11-17): concrete only breaks in Rampage (Stride bounces off it).
+  barricade: { cls: 'heavy', mat: 'concrete', hl: 0.35, hw: 1.8, h: 0.95, variants: 1, rampOnly: true },
   // Impact pass: the one lane prop nothing smashes (bounces him at any tier). Leap clears it.
   dozer: { cls: 'immovable', mat: 'metal', hl: 2.3, hw: 1.35, h: 2.4, variants: 1 },
   // Landmarks: a toll gate arm (Medium: Stride smashes it) and a food truck (Heavy: Rampage).
@@ -78,7 +80,8 @@ export const PROP_DEFS: Record<PropKind, PropDef> = {
 };
 
 const MEDIUM: PropKind[] = ['sawhorse', 'cart', 'fence', 'scooter'];
-const HEAVY: PropKind[] = ['car', 'car', 'van', 'barricade'];
+/** Heavy traffic; concrete barricades come in by the difficulty table (TUNING.difficulty.concrete). */
+const HEAVY: PropKind[] = ['car', 'car', 'van'];
 
 /** A lane is usable where at least this much of it is open (giant is 2.2m wide). */
 const MIN_USABLE_LANE_WIDTH = 2.8;
@@ -120,7 +123,15 @@ export class Track {
   private readonly gapScale: number;
   private readonly landmarkScale: number;
 
-  constructor(readonly seed: number, segment = 0) {
+  /** Which segment of the run this road is for (difficulty, pacing). */
+  private readonly segmentNo: number;
+
+  /** Guided first broadcast: nothing unbreakable this close to the start (m). */
+  private readonly hardFrom: number;
+
+  constructor(readonly seed: number, segment = 0, guided = false) {
+    this.segmentNo = segment;
+    this.hardFrom = guided ? TUNING.guided.clearFor : TUNING.props.immovableFrom;
     const Pc = TUNING.pacing;
     this.gapScale = Pc.rowGapScale[Math.min(segment, Pc.rowGapScale.length - 1)];
     this.landmarkScale = Pc.landmarkEveryScale[Math.min(segment, Pc.landmarkEveryScale.length - 1)];
@@ -423,14 +434,24 @@ export class Track {
         const j = rng.int(0, i);
         [order[i], order[j]] = [order[j], order[i]];
       }
-      let dozers = 0;
+      // Difficulty by segment (2026-11-17): bulldozers and concrete (what Stride can't break) thicken as the run goes on;
+      // `hardPerRow` caps them in one row (every row still leaves a lane open).
+      const D = TUNING.difficulty;
+      const di = Math.min(this.segmentNo, D.dozer.length - 1);
+      let hard = 0;
+      const hardLanes: number[] = [];
       for (const lane of order.slice(0, k)) {
         const mw = TUNING.zones.mediumWeight[seg.zone];
         const heavy = rng.next() >= mw;
-        // One immovable per row at most, never in the opening stretch.
-        const immovable = dozers === 0 && P.immovableChance > 0 && rowS >= P.immovableFrom && rng.chance(P.immovableChance);
-        if (immovable) dozers++;
-        const kind: PropKind = immovable ? 'dozer' : rng.pick(heavy ? HEAVY : MEDIUM);
+        // Never two side by side: a wall of two beside the edge lane left no way out but through one (Law 1).
+        const canHard = hard < D.hardPerRow[di] && rowS >= this.hardFrom && !hardLanes.some((l) => Math.abs(l - lane) === 1);
+        const immovable = canHard && rng.chance(D.dozer[di]);
+        const concrete = !immovable && heavy && canHard && rng.chance(D.concrete[di]);
+        if (immovable || concrete) {
+          hard++;
+          hardLanes.push(lane);
+        }
+        const kind: PropKind = immovable ? 'dozer' : concrete ? 'barricade' : rng.pick(heavy ? HEAVY : MEDIUM);
         const def = PROP_DEFS[kind];
         this.props.push({
           id: this.propId++,
@@ -443,6 +464,7 @@ export class Track {
           hw: def.hw,
           h: def.h,
           variant: rng.int(0, def.variants - 1),
+          ...(def.rampOnly ? { rampOnly: true } : {}),
           alive: true,
           segment: seg.index,
         });
@@ -463,6 +485,7 @@ export class Track {
       hw: def.hw,
       h: def.h,
       variant: this.rng.int(0, def.variants - 1),
+      ...(def.rampOnly ? { rampOnly: true } : {}),
       alive: true,
       segment: seg.index,
     });
@@ -510,7 +533,7 @@ export class Track {
    */
   drop(kind: PropKind, s: number, d: number): Prop {
     const def = PROP_DEFS[kind];
-    const p: Prop = { id: this.propId++, kind, cls: def.cls, mat: def.mat, s, d, hl: def.hl, hw: def.hw, h: def.h, variant: this.rng.int(0, def.variants - 1), alive: true, segment: this.segmentAt(s).index };
+    const p: Prop = { id: this.propId++, kind, cls: def.cls, mat: def.mat, s, d, hl: def.hl, hw: def.hw, h: def.h, variant: this.rng.int(0, def.variants - 1), alive: true, segment: this.segmentAt(s).index, ...(def.rampOnly ? { rampOnly: true } : {}) };
     let i = this.props.length;
     while (i > 0 && this.props[i - 1].s > s) i--;
     this.props.splice(i, 0, p);
