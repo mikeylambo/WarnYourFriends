@@ -578,7 +578,9 @@ export const TUNING = {
    * `asksFlash` s when one lands, then get out of the way (the recap lists them). Heat stars are off the HUD.
    */
   /** `rampWarn`: Rampage's last this-many seconds pulse red and tick (review pick 2: see it ending). */
-  hud: { minScale: 0.5, maxScale: 1.3, asksIntro: 8, asksFlash: 3, rampWarn: 1.5 },
+  hud: {
+    /** Chopper fuel gauge: red and pulsing for this many seconds before the segment's hard end. */
+    fuelCritical: 15, minScale: 0.5, maxScale: 1.3, asksIntro: 8, asksFlash: 3, rampWarn: 1.5 },
 
   /** Footfall presentation (v0.3). */
   /**
@@ -609,6 +611,8 @@ export const TUNING = {
    * §15 oblique news-chopper camera with v0.3 broadcast angle cuts.
    */
   camera: {
+    /** Fork wipe: seconds until the wipe covers the screen; the road swap and the cut happen then, under it. */
+    forkWipeCover: 0.28,
     angles: [
       { name: 'Chase High', yawDeg: 0, pitchDeg: 48, distance: 40, fov: 35 },
       // Cut-aways look less far ahead so the escort behind the giant is in shot (≥2s of road ahead still enforced).

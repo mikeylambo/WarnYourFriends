@@ -56,6 +56,10 @@ const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as 
 const canvas = $<HTMLCanvasElement>('view');
 const flashEl = $('flash');
 const rampSlam = $('rampslam');
+/** Fork taken (Mike, 2026-11-18): a station wipe names the new road, so the cut reads as TV, not a glitch. */
+const forkWipe = $('forkwipe');
+let forkSwap: { at: number; swap: () => void } | null = null;
+forkWipe.addEventListener('animationend', () => forkWipe.classList.remove('in'));
 // The slam plays once: drop its class when it ends, so a re-shown HUD never replays it over the recap.
 rampSlam.addEventListener('animationend', () => rampSlam.classList.remove('in'));
 /** Rampage tells (TUNING.rampageFx): the rim light heats, the screen edges glow. `rampK` eases 0..1. */
@@ -129,6 +133,9 @@ const touchUi = $('touch-ui');
 const camTag = $('camtag');
 const clockEl = $('clock');
 const clockLbl = $('clocklbl');
+/** Chopper fuel (Mike, 2026-11-18: "no meter, it snuck up on me"): the whole segment drains a visible tank. */
+const fuelEl = $('fuel');
+const fuelBar = fuelEl.querySelector('i') as HTMLElement;
 const brakeOnEl = $('brakeon');
 const chyKicker = document.querySelector('#chyron .kicker') as HTMLElement;
 const chyText = document.querySelector('#chyron .text') as HTMLElement;
@@ -404,6 +411,8 @@ const where = (s: number, d: number) => sim.track.posAt(s, d, { x: 0, z: 0 });
 const sirenRight = new THREE.Vector3();
 
 function newRun(seed: number, segment = 0, upgrades: UpgradeId[] = [], levels: Partial<Record<AbilityId, number>> = {}, guided = false) {
+  forkSwap = null; // a fork wipe from the last broadcast never swaps this one's road
+  forkWipe.classList.remove('in');
   if (replay) {
     // A new broadcast mid-replay: drop the replay (its views go below) and the parked live ones.
     replay = null;
@@ -1196,15 +1205,27 @@ function present(e: SimEvent) {
       break;
     case 'fork':
       if (e.taken) {
-        // The station cuts away while the road ahead is rebuilt as the avenue (a jump, not a slide).
-        highway.rebuildFrom(e.from);
-        gait.reset();
-        prev.s = sim.giant.s;
-        prev.d = sim.giant.d;
-        prev.stepPos = sim.giant.stepPos;
-        rig.cut(director.current, director.side, targetAt(sim.giant.s, sim.giant.d));
-        flash(TUNING.camera.cutFlashFrames);
-        showCamTag();
+        // The station wipes to the avenue: the last frame holds under the incoming wipe, and the road is rebuilt and the
+        // camera cut once the wipe covers the screen (Mike, 2026-11-18: the bare cut read as a glitch).
+        const swap = () => {
+          highway.rebuildFrom(e.from);
+          gait.reset();
+          prev.s = sim.giant.s;
+          prev.d = sim.giant.d;
+          prev.stepPos = sim.giant.stepPos;
+          rig.cut(director.current, director.side, targetAt(sim.giant.s, sim.giant.d));
+          showCamTag();
+        };
+        if (replay || attract || flags.stepMode) {
+          swap();
+          flash(TUNING.camera.cutFlashFrames);
+        } else {
+          (forkWipe.querySelector('span') as HTMLElement).textContent = e.name.toUpperCase();
+          forkWipe.classList.remove('in');
+          void forkWipe.offsetWidth;
+          forkWipe.classList.add('in');
+          forkSwap = { at: performance.now() / 1000 + TUNING.camera.forkWipeCover, swap };
+        }
       }
       break;
     case 'signOff': {
@@ -2303,10 +2324,18 @@ function frame(now: number) {
     poseCam.position.set(t.x + rx * 9 + Math.cos(t.travel) * 0.5, 2.0, t.z + rz * 9 + Math.sin(t.travel) * 0.5);
     poseCam.lookAt(t.x + Math.cos(t.travel) * 0.5, 1.5, t.z + Math.sin(t.travel) * 0.5);
     renderer.render(scene, poseCam);
+  } else if (forkSwap && performance.now() / 1000 < forkSwap.at) {
+    // Fork wipe coming in: the last frame holds (the road is about to be swapped under the wipe).
   } else if (contextLost || (paused && !attract && pausedDrawn)) {
     // Paused: the last frame stays on the canvas; no 3D work until something changes.
   } else if (updateTitleShot(realDt, t)) draw(titleCam);
-  else draw(rig.camera);
+  else {
+    if (forkSwap) {
+      forkSwap.swap();
+      forkSwap = null;
+    }
+    draw(rig.camera);
+  }
   pausedDrawn = paused && !attract;
   // The recap's picture: the replay's own frame just as the moment lands (before the viewer-video window draws).
   if (replay && !recapShot && moment && (replay.grab || replay.sim.time >= moment.t + TUNING.replay.shotAfter)) grabShot();
@@ -2516,6 +2545,13 @@ function updateHud(dt: number) {
   clockEl.textContent = `${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')}`;
   clockEl.classList.toggle('count', counting);
   if (clockLbl.hidden === counting) clockLbl.hidden = !counting;
+  // Fuel: full at the cold open, empty when the grace runs out (the segment's hard end). Amber once the exit is open,
+  // red and pulsing for the last `hud.fuelCritical` s.
+  const total = X.length + X.grace;
+  const fuel = Math.max(0, Math.min(1, 1 - sim.time / total));
+  fuelBar.style.transform = `scaleX(${fuel.toFixed(4)})`;
+  fuelEl.classList.toggle('low', counting);
+  fuelEl.classList.toggle('crit', sim.live && total - sim.time <= TUNING.hud.fuelCritical);
   const brakeShown = input.brakeLatched && sim.live;
   if (brakeOnEl.hidden === brakeShown) brakeOnEl.hidden = !brakeShown;
   // One primary number: the score (the whole run's in Full Broadcast; spending never lowers it). Ratings is the

@@ -42,6 +42,8 @@ function freeSegment(g: THREE.Object3D, box: THREE.BufferGeometry) {
   });
 }
 
+/** The sign-off board's red (the station's red, as on the HUD). */
+const SIGNOFF_RED = '#b3122a';
 const signTex = new Map<string, THREE.Texture>();
 /** Exit sign faces: "EXIT 6 / SIGN-OFF" for the sign-off, "EXIT 6A / {road}" for a fork. Drawn once each. */
 function signTexture(fork?: string): THREE.Texture {
@@ -52,7 +54,9 @@ function signTexture(fork?: string): THREE.Texture {
   c.width = 256;
   c.height = 176;
   const g = c.getContext('2d')!;
-  g.fillStyle = '#1e6b3a';
+  // A fork is an ordinary green highway exit; the sign-off is the station's own red board (Mike, 2026-11-18: a fork
+  // read as the sign-off), so the two never look alike.
+  g.fillStyle = fork ? '#1e6b3a' : SIGNOFF_RED;
   g.fillRect(0, 0, 256, 176);
   g.strokeStyle = '#f4f4ee';
   g.lineWidth = 6;
@@ -60,7 +64,7 @@ function signTexture(fork?: string): THREE.Texture {
   g.fillStyle = '#f4f4ee';
   g.textAlign = 'center';
   g.font = '800 30px system-ui, sans-serif';
-  g.fillText(fork ? 'EXIT 6A' : 'EXIT 6', 128, 52);
+  g.fillText(fork ? 'EXIT 6A' : 'WYF 6', 128, 52);
   const big = fork ? fork.toUpperCase() : 'SIGN-OFF';
   let px = 40;
   do g.font = `900 ${px--}px system-ui, sans-serif`;
@@ -1053,7 +1057,7 @@ export class HighwayView {
     arm.position.set(armMid.x, 7.4, armMid.z);
     arm.rotation.y = -h;
     // Fades like an overpass while he runs under it.
-    const green = new THREE.MeshToonMaterial({ color: 0x1e6b3a, gradientMap: toonRamp(), transparent: true });
+    const green = new THREE.MeshToonMaterial({ color: fork ? 0x1e6b3a : SIGNOFF_RED, gradientMap: toonRamp(), transparent: true });
     const face = new THREE.MeshBasicMaterial({ map: signTexture(fork), transparent: true });
     this.overpasses.push({ s, mat: green }, { s, mat: face as unknown as THREE.MeshToonMaterial });
     const board = new THREE.Mesh(this.box, [green, face, green, green, green, green]);
