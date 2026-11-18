@@ -10,7 +10,19 @@ import { TUNING, type UpgradeId } from '../tuning';
  * Pure: no DOM, no network. Shared by the game (encode) and the API (decode + verify).
  */
 
-export type BoardMode = 'run' | 'broadcast';
+export type BoardMode = 'run' | 'broadcast' | 'daily';
+
+/** The UTC day a moment falls on, as YYYY-MM-DD: the Daily Broadcast's key. */
+export function dayKey(ms: number): string {
+  return new Date(ms).toISOString().slice(0, 10);
+}
+
+/** The Daily Broadcast's road: the same seed for everyone on a UTC day (FNV-1a of the day, 1..1e9). */
+export function dailySeed(day: string): number {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < day.length; i++) h = Math.imul(h ^ day.charCodeAt(i), 0x01000193) >>> 0;
+  return (h % 999_999_999) + 1;
+}
 
 export interface Submission {
   mode: BoardMode;
@@ -78,7 +90,7 @@ function playSegment(sim: Sim, inputs: SimInput[]): boolean {
 
 /** Re-simulate a submission and return the score the sim gives it. */
 export function verify(sub: Submission): VerifyResult {
-  if (sub.mode !== 'run' && sub.mode !== 'broadcast') return { ok: false, error: 'mode' };
+  if (sub.mode !== 'run' && sub.mode !== 'broadcast' && sub.mode !== 'daily') return { ok: false, error: 'mode' };
   if (!Number.isSafeInteger(sub.seed)) return { ok: false, error: 'seed' };
   if (!Array.isArray(sub.segments) || !sub.segments.length || sub.segments.length > TUNING.run.segments) return { ok: false, error: 'segments' };
   const logs = sub.segments.map((s) => (typeof s === 'string' ? decodeInputs(s) : null));

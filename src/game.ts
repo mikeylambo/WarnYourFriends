@@ -30,7 +30,7 @@ import coverUrl from './assets/title-cover.webp';
 import { UPGRADE_ART } from './upgradeArt';
 import { PlayLog, appendLog, exportLog, type PlayEntry } from './playlog';
 import { readFlags } from './debug';
-import { encodeInputs, type Submission } from './leaderboard/verify';
+import { dailySeed, dayKey, encodeInputs, type BoardMode, type Submission } from './leaderboard/verify';
 import { mountBoard, prefetchSeed, takeSeed } from './leaderboardClient';
 import { Onboarding, type PromptId } from './onboarding';
 import { AWARDS, loadProfile, outfitUnlocked, record, rewardLine, saveProfile, unlockEdition, upgradePool, type Award } from './awards';
@@ -353,7 +353,7 @@ let lastEntry: PlayEntry | null = null;
 let simOpts: { seed: number; segment: number; upgrades: UpgradeId[]; levels: Partial<Record<AbilityId, number>>; growth: boolean; guided?: boolean; edition?: number } = { seed: 0, segment: 0, upgrades: [], levels: {}, growth: false };
 const inputLog: SimInput[] = [];
 /** Leaderboard: this broadcast's (or run's) seed, each segment's inputs and the meeting buys, for the server to re-play. */
-let lb: { mode: 'run' | 'broadcast'; seed: number; segments: string[]; buys: UpgradeId[][]; pool: UpgradeId[]; guided?: boolean; edition?: number } = { mode: 'broadcast', seed: 0, segments: [], buys: [], pool: [] };
+let lb: { mode: BoardMode; seed: number; segments: string[]; buys: UpgradeId[][]; pool: UpgradeId[]; guided?: boolean; edition?: number } = { mode: 'broadcast', seed: 0, segments: [], buys: [], pool: [] };
 /** Why this browser's scores can't go on the board (a setting that changes the sim), or null. */
 const lbBlocked = () =>
   flags.bot || flags.seg !== null || flags.ability || flags.heat !== null || flags.nodecay || flags.god || (flags.size !== null && flags.size !== 'growth') || tuningChanged()
@@ -804,6 +804,19 @@ function openControls(): Promise<void> {
   });
 }
 
+/** Upgrades still locked behind an award: shown dimmed under the offers, with the award and the progress to it. */
+function lockedCards(): string {
+  const locked = AWARDS.filter((a) => a.upgrade && !profile.won.includes(a.id));
+  if (!locked.length) return '';
+  return `<div class="locked"><div class="hd">Locked · win an award to add it to the meeting</div><div class="row">${locked
+    .map((a) => {
+      const u = TUNING.upgrades[a.upgrade!];
+      const have = Math.min(profile.counts[a.stat], a.n);
+      return `<div class="lock"><span class="art"><img src="${UPGRADE_ART[a.upgrade!]}" alt="" /></span><div><b>${esc(u.label)}</b><small>${esc(a.title)}: ${esc(a.how)} · ${have.toLocaleString()}/${a.n.toLocaleString()}</small><i style="--p:${((have / a.n) * 100).toFixed(0)}%"></i></div></div>`;
+    })
+    .join('')}</div></div>`;
+}
+
 function showMeeting(focusId?: string) {
   if (!run) return;
   const r = run;
@@ -832,6 +845,7 @@ function showMeeting(focusId?: string) {
           <b>${esc(title)}</b><span class="blurb">${esc(blurb)}</span>${slot}${bought ? '<span class="price">Bought ✓</span>' : `<span class="price">${price.toLocaleString()}</span>${can ? '' : `<small class="need">Need ${(price - r.purse).toLocaleString()} more</small>`}`}</button>`;
       })
       .join('')}</div>
+    ${lockedCards()}
     <div class="row"><button class="go" id="skip">Go live</button></div>
     <div class="padhint"></div>
   </div>`;
@@ -1710,13 +1724,15 @@ function start() {
 function beginBroadcast(mode = 'broadcast') {
   attract = false;
   document.documentElement.classList.remove('attract');
-  const seed = nextSeed ?? takeSeed() ?? (Math.random() * 1e9) | 0;
+  // The Daily Broadcast: everyone gets the same road today (UTC), five segments at the base edition, its own board.
+  const daily = mode === 'daily';
+  const seed = daily ? dailySeed(dayKey(Date.now())) : (nextSeed ?? takeSeed() ?? (Math.random() * 1e9) | 0);
   nextSeed = null;
   // The very first broadcast a player goes live in is the guided one (TUNING.guided): its first segment opens calm.
-  const guided = !flags.bot && !flags.autostart && !briefingSeen();
+  const guided = !daily && !flags.bot && !flags.autostart && !briefingSeen();
   const edition = mode === 'run' ? profile.chosenEdition : 0;
-  lb = { mode: mode === 'run' ? 'run' : 'broadcast', seed, segments: [], buys: [], pool: upgradePool(profile), ...(guided ? { guided } : {}), ...(edition ? { edition } : {}) };
-  if (mode === 'run') {
+  lb = { mode: daily ? 'daily' : mode === 'run' ? 'run' : 'broadcast', seed, segments: [], buys: [], pool: upgradePool(profile), ...(guided ? { guided } : {}), ...(edition ? { edition } : {}) };
+  if (mode === 'run' || daily) {
     run = new RunState(seed, lb.pool, edition); // Awards unlock the rest of the pool
     newRun(run.segmentSeed(), 0, [], {}, guided);
   } else {
@@ -1804,7 +1820,7 @@ window.addEventListener('keydown', (e) => {
   if (e.code === 'KeyC' && playing) setAngle(director.current + 1, director.side); // dev: next angle (held until C comes back to Chase High)
   if (e.code === 'KeyR' && playing) {
     nextSeed = flags.seedFixed ? flags.seed : null;
-    beginBroadcast(run ? 'run' : 'broadcast');
+    beginBroadcast(run ? (lb.mode === 'daily' ? 'daily' : 'run') : 'broadcast');
   }
 });
 
@@ -1816,6 +1832,7 @@ const wyfAssembly = (shell: SLUWebShell<CoreSettings>): FrameAssembly => {
     menuFlow: [],
     modes: [
       { id: 'run', label: 'Full Broadcast', description: 'Five segments. Spend your ratings between them.', leaderboardKey: 'runScore' },
+      { id: 'daily', label: 'Daily Broadcast', description: "Today's road, the same for everyone. Its own board.", leaderboardKey: 'runScore' },
       { id: 'broadcast', label: 'Single Segment', description: 'Keep the ratings up. Take the exit before the chopper runs out of fuel.', leaderboardKey: 'banked' },
     ],
     statKeys: ['broadcasts', 'signOffs', 'bestBanked', 'bestPeak'],
@@ -1948,6 +1965,7 @@ function refreshMainMenu() {
       { id: 'run', label: 'Go Live', description: profile.chosenEdition ? `${E.name}: five segments, score ×${E.score}` : 'Five segments, upgrades between them' },
       // Editions (2026-11-17): shown once a full run has unlocked the next one.
       ...(profile.edition > 0 ? [{ id: 'edition', label: `Edition: ${E.name}`, description: profile.chosenEdition ? `Harder, score ×${E.score}. Win a full run to unlock the next` : 'Win a full run to unlock the next edition' }] : []),
+      { id: 'daily', label: 'Daily Broadcast', description: `Today's road (${dayKey(Date.now())} UTC), the same for everyone. Its own board` },
       { id: 'awards', label: 'Awards', description: 'Milestones, unlocks and outfits' },
       { id: 'howto', label: 'How to Play' },
       { id: 'settings', label: 'Settings' },
@@ -1967,7 +1985,7 @@ refreshMainMenu();
       refreshMainMenu();
       app!.ui.show('main-menu');
     }
-    else if (screen === 'main-menu' && (choice === 'run' || choice === 'broadcast')) flowActivate('mode-select', choice);
+    else if (screen === 'main-menu' && (choice === 'run' || choice === 'daily' || choice === 'broadcast')) flowActivate('mode-select', choice);
     else flowActivate(screen, choice);
   };
 }

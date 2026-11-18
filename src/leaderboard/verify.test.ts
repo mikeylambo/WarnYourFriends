@@ -4,7 +4,7 @@ import { Bot } from '../sim/bot';
 import { RunState } from '../sim/run';
 import type { SimInput } from '../sim/types';
 import type { UpgradeId } from '../tuning';
-import { cleanName, decodeInputs, encodeInputs, verify, type Submission } from './verify';
+import { cleanName, dailySeed, dayKey, decodeInputs, encodeInputs, verify, type Submission } from './verify';
 import { handle, memoryStore, ticketKey } from '../../server/leaderboard';
 
 /** Play a segment with the bot the way the game does: every step's input logged, plus a short outro. */
@@ -177,5 +177,26 @@ describe('leaderboard API', () => {
     for (let i = 0; i < 12; i++) await handle(store, 'POST', {}, {}, '9.9.9.9', 0);
     expect((await handle(store, 'POST', {}, {}, '9.9.9.9', 0)).status).toBe(429);
     expect((await handle(null, 'GET', { mode: 'run' }, null, '1')).status).toBe(503);
+  });
+
+  it('ranks the Daily Broadcast on its own board for the day, with no ticket', async () => {
+    const store = memoryStore();
+    const now = Date.UTC(2026, 10, 18, 12);
+    const day = dayKey(now);
+    expect(day).toBe('2026-11-18');
+    expect(dailySeed(day)).toBe(dailySeed('2026-11-18'));
+    expect(dailySeed(day)).not.toBe(dailySeed('2026-11-19'));
+    const sub = { ...botRun(dailySeed(day)), mode: 'daily' as const };
+    const post = await handle(store, 'POST', {}, { ...sub, player, secret, name: 'Tester' }, '1.1.1.1', now);
+    expect(post.status).toBe(200);
+    // Still open just after midnight UTC (a run that started yesterday); gone the day after.
+    const late = await handle(store, 'GET', { mode: 'daily', day, player }, null, '1', now + 13 * 3600_000);
+    expect((late.body as { you: { rank: number } }).you.rank).toBe(1);
+    const tomorrow = await handle(store, 'GET', { mode: 'daily', player }, null, '1', now + 86_400_000);
+    expect((tomorrow.body as { top: unknown[] }).top.length).toBe(0);
+    // Any other road, or a harder edition, is refused; the daily score never lands on the run board.
+    expect((await handle(store, 'POST', {}, { ...sub, seed: sub.seed + 1, player, secret, name: 'Tester' }, '1.1.1.3', now)).status).toBe(422);
+    expect((await handle(store, 'POST', {}, { ...sub, edition: 1, player, secret, name: 'Tester' }, '1.1.1.4', now)).status).toBe(422);
+    expect(((await handle(store, 'GET', { mode: 'run', player }, null, '1', now)).body as { top: unknown[] }).top.length).toBe(0);
   });
 });

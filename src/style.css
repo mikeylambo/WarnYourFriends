@@ -1012,3 +1012,13 @@ html.replay #rampslam, html.title #rampslam { display: none; }
 #standby b { font: italic 900 30px/1 var(--f-head, sans-serif); letter-spacing: 0.06em; }
 #standby span { font: 700 15px/1.3 var(--f-head, sans-serif); }
 #standby small { font: 600 12px/1.3 var(--f-head, sans-serif); opacity: 0.7; }
+
+/* Producer's Meeting: upgrades still locked behind an award (dimmed, with the award and its progress). */
+#recap .meeting .locked { margin: 10px 0 4px; }
+#recap .meeting .locked .hd { font: 700 11px/1 var(--f-head); letter-spacing: 0.14em; text-transform: uppercase; opacity: 0.7; margin-bottom: 6px; }
+#recap .meeting .locked .row { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; }
+#recap .meeting .lock { display: flex; align-items: center; gap: 10px; padding: 6px 10px 6px 6px; border: 1px dashed currentColor; border-radius: 6px; opacity: 0.75; min-width: 0; max-width: 340px; }
+#recap .meeting .lock .art img { width: 48px; height: 48px; display: block; filter: grayscale(1) brightness(0.55); border-radius: 4px; }
+#recap .meeting .lock b { display: block; font-size: 14px; }
+#recap .meeting .lock small { display: block; font-size: 12px; opacity: 0.85; }
+#recap .meeting .lock i { display: block; height: 3px; margin-top: 4px; background: linear-gradient(90deg, currentColor var(--p), rgba(127, 127, 127, 0.3) var(--p)); }
