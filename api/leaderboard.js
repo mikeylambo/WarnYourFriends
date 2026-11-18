@@ -30,6 +30,19 @@ var TUNING = {
     /** Chunk level climbs one step every this many metres (and one per run segment). */
     levelEvery: 700,
     /** Moving traffic: oncoming cars (m/s toward him), slow box trucks (m/s his way), and how far ahead of him they wake (m, off camera). */
+    /**
+     * After a Car Carrier leaves, no Net, Blockade or carrier for this long (s). The build Mike liked had carriers
+     * that lingered (a bug: they drove through traffic) and so held those events off; this keeps that breather on purpose.
+     */
+    eventGap: 0,
+    /**
+     * One police unit fewer at a time than the default rules. In the build Mike liked, a Car Carrier that never left
+     * (a bug: it drove through traffic) took one of the slots for good; this keeps that pressure on purpose.
+     */
+    capLess: 0,
+    /** Car Carriers in the prototype: rarer and lighter (drops each, seconds between). The build Mike liked had carriers that barely dropped (a bug); working ones at the default rate were too much. */
+    carrierDrops: 3,
+    carrierEvery: [70, 100],
     oncomingSpeed: 12,
     truckSpeed: 7,
     moverWake: 150,
@@ -893,7 +906,25 @@ var TUNING = {
      * stalled cars, one every `dropEvery` s, into its lane or the next; never a drop he couldn't see coming
      * (`dropLead` s), never one that closes the last open lane. Heavy: Rampage (or a Stride Shoulder Check) smashes the carrier itself.
      */
-    carrier: { firstAt: 30, every: [40, 60], cruiseFactor: 0.62, tellAhead: 1.9, tellMin: 25, tellMax: 28, firstDrop: 0.8, drops: 6, dropEvery: 0.9, dropLead: 1.2, leaveSpeed: 8 },
+    carrier: {
+      /** Its lane is cleared this far ahead when it spawns (m); after that it clears its lane as it goes, off frame (offFrame). */
+      clearAhead: 200,
+      /** A leaving carrier clears its lane only this far ahead of him (m: out of the frame). */
+      offFrame: 70,
+      /** Safety net: seconds it holds station before it leaves, whatever it dropped (its drops take ~5s). */
+      actMax: 12,
+      firstAt: 30,
+      every: [40, 60],
+      cruiseFactor: 0.62,
+      tellAhead: 1.9,
+      tellMin: 25,
+      tellMax: 28,
+      firstDrop: 0.8,
+      drops: 6,
+      dropEvery: 0.9,
+      dropLead: 1.2,
+      leaveSpeed: 8
+    },
     /**
      * Caught (Mike, 2026-11-16: "the run doesn't end when police catch up"). Every segment, no Heat gate: while he
      * crawls under `below` m/s (braking; Jog's top is 6), any cruiser within `from` m behind pulls up to `gap` m off
@@ -2314,6 +2345,8 @@ var Pursuit = class {
   shiftT = /* @__PURE__ */ new Map();
   /** Car Carrier: when the next one may come. */
   carrierAt;
+  /** Prototype: after a carrier leaves, no Net, Blockade or carrier until then (a breather; see TUNING.proto.eventGap). */
+  quietUntil = 0;
   /** A Police Net is in play (presentation: the BOXED IN meter, the producer's call). */
   get netActive() {
     return this.units.some((u) => u.alive && u.unit === "net" && u.phase !== "approach" && u.phase !== "leave");
@@ -2490,7 +2523,7 @@ var Pursuit = class {
       const H = P.byHeat[sim.show.heat - 1];
       this.spawnT += dt * (this.marked ? P.chopper.spawnBoost : 1);
       const active = this.units.filter((u) => u.alive && !u.lost).length;
-      if (this.spawnT >= H.cadence && active < H.cap) {
+      if (this.spawnT >= H.cadence && active < H.cap - (TUNING.proto.on ? TUNING.proto.capLess : 0)) {
         const kinds = H.kinds.filter((k) => this.allowed(k));
         if (kinds.length) {
           let total = 0;
@@ -2528,6 +2561,7 @@ var Pursuit = class {
     }
   }
   allowed(k) {
+    if (TUNING.proto.on && this.sim.time < this.quietUntil && (k === "net" || k === "rolling" || k === "carrier")) return false;
     const sim = this.sim;
     if (this.units.some((u) => u.alive && u.unit === "roadblock" && u.s > sim.giant.s)) return false;
     if (k === "net") {
@@ -2718,20 +2752,32 @@ var Pursuit = class {
     const C = TUNING.pursuit.carrier;
     const track = sim.track;
     const s = this.aheadSpot();
-    track.ensure(s + 220);
+    track.ensure(s + C.clearAhead + 20);
     const L = track.lanesAt(s);
     if (L < 2) return false;
     for (let x = s - 10; x <= s + 200; x += 10) if (track.lanesAt(x) !== L) return false;
-    const options = Array.from({ length: L }, (_, i) => i).filter((l) => l !== g.lane);
+    const oncoming = /* @__PURE__ */ new Set();
+    for (const tw of track.twoWay) {
+      if (tw.s1 < s - 10 || tw.s0 > s + C.clearAhead + 200) continue;
+      const left = track.movers.some((m) => m.oncoming && m.s >= tw.s0 && m.s <= tw.s1 && m.d < tw.split * TUNING.lanes.width);
+      for (let l = 0; l < L; l++) if (left ? l < tw.split : l >= tw.split) oncoming.add(l);
+    }
+    const options = Array.from({ length: L }, (_, i) => i).filter((l) => l !== g.lane && !oncoming.has(l));
+    if (!options.length) return false;
     const lane = options[this.rng.int(0, options.length - 1)];
     const c = track.laneCenter(lane);
-    for (const p of track.propsBetween(s - 10, s + 200)) if (Math.abs(p.d - c) < p.hw + 1.4) p.alive = false;
+    for (const p of track.propsBetween(s - 10, s + C.clearAhead)) if (Math.abs(p.d - c) < p.hw + 1.4) p.alive = false;
     const u = this.make("carrier", "carrier", s, c, lane);
     u.speed = g.speed * C.cruiseFactor;
     u.drops = C.drops;
     u.dropT = 0;
     sim.emitPublic({ type: "unitSpawn", id: u.id, kind: "carrier", s, d: c, lanes: [lane] });
     return true;
+  }
+  /** The carrier keeps to its lane's centre (a merge can move its lane: see the on-road rule in step). */
+  carrierSteer(u, dt) {
+    const c = this.sim.track.laneCenter(u.lane);
+    u.d += clamp(c - u.d, -TUNING.pursuit.cruiser.sideSpeed * dt, TUNING.pursuit.cruiser.sideSpeed * dt);
   }
   updateCarrier(u, dt) {
     const sim = this.sim;
@@ -2740,7 +2786,7 @@ var Pursuit = class {
     const track = sim.track;
     const W = TUNING.lanes.width;
     const ahead = u.s - g.s;
-    const onScreen = Math.min(C.tellMax, Math.max(C.tellMin, g.speed * C.tellAhead));
+    const onScreen = Math.max(Math.min(C.tellMax, Math.max(C.tellMin, g.speed * C.tellAhead)), g.speed * C.dropLead + u.hl + 3);
     if (u.phase === "approach") {
       u.speed = Math.max(u.speed, g.speed * C.cruiseFactor);
       if (ahead <= onScreen) {
@@ -2752,7 +2798,17 @@ var Pursuit = class {
       u.speed = g.speed + (onScreen - ahead) * 1.2;
     } else u.speed += C.leaveSpeed * dt;
     u.s += u.speed * dt;
+    this.carrierSteer(u, dt);
+    {
+      const c = track.laneCenter(u.lane);
+      for (const p of track.propsBetween(u.s - u.hl, u.s + u.hl + 40)) if (p.alive && p.s - g.s > C.offFrame && Math.abs(p.d - c) < p.hw + u.hw) p.alive = false;
+    }
     if (u.phase !== "act") return;
+    if (u.phaseT >= C.actMax) {
+      this.setPhase(u, "leave");
+      this.quietUntil = sim.time + TUNING.proto.eventGap;
+      return;
+    }
     u.dropT = (u.dropT ?? 0) - dt;
     if (u.dropT > 0) return;
     u.dropT = C.dropEvery;
@@ -2771,9 +2827,12 @@ var Pursuit = class {
       if (TUNING.proto.on && !sim.inRampage && !this.dropFair(at, lane, L)) continue;
       const p = track.drop("car", at, track.laneCenter(lane) + this.rng.range(-0.4, 0.4));
       sim.emitPublic({ type: "carrierDrop", carrierId: u.id, propId: p.id, s: p.s, d: p.d });
-      u.drops = (u.drops ?? 1) - 1;
-      if (u.drops <= 0) this.setPhase(u, "leave");
       break;
+    }
+    u.drops = (u.drops ?? 1) - 1;
+    if (u.drops <= 0) {
+      this.setPhase(u, "leave");
+      this.quietUntil = sim.time + TUNING.proto.eventGap;
     }
   }
   // --- Cruiser ram ---------------------------------------------------------------
@@ -3953,6 +4012,11 @@ var Sim = class {
     const T = TUNING.targets;
     this.track.ensure(g.s + T.ahead + T.length + 10);
     this.track.surge(g.s + T.ahead, g.s + T.ahead + T.length);
+    for (const u of this.pursuit.units) {
+      if (!u.alive || u.unit !== "carrier") continue;
+      const c = this.track.laneCenter(u.lane);
+      for (const p of this.track.propsBetween(g.s + T.ahead - 2, g.s + T.ahead + T.length + 2)) if (Math.abs(p.d - c) < p.hw + 1.4) p.alive = false;
+    }
     if (this.upgrades.has("groundZero")) this.emit({ type: "groundZero", s: g.s, d: g.d, smashed: this.slam(TUNING.passives.groundZeroRadius, true) });
   }
   endRampage() {

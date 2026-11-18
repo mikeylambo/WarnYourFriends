@@ -46,6 +46,8 @@ export class Pursuit {
   private shiftT = new Map<number, number>();
   /** Car Carrier: when the next one may come. */
   private carrierAt: number;
+  /** Prototype: after a carrier leaves, no Net, Blockade or carrier until then (a breather; see TUNING.proto.eventGap). */
+  private quietUntil = 0;
 
   constructor(seed: number, private sim: Sim) {
     this.rng = new Rng((seed ^ 0x9015e) >>> 0);
@@ -224,7 +226,7 @@ export class Pursuit {
       const H = P.byHeat[sim.show.heat - 1];
       this.spawnT += dt * (this.marked ? P.chopper.spawnBoost : 1);
       const active = this.units.filter((u) => u.alive && !u.lost).length;
-      if (this.spawnT >= H.cadence && active < H.cap) {
+      if (this.spawnT >= H.cadence && active < H.cap - (TUNING.proto.on ? TUNING.proto.capLess : 0)) {
         const kinds = H.kinds.filter((k) => this.allowed(k));
         if (kinds.length) {
           let total = 0;
@@ -268,6 +270,7 @@ export class Pursuit {
   }
 
   private allowed(k: UnitKind): boolean {
+    if (TUNING.proto.on && this.sim.time < this.quietUntil && (k === 'net' || k === 'rolling' || k === 'carrier')) return false;
     const sim = this.sim;
     // A roadblock still ahead of him (the finale's included) owns the next tell: nothing else joins until it's passed.
     if (this.units.some((u) => u.alive && u.unit === 'roadblock' && u.s > sim.giant.s)) return false;
@@ -478,21 +481,37 @@ export class Pursuit {
     const C = TUNING.pursuit.carrier;
     const track = sim.track;
     const s = this.aheadSpot();
-    track.ensure(s + 220);
+    track.ensure(s + C.clearAhead + 20);
     const L = track.lanesAt(s);
     if (L < 2) return false;
     for (let x = s - 10; x <= s + 200; x += 10) if (track.lanesAt(x) !== L) return false;
-    const options = Array.from({ length: L }, (_, i) => i).filter((l) => l !== g.lane);
+    // Never his lane, and never a lane that's oncoming anywhere on its trip (prototype two-way stretches).
+    const oncoming = new Set<number>();
+    for (const tw of track.twoWay) {
+      if (tw.s1 < s - 10 || tw.s0 > s + C.clearAhead + 200) continue;
+      const left = track.movers.some((m) => m.oncoming && m.s >= tw.s0 && m.s <= tw.s1 && m.d < tw.split * TUNING.lanes.width);
+      for (let l = 0; l < L; l++) if (left ? l < tw.split : l >= tw.split) oncoming.add(l);
+    }
+    const options = Array.from({ length: L }, (_, i) => i).filter((l) => l !== g.lane && !oncoming.has(l));
+    if (!options.length) return false;
     const lane = options[this.rng.int(0, options.length - 1)];
-    // Its own lane, ≥100m ahead (never visible): clear for it to drive down.
+    // Its own lane for its whole trip (it cruises, then holds station near the top of his frame while it drops:
+    // ~400m in all), cleared now while all of it is ≥100m ahead and off camera, so it never drives through traffic
+    // (Mike, 2026-11-18). Taking traffic away never closes a line through.
     const c = track.laneCenter(lane);
-    for (const p of track.propsBetween(s - 10, s + 200)) if (Math.abs(p.d - c) < p.hw + 1.4) p.alive = false;
+    for (const p of track.propsBetween(s - 10, s + C.clearAhead)) if (Math.abs(p.d - c) < p.hw + 1.4) p.alive = false;
     const u = this.make('carrier', 'carrier', s, c, lane);
     u.speed = g.speed * C.cruiseFactor;
     u.drops = C.drops;
     u.dropT = 0;
     sim.emitPublic({ type: 'unitSpawn', id: u.id, kind: 'carrier', s, d: c, lanes: [lane] });
     return true;
+  }
+
+  /** The carrier keeps to its lane's centre (a merge can move its lane: see the on-road rule in step). */
+  private carrierSteer(u: Unit, dt: number) {
+    const c = this.sim.track.laneCenter(u.lane);
+    u.d += clamp(c - u.d, -TUNING.pursuit.cruiser.sideSpeed * dt, TUNING.pursuit.cruiser.sideSpeed * dt);
   }
 
   private updateCarrier(u: Unit, dt: number) {
@@ -502,7 +521,9 @@ export class Pursuit {
     const track = sim.track;
     const W = TUNING.lanes.width;
     const ahead = u.s - g.s;
-    const onScreen = Math.min(C.tellMax, Math.max(C.tellMin, g.speed * C.tellAhead));
+    // Holds station far enough up the frame that a drop behind it lands with time to see it (it used to sit closer,
+    // skip almost every drop, and linger for good, driving through traffic).
+    const onScreen = Math.max(Math.min(C.tellMax, Math.max(C.tellMin, g.speed * C.tellAhead)), g.speed * C.dropLead + u.hl + 3);
     if (u.phase === 'approach') {
       // Cruise until it's in the frame (its tell, like every tell, starts on screen) ...
       u.speed = Math.max(u.speed, g.speed * C.cruiseFactor);
@@ -516,12 +537,25 @@ export class Pursuit {
       u.speed = g.speed + (onScreen - ahead) * 1.2;
     } else u.speed += C.leaveSpeed * dt;
     u.s += u.speed * dt;
+    this.carrierSteer(u, dt);
+    // Its lane ahead of it clears as it goes, but only out of his frame (nothing pops in view). Anything that reaches
+    // the frame in its lane is already behind it (it always moves up the road), so it never drives through traffic.
+    {
+      const c = track.laneCenter(u.lane);
+      for (const p of track.propsBetween(u.s - u.hl, u.s + u.hl + 40)) if (p.alive && p.s - g.s > C.offFrame && Math.abs(p.d - c) < p.hw + u.hw) p.alive = false;
+    }
     if (u.phase !== 'act') return;
+    // Its time on station is capped: it never lingers waiting for a drop it may not make (and drive through traffic).
+    if (u.phaseT >= C.actMax) {
+      this.setPhase(u, 'leave');
+      this.quietUntil = sim.time + TUNING.proto.eventGap;
+      return;
+    }
     u.dropT = (u.dropT ?? 0) - dt;
     if (u.dropT > 0) return;
     u.dropT = C.dropEvery;
     const at = u.s - u.hl - 2;
-    if (at - g.s < g.speed * C.dropLead) return; // he'd have no time to see it land
+    if (at - g.s < g.speed * C.dropLead) return; // he'd have no time to see it land: wait (no slot spent)
     const L = track.lanesAt(at);
     const options = [u.lane, u.lane - 1, u.lane + 1].filter((l) => l >= 0 && l < L);
     for (let tries = 0; tries < options.length; tries++) {
@@ -538,9 +572,14 @@ export class Pursuit {
       if (TUNING.proto.on && !sim.inRampage && !this.dropFair(at, lane, L)) continue;
       const p = track.drop('car', at, track.laneCenter(lane) + this.rng.range(-0.4, 0.4));
       sim.emitPublic({ type: 'carrierDrop', carrierId: u.id, propId: p.id, s: p.s, d: p.d });
-      u.drops = (u.drops ?? 1) - 1;
-      if (u.drops <= 0) this.setPhase(u, 'leave');
       break;
+    }
+    // Every drop slot counts, dropped or held back (a fair-play refusal used to keep it holding station for good,
+    // driving through all the traffic he met): after its `drops` slots it leaves.
+    u.drops = (u.drops ?? 1) - 1;
+    if (u.drops <= 0) {
+      this.setPhase(u, 'leave');
+      this.quietUntil = sim.time + TUNING.proto.eventGap;
     }
   }
 

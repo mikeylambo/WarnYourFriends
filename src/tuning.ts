@@ -113,6 +113,19 @@ export const TUNING = {
     /** Chunk level climbs one step every this many metres (and one per run segment). */
     levelEvery: 700,
     /** Moving traffic: oncoming cars (m/s toward him), slow box trucks (m/s his way), and how far ahead of him they wake (m, off camera). */
+    /**
+     * After a Car Carrier leaves, no Net, Blockade or carrier for this long (s). The build Mike liked had carriers
+     * that lingered (a bug: they drove through traffic) and so held those events off; this keeps that breather on purpose.
+     */
+    eventGap: 0,
+    /**
+     * One police unit fewer at a time than the default rules. In the build Mike liked, a Car Carrier that never left
+     * (a bug: it drove through traffic) took one of the slots for good; this keeps that pressure on purpose.
+     */
+    capLess: 0,
+    /** Car Carriers in the prototype: rarer and lighter (drops each, seconds between). The build Mike liked had carriers that barely dropped (a bug); working ones at the default rate were too much. */
+    carrierDrops: 3,
+    carrierEvery: [70, 100] as [number, number],
     oncomingSpeed: 12,
     truckSpeed: 7,
     moverWake: 150,
@@ -933,7 +946,7 @@ export const TUNING = {
      * stalled cars, one every `dropEvery` s, into its lane or the next; never a drop he couldn't see coming
      * (`dropLead` s), never one that closes the last open lane. Heavy: Rampage (or a Stride Shoulder Check) smashes the carrier itself.
      */
-    carrier: { firstAt: 30, every: [40, 60] as [number, number], cruiseFactor: 0.62, tellAhead: 1.9, tellMin: 25, tellMax: 28, firstDrop: 0.8, drops: 6, dropEvery: 0.9, dropLead: 1.2, leaveSpeed: 8 },
+    carrier: { /** Its lane is cleared this far ahead when it spawns (m); after that it clears its lane as it goes, off frame (offFrame). */ clearAhead: 200, /** A leaving carrier clears its lane only this far ahead of him (m: out of the frame). */ offFrame: 70, /** Safety net: seconds it holds station before it leaves, whatever it dropped (its drops take ~5s). */ actMax: 12, firstAt: 30, every: [40, 60] as [number, number], cruiseFactor: 0.62, tellAhead: 1.9, tellMin: 25, tellMax: 28, firstDrop: 0.8, drops: 6, dropEvery: 0.9, dropLead: 1.2, leaveSpeed: 8 },
     /**
      * Caught (Mike, 2026-11-16: "the run doesn't end when police catch up"). Every segment, no Heat gate: while he
      * crawls under `below` m/s (braking; Jog's top is 6), any cruiser within `from` m behind pulls up to `gap` m off
@@ -1216,4 +1229,7 @@ export function enableProto() {
   seg.length = TUNING.proto.story.fuel;
   seg.exitOpensAt = TUNING.proto.story.fuel - 30; // the HUD's SIGN-OFF IN countdown; the sim opens the exit by distance
   for (const [k, v] of Object.entries(TUNING.proto.gain)) t.show.gain[k] = v;
+  const car = (TUNING as unknown as { pursuit: { carrier: { drops: number; every: [number, number] } } }).pursuit.carrier;
+  car.drops = TUNING.proto.carrierDrops;
+  car.every = TUNING.proto.carrierEvery;
 }

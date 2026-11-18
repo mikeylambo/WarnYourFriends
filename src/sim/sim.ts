@@ -648,6 +648,12 @@ export class Sim {
     const T = TUNING.targets;
     this.track.ensure(g.s + T.ahead + T.length + 10);
     this.track.surge(g.s + T.ahead, g.s + T.ahead + T.length);
+    // ...but never into a Car Carrier's lane (it would drive through the new traffic).
+    for (const u of this.pursuit.units) {
+      if (!u.alive || u.unit !== 'carrier') continue;
+      const c = this.track.laneCenter(u.lane);
+      for (const p of this.track.propsBetween(g.s + T.ahead - 2, g.s + T.ahead + T.length + 2)) if (Math.abs(p.d - c) < p.hw + 1.4) p.alive = false;
+    }
     // Ground Zero: going Rampage flattens everything around him (bulldozers and police included).
     if (this.upgrades.has('groundZero')) this.emit({ type: 'groundZero', s: g.s, d: g.d, smashed: this.slam(TUNING.passives.groundZeroRadius, true) });
   }
