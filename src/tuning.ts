@@ -107,10 +107,15 @@ export const TUNING = {
     /** Track: rows closer than this (m, ~2s) keep a lane the last row left open; 4+ lane roads block at least this many lanes a row. */
     /** The small things that crumble underfoot in Stride (anything with wheels and an engine is a hit). */
     small: ['sawhorse', 'cart', 'fence', 'scooter', 'tollgate'] as string[],
+    /** Authored chunks (src/sim/chunks.ts): the gap between two chunks (m), and the reaction time the solver allows (s). */
+    chunkGap: 34,
+    chunkReact: 0.45,
+    /** Chunk level climbs one step every this many metres (and one per run segment). */
+    levelEvery: 700,
     reachGap: 36,
     wideMinBlocked: 2,
     tail: 22,
-    hitPin: 28,
+    hitPin: 20,
     afterRampage: 55,
     /** Dodges are the Stride verb, so they skip the variety rule; the near-miss window is wider (m); the drain is gentler. */
     dodgeGap: 2.2,

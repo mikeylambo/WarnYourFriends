@@ -2,6 +2,7 @@ import { TUNING } from '../tuning';
 import { clamp } from './math';
 import { Rng } from './rng';
 import { PROP_DEFS } from './track';
+import { pathFrom } from './chunks';
 import type { Sim } from './sim';
 import type { Prop, PropKind, Unit, UnitKind } from './types';
 
@@ -69,6 +70,31 @@ export class Pursuit {
     const g = this.sim.giant;
     const C = TUNING.pursuit.caught;
     return this.units.filter((u) => u.alive && u.unit === 'cruiser' && !u.lost && u.phase !== 'leave' && !u.backOff && Math.abs(u.s - g.s) <= u.hl + C.reach && Math.abs(u.d - g.d) < TUNING.lanes.width * 1.5);
+  }
+
+  /** Prototype: with a car dropped at (`at`, `lane`), is there still a line through from his lane? */
+  private dropFair(at: number, lane: number, L: number): boolean {
+    return this.fairWith(at, [lane], L);
+  }
+
+  /** Prototype: with `lanes` blocked at `at` too, is there still a line through from his lane? */
+  private fairWith(at: number, lanes: number[], L: number): boolean {
+    const sim = this.sim;
+    const g = sim.giant;
+    const W = TUNING.lanes.width;
+    const rank = sim.smashRank();
+    const rows: { ds: number; blocked: Set<number> }[] = [];
+    const add = (s: number, l: number) => {
+      const ds = s - g.s;
+      const row = rows.find((r) => Math.abs(r.ds - ds) < 3);
+      if (row) row.blocked.add(l);
+      else rows.push({ ds, blocked: new Set([l]) });
+    };
+    for (const p of sim.track.propsBetween(g.s + 2, at + 40)) if (p.alive && sim.rankOf(p) > rank) add(p.s, Math.max(0, Math.min(L - 1, Math.floor(p.d / W))));
+    for (const u of this.units) if (u.alive && u.unit !== 'chopper' && u.unit !== 'spike' && u.s > g.s + 2 && u.s < at + 40 && sim.rankOf(u) > rank) add(u.s, Math.max(0, Math.min(L - 1, Math.floor(u.d / W))));
+    for (const l of lanes) add(at, l);
+    rows.sort((a, b) => a.ds - b.ds);
+    return pathFrom(L, g.lane, rows);
   }
 
   /** He shook off the police on his tail: they drop back for a moment (still in the chase). */
@@ -499,6 +525,8 @@ export class Pursuit {
       if (police.some((x) => Math.abs(x.d - track.laneCenter(lane)) < x.hw + 1)) continue;
       for (const x of police) blocked.add(Math.floor(x.d / W));
       if (blocked.size >= L) continue;
+      // Prototype: a dropped car never closes his line through what's already ahead (chunks included).
+      if (TUNING.proto.on && !sim.inRampage && !this.dropFair(at, lane, L)) continue;
       const p = track.drop('car', at, track.laneCenter(lane) + this.rng.range(-0.4, 0.4));
       sim.emitPublic({ type: 'carrierDrop', carrierId: u.id, propId: p.id, s: p.s, d: p.d });
       u.drops = (u.drops ?? 1) - 1;
@@ -823,7 +851,9 @@ export class Pursuit {
       if (L < 2 || track.lanesAt(s - 12) !== L || track.lanesAt(s + 12) !== L) continue;
       if (track.propsBetween(s - 7, s + 7).length) continue;
       // The gap must be clear from the approach on, for any tier.
-      const gaps = Array.from({ length: L }, (_, i) => i).filter((l) => !this.propIn(l, s - 30, s + 8));
+      const all = Array.from({ length: L }, (_, i) => i);
+      // Prototype: only a gap he can actually reach through what's ahead of it.
+      const gaps = all.filter((l) => !this.propIn(l, s - 30, s + 8) && (!TUNING.proto.on || this.fairWith(s, all.filter((x) => x !== l), L)));
       if (!gaps.length) continue;
       const gap = gaps[this.rng.int(0, gaps.length - 1)];
       const grp = this.group++;

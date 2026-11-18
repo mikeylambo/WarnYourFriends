@@ -2,6 +2,7 @@ import { TUNING, type MassClass } from '../tuning';
 import { Rng } from './rng';
 import { DEG, clamp } from './math';
 import type { LandmarkKind, Material, Prop, PropKind } from './types';
+import { CHUNKS, CHUNK_KINDS, SMALL_KINDS, type Chunk } from './chunks';
 
 /**
  * v0.3 procedural highway, built from 40m segments on gentle splines.
@@ -312,6 +313,7 @@ export class Track {
 
   /** A landmark that suits this zone (weighted), or none. */
   private pickLandmark(zone: ZoneKind): LandmarkKind | undefined {
+    if (TUNING.proto.on) return undefined; // prototype: authored chunks carry the set pieces
     const LM = TUNING.landmarks;
     const options = (Object.keys(LM.zones) as LandmarkKind[]).filter((k) => LM.zones[k].includes(zone));
     if (!options.length) return undefined;
@@ -411,6 +413,7 @@ export class Track {
 
   /** Lane props for one segment: rows that always leave at least one lane open. */
   private addProps(seg: Segment) {
+    if (TUNING.proto.on) return this.addChunkProps(seg);
     const P = TUNING.props;
     if (seg.landmark) {
       this.addLandmarkProps(seg);
@@ -491,6 +494,70 @@ export class Track {
         });
       }
     }
+  }
+
+  /** Prototype: the chunk being laid down (its start, the next row to place), and where the next may start. */
+  private chunk: { c: Chunk; s0: number; row: number; last: number } | null = null;
+  private nextChunkS: number = TUNING.props.startAt;
+  private lastChunkId = '';
+
+  /** Chunk level (1–5) at `s`: climbs with distance and the run's segment. */
+  levelAt(s: number): number {
+    return Math.max(1, Math.min(5, 1 + this.segmentNo + Math.floor(s / TUNING.proto.levelEvery)));
+  }
+
+  /**
+   * Prototype: authored chunks (src/sim/chunks.ts, each proven passable) in place of random rows. A chunk is picked
+   * for the lane count where it starts; if the road changes lane count under it (a merge), it stops there and the
+   * next starts a full `chunkGap` after its last row, so the solver's entry assumption always holds.
+   */
+  private addChunkProps(seg: Segment) {
+    const end = seg.s0 + seg.length;
+    const gap = TUNING.proto.chunkGap;
+    for (let guard = 0; guard < 64; guard++) {
+      if (!this.chunk) {
+        const s0 = Math.max(this.nextChunkS, seg.s0);
+        if (s0 >= end) return;
+        const lanes = this.lanesAt(s0);
+        const c = this.pickChunk(lanes, this.levelAt(s0), seg.zone);
+        if (!c) {
+          this.nextChunkS = s0 + 10;
+          continue;
+        }
+        this.chunk = { c, s0, row: 0, last: s0 };
+        this.lastChunkId = c.id;
+      }
+      const ch = this.chunk;
+      const [ds, pattern] = ch.c.rows[ch.row];
+      const s = ch.s0 + ds;
+      if (s >= end) return; // the rest goes on the next segment
+      const ok = [s - 6, s, s + 6].every((x) => this.lanesAt(x) === ch.c.lanes) && Array.from({ length: ch.c.lanes }, (_, l) => this.laneUsable(l, s)).every(Boolean);
+      if (!ok) {
+        // The road changed under it: stop this chunk; the next one waits a full gap.
+        this.chunk = null;
+        this.nextChunkS = ch.last + gap;
+        continue;
+      }
+      for (let l = 0; l < pattern.length; l++) {
+        const k = CHUNK_KINDS[pattern[l]];
+        if (!k) continue;
+        this.place(k === 'small' ? this.rng.pick(SMALL_KINDS) : k, s + this.rng.range(-0.6, 0.6), l, seg);
+      }
+      ch.last = s;
+      this.lastRowAt = s;
+      if (++ch.row >= ch.c.rows.length) {
+        this.chunk = null;
+        this.nextChunkS = s + gap;
+      }
+    }
+  }
+
+  private pickChunk(lanes: number, level: number, zone: string): Chunk | null {
+    const fits = CHUNKS.filter((c) => c.lanes === lanes && c.level <= level && (!c.zones || c.zones.includes(zone)) && c.id !== this.lastChunkId);
+    if (!fits.length) return null;
+    // Mostly at the current level, sometimes a breather from below.
+    const top = fits.filter((c) => c.level >= level - 1);
+    return this.rng.pick(top.length && this.rng.chance(0.75) ? top : fits);
   }
 
   private place(kind: PropKind, s: number, lane: number, seg: Segment, jitter = 0.2) {

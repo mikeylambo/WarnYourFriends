@@ -591,7 +591,8 @@ export class Sim {
   /** A prop's rank against his: rampOnly things (concrete, police roadblocks) count as unbreakable outside Rampage. */
   rankOf(p: Prop): number {
     // Prototype: a rival station's van is the one vehicle he goes for in Stride.
-    if (TUNING.proto.on && (p.kind === 'newsvan' || (TUNING.proto.small as readonly string[]).includes(p.kind))) return CLASS_RANK.light;
+    // ...and a Rolling Blockade's weak link (the compact) gives way, so a blockade across a 2-lane road is never a wall.
+    if (TUNING.proto.on && (p.kind === 'newsvan' || (p.kind === 'compact' && (p as Unit).unit === 'rolling') || (TUNING.proto.small as readonly string[]).includes(p.kind))) return CLASS_RANK.light;
     return p.rampOnly && !this.inRampage && this.giant.shoulderT <= 0 ? CLASS_RANK.immovable : CLASS_RANK[p.cls];
   }
 

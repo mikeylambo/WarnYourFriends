@@ -1,6 +1,8 @@
 import type { Sim } from './sim';
 import type { AbilityId } from '../tuning';
 import type { SimInput } from './types';
+import { TUNING } from '../tuning';
+import { pathFrom } from './chunks';
 
 /**
  * Balance-harness bot (§33), lane-runner version: keeps the lane while it's
@@ -136,12 +138,27 @@ export class Bot {
       return sc - Math.abs(lane - g.lane) * 0.5;
     };
 
-    const here = score(g.lane);
+    // Prototype (dodge in Stride): plan a few rows ahead, so it's in the right lane before a pattern closes in.
+    const planned = new Map<number, boolean>();
+    if (TUNING.proto.on && !sim.inRampage) {
+      const W = TUNING.lanes.width;
+      const rows: { ds: number; blocked: Set<number> }[] = [];
+      const solid = [...track.propsBetween(g.s + 2, g.s + g.speed * 4), ...units.filter((u) => u.s > g.s + 2 && u.s < g.s + g.speed * 4 && u.unit !== 'chopper' && u.unit !== 'spike')];
+      for (const p of solid.filter((x) => x.alive && sim.rankOf(x) > rank).sort((a, b) => a.s - b.s)) {
+        const lane = Math.max(0, Math.min(lanes - 1, Math.floor(p.d / W)));
+        const last = rows[rows.length - 1];
+        if (last && p.s - g.s - last.ds < 3) last.blocked.add(lane);
+        else rows.push({ ds: p.s - g.s, blocked: new Set([lane]) });
+      }
+      for (let l = 0; l < lanes; l++) planned.set(l, pathFrom(lanes, l, rows));
+    }
+    const plan = (lane: number) => (planned.size && !planned.get(lane) ? -40 : 0);
+    const here = score(g.lane) + plan(g.lane);
     let best = g.lane;
     let bestScore = here;
     for (const lane of [g.lane - 1, g.lane + 1]) {
       if (lane < 0 || lane >= lanes) continue;
-      const sc = score(lane);
+      const sc = score(lane) + plan(lane);
       if (sc > bestScore + 0.75) {
         best = lane;
         bestScore = sc;

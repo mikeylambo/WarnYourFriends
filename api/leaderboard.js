@@ -24,10 +24,15 @@ var TUNING = {
     /** Track: rows closer than this (m, ~2s) keep a lane the last row left open; 4+ lane roads block at least this many lanes a row. */
     /** The small things that crumble underfoot in Stride (anything with wheels and an engine is a hit). */
     small: ["sawhorse", "cart", "fence", "scooter", "tollgate"],
+    /** Authored chunks (src/sim/chunks.ts): the gap between two chunks (m), and the reaction time the solver allows (s). */
+    chunkGap: 34,
+    chunkReact: 0.45,
+    /** Chunk level climbs one step every this many metres (and one per run segment). */
+    levelEvery: 700,
     reachGap: 36,
     wideMinBlocked: 2,
     tail: 22,
-    hitPin: 28,
+    hitPin: 20,
     afterRampage: 55,
     /** Dodges are the Stride verb, so they skip the variety rule; the near-miss window is wider (m); the drain is gentler. */
     dodgeGap: 2.2,
@@ -1284,6 +1289,60 @@ function clamp(v, lo, hi) {
   return v < lo ? lo : v > hi ? hi : v;
 }
 
+// src/sim/chunks.ts
+var CHUNKS = [
+  // --- Two lanes (bridges, tunnels) --------------------------------------------------------
+  { id: "two-slalom", lanes: 2, level: 1, rows: [[0, "c."], [34, ".c"], [68, "c."], [102, ".v"]] },
+  { id: "two-trail", lanes: 2, level: 1, rows: [[0, "c."], [14, ".s"], [24, ".s"], [34, ".s"], [60, ".c"], [74, "s."], [84, "s."]] },
+  { id: "two-pairs", lanes: 2, level: 1, rows: [[0, ".c"], [10, ".c"], [44, "c."], [54, "v."]] },
+  { id: "two-van", lanes: 2, level: 2, rows: [[0, ".n"], [30, "c."], [58, ".v"], [72, "s."], [100, ".c"]] },
+  { id: "two-quick", lanes: 2, level: 2, rows: [[0, "c."], [28, ".v"], [56, "c."], [84, ".c"], [112, "v."]] },
+  { id: "two-dozer", lanes: 2, level: 3, rows: [[0, "d."], [28, ".c"], [40, "s."], [68, "c."], [82, ".s"]] },
+  { id: "two-tight", lanes: 2, level: 4, rows: [[0, "c."], [25, ".c"], [50, "c."], [75, ".c"], [100, "c."]] },
+  { id: "two-walls", lanes: 2, level: 5, rows: [[0, "b."], [24, ".v"], [48, "d."], [72, ".c"], [96, "v."], [120, ".d"]] },
+  // --- Three lanes (avenues) ------------------------------------------------------------------
+  { id: "three-gate", lanes: 3, level: 1, rows: [[0, "c.c"], [32, ".c."], [64, "c.v"]] },
+  { id: "three-trail", lanes: 3, level: 1, rows: [[0, ".c."], [12, "s.s"], [24, "s.s"], [36, ".v."], [62, "c.."]] },
+  { id: "three-steps", lanes: 3, level: 2, rows: [[0, "cc."], [32, ".cc"], [64, "cc."]] },
+  { id: "three-market", lanes: 3, level: 2, zones: ["avenue"], rows: [[0, "f.f"], [34, ".f."], [46, "s.s"], [76, "f.f"]] },
+  { id: "three-rival", lanes: 3, level: 2, rows: [[0, "c.c"], [26, "cn."], [52, ".cv"], [78, "s.s"]] },
+  { id: "three-dozers", lanes: 3, level: 3, rows: [[0, "d.c"], [30, ".v."], [60, "c.d"], [90, ".c."]] },
+  { id: "three-weave", lanes: 3, level: 4, rows: [[0, "cv."], [28, ".cv"], [56, "c.v"], [84, "vc."], [112, ".cc"]] },
+  { id: "three-gauntlet", lanes: 3, level: 5, rows: [[0, "b.d"], [26, ".cc"], [52, "d.c"], [78, ".vb"], [104, "c.d"]] },
+  // --- Four lanes (highways) ------------------------------------------------------------------
+  { id: "four-scatter", lanes: 4, level: 1, rows: [[0, "c..v"], [30, ".c.."], [60, "..vc"], [90, "c..."]] },
+  { id: "four-cones", lanes: 4, level: 1, rows: [[0, ".cc."], [14, "s..s"], [26, "s..s"], [38, ".vv."], [64, "c..c"]] },
+  { id: "four-dozers", lanes: 4, level: 2, rows: [[0, "d..d"], [32, ".cc."], [64, "d..d"]] },
+  { id: "four-rival", lanes: 4, level: 2, rows: [[0, "cv.c"], [32, ".cnv"], [64, "c.vc"], [92, "s.s."]] },
+  { id: "four-wall", lanes: 4, level: 3, rows: [[0, "cvc."], [36, ".cvc"], [72, "cv.c"]] },
+  { id: "four-zig", lanes: 4, level: 4, rows: [[0, "ccc."], [38, ".ccc"], [76, "ccc."], [114, "c.cc"]] },
+  { id: "four-blockade", lanes: 4, level: 5, rows: [[0, "bdc."], [34, "c.vd"], [64, ".cbd"], [94, "cv.d"], [124, "d.cv"]] }
+];
+var CHUNK_KINDS = { c: "car", v: "van", n: "newsvan", d: "dozer", b: "barricade", f: "foodtruck", s: "small" };
+var SMALL_KINDS = ["sawhorse", "cart", "scooter", "fence"];
+function pathFrom(lanes, lane, rows, opts = SOLVE) {
+  const shift = (ds) => Math.max(0, Math.floor(((ds - opts.clear) / opts.speed - opts.react) / opts.change));
+  let at = /* @__PURE__ */ new Set([lane]);
+  let prev = 0;
+  for (const r of rows) {
+    const k = r.ds - prev < opts.clear ? 0 : shift(r.ds - prev + opts.clear * 0.5);
+    const next = /* @__PURE__ */ new Set();
+    for (const l of at) for (let m = Math.max(0, l - k); m <= Math.min(lanes - 1, l + k); m++) if (!r.blocked.has(m)) next.add(m);
+    if (!next.size) return false;
+    at = next;
+    prev = r.ds;
+  }
+  return true;
+}
+var SOLVE = {
+  speed: TUNING.tiers[1].topSpeed + TUNING.proto.sprintBonus,
+  change: TUNING.tiers[1].laneChangeTime,
+  react: TUNING.proto.chunkReact,
+  /** Car length plus his body (m): two rows closer than this are one wall. */
+  clear: 8,
+  lead: TUNING.proto.chunkGap
+};
+
 // src/sim/track.ts
 var PROP_DEFS = {
   sawhorse: { cls: "medium", mat: "wood", hl: 0.3, hw: 1.4, h: 1.1, variants: 2 },
@@ -1513,6 +1572,7 @@ var Track = class {
   }
   /** A landmark that suits this zone (weighted), or none. */
   pickLandmark(zone) {
+    if (TUNING.proto.on) return void 0;
     const LM = TUNING.landmarks;
     const options = Object.keys(LM.zones).filter((k) => LM.zones[k].includes(zone));
     if (!options.length) return void 0;
@@ -1597,6 +1657,7 @@ var Track = class {
   }
   /** Lane props for one segment: rows that always leave at least one lane open. */
   addProps(seg) {
+    if (TUNING.proto.on) return this.addChunkProps(seg);
     const P = TUNING.props;
     if (seg.landmark) {
       this.addLandmarkProps(seg);
@@ -1665,6 +1726,64 @@ var Track = class {
         });
       }
     }
+  }
+  /** Prototype: the chunk being laid down (its start, the next row to place), and where the next may start. */
+  chunk = null;
+  nextChunkS = TUNING.props.startAt;
+  lastChunkId = "";
+  /** Chunk level (1–5) at `s`: climbs with distance and the run's segment. */
+  levelAt(s) {
+    return Math.max(1, Math.min(5, 1 + this.segmentNo + Math.floor(s / TUNING.proto.levelEvery)));
+  }
+  /**
+   * Prototype: authored chunks (src/sim/chunks.ts, each proven passable) in place of random rows. A chunk is picked
+   * for the lane count where it starts; if the road changes lane count under it (a merge), it stops there and the
+   * next starts a full `chunkGap` after its last row, so the solver's entry assumption always holds.
+   */
+  addChunkProps(seg) {
+    const end = seg.s0 + seg.length;
+    const gap = TUNING.proto.chunkGap;
+    for (let guard = 0; guard < 64; guard++) {
+      if (!this.chunk) {
+        const s0 = Math.max(this.nextChunkS, seg.s0);
+        if (s0 >= end) return;
+        const lanes = this.lanesAt(s0);
+        const c = this.pickChunk(lanes, this.levelAt(s0), seg.zone);
+        if (!c) {
+          this.nextChunkS = s0 + 10;
+          continue;
+        }
+        this.chunk = { c, s0, row: 0, last: s0 };
+        this.lastChunkId = c.id;
+      }
+      const ch = this.chunk;
+      const [ds, pattern] = ch.c.rows[ch.row];
+      const s = ch.s0 + ds;
+      if (s >= end) return;
+      const ok = [s - 6, s, s + 6].every((x) => this.lanesAt(x) === ch.c.lanes) && Array.from({ length: ch.c.lanes }, (_, l) => this.laneUsable(l, s)).every(Boolean);
+      if (!ok) {
+        this.chunk = null;
+        this.nextChunkS = ch.last + gap;
+        continue;
+      }
+      for (let l = 0; l < pattern.length; l++) {
+        const k = CHUNK_KINDS[pattern[l]];
+        if (!k) continue;
+        this.place(k === "small" ? this.rng.pick(SMALL_KINDS) : k, s + this.rng.range(-0.6, 0.6), l, seg);
+      }
+      ch.last = s;
+      this.lastRowAt = s;
+      if (++ch.row >= ch.c.rows.length) {
+        this.chunk = null;
+        this.nextChunkS = s + gap;
+      }
+    }
+  }
+  pickChunk(lanes, level, zone) {
+    const fits = CHUNKS.filter((c) => c.lanes === lanes && c.level <= level && (!c.zones || c.zones.includes(zone)) && c.id !== this.lastChunkId);
+    if (!fits.length) return null;
+    const top = fits.filter((c) => c.level >= level - 1);
+    return this.rng.pick(top.length && this.rng.chance(0.75) ? top : fits);
   }
   place(kind, s, lane, seg, jitter = 0.2) {
     const def = PROP_DEFS[kind];
@@ -2105,6 +2224,29 @@ var Pursuit = class {
     const C = TUNING.pursuit.caught;
     return this.units.filter((u) => u.alive && u.unit === "cruiser" && !u.lost && u.phase !== "leave" && !u.backOff && Math.abs(u.s - g.s) <= u.hl + C.reach && Math.abs(u.d - g.d) < TUNING.lanes.width * 1.5);
   }
+  /** Prototype: with a car dropped at (`at`, `lane`), is there still a line through from his lane? */
+  dropFair(at, lane, L) {
+    return this.fairWith(at, [lane], L);
+  }
+  /** Prototype: with `lanes` blocked at `at` too, is there still a line through from his lane? */
+  fairWith(at, lanes, L) {
+    const sim = this.sim;
+    const g = sim.giant;
+    const W = TUNING.lanes.width;
+    const rank = sim.smashRank();
+    const rows = [];
+    const add = (s, l) => {
+      const ds = s - g.s;
+      const row = rows.find((r) => Math.abs(r.ds - ds) < 3);
+      if (row) row.blocked.add(l);
+      else rows.push({ ds, blocked: /* @__PURE__ */ new Set([l]) });
+    };
+    for (const p of sim.track.propsBetween(g.s + 2, at + 40)) if (p.alive && sim.rankOf(p) > rank) add(p.s, Math.max(0, Math.min(L - 1, Math.floor(p.d / W))));
+    for (const u of this.units) if (u.alive && u.unit !== "chopper" && u.unit !== "spike" && u.s > g.s + 2 && u.s < at + 40 && sim.rankOf(u) > rank) add(u.s, Math.max(0, Math.min(L - 1, Math.floor(u.d / W))));
+    for (const l of lanes) add(at, l);
+    rows.sort((a, b) => a.ds - b.ds);
+    return pathFrom(L, g.lane, rows);
+  }
   /** He shook off the police on his tail: they drop back for a moment (still in the chase). */
   shakeOff() {
     for (const u of this.onHisTail()) u.backOff = TUNING.pursuit.caught.backOff;
@@ -2512,6 +2654,7 @@ var Pursuit = class {
       if (police.some((x) => Math.abs(x.d - track.laneCenter(lane)) < x.hw + 1)) continue;
       for (const x of police) blocked.add(Math.floor(x.d / W));
       if (blocked.size >= L) continue;
+      if (TUNING.proto.on && !sim.inRampage && !this.dropFair(at, lane, L)) continue;
       const p = track.drop("car", at, track.laneCenter(lane) + this.rng.range(-0.4, 0.4));
       sim.emitPublic({ type: "carrierDrop", carrierId: u.id, propId: p.id, s: p.s, d: p.d });
       u.drops = (u.drops ?? 1) - 1;
@@ -2796,7 +2939,8 @@ var Pursuit = class {
       const L = track.lanesAt(s);
       if (L < 2 || track.lanesAt(s - 12) !== L || track.lanesAt(s + 12) !== L) continue;
       if (track.propsBetween(s - 7, s + 7).length) continue;
-      const gaps = Array.from({ length: L }, (_, i) => i).filter((l) => !this.propIn(l, s - 30, s + 8));
+      const all = Array.from({ length: L }, (_, i) => i);
+      const gaps = all.filter((l) => !this.propIn(l, s - 30, s + 8) && (!TUNING.proto.on || this.fairWith(s, all.filter((x) => x !== l), L)));
       if (!gaps.length) continue;
       const gap = gaps[this.rng.int(0, gaps.length - 1)];
       const grp = this.group++;
@@ -3646,7 +3790,7 @@ var Sim = class {
   }
   /** A prop's rank against his: rampOnly things (concrete, police roadblocks) count as unbreakable outside Rampage. */
   rankOf(p) {
-    if (TUNING.proto.on && (p.kind === "newsvan" || TUNING.proto.small.includes(p.kind))) return CLASS_RANK.light;
+    if (TUNING.proto.on && (p.kind === "newsvan" || p.kind === "compact" && p.unit === "rolling" || TUNING.proto.small.includes(p.kind))) return CLASS_RANK.light;
     return p.rampOnly && !this.inRampage && this.giant.shoulderT <= 0 ? CLASS_RANK.immovable : CLASS_RANK[p.cls];
   }
   /** In Rampage (the burst), not just at top speed. */
