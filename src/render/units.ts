@@ -54,6 +54,9 @@ const BEAM_GEO = (() => {
 })();
 const add = (color: number, opacity: number) => new THREE.MeshBasicMaterial({ color, transparent: true, opacity, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -3 });
 const UP = new THREE.Vector3(0, 1, 0);
+/** Light-bar lenses, shared by every unit (review #50: two new materials per unit). */
+const BAR_RED = new THREE.MeshBasicMaterial({ color: 0xff2030 });
+const BAR_BLUE = new THREE.MeshBasicMaterial({ color: 0x2a5cff });
 const GAP_GLOW = new THREE.MeshBasicMaterial({ color: 0x7dffb0, transparent: true, opacity: 0.35, blending: THREE.AdditiveBlending, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -3 });
 
 export class UnitViews {
@@ -124,7 +127,7 @@ export class UnitViews {
     const roof = u.kind === 'compact' ? 1.45 : u.kind === 'armored' ? 2.8 : 1.62;
     const police = u.unit !== 'carrier';
     for (const [arr, mat, z] of police ? ([[v.red, GLOW.sirenRedHalo, -0.38], [v.blue, GLOW.sirenBlueHalo, 0.38]] as const) : []) {
-      const bar = new THREE.Mesh(BOX, new THREE.MeshBasicMaterial({ color: mat === GLOW.sirenRedHalo ? 0xff2030 : 0x2a5cff }));
+      const bar = new THREE.Mesh(BOX, mat === GLOW.sirenRedHalo ? BAR_RED : BAR_BLUE);
       bar.scale.set(0.3, 0.14, 0.66);
       bar.position.set(-0.2, roof + 0.1, z);
       const sp = new THREE.Sprite(mat);

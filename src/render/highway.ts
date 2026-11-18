@@ -18,6 +18,10 @@ function basicDouble(color: number): THREE.MeshBasicMaterial {
   return m;
 }
 
+/** A unit cone (trees), scaled per tree (review #48: a new ConeGeometry per tree). Shared: never disposed. */
+const UNIT_CONE = new THREE.ConeGeometry(1, 1, 6);
+const batchable = (m: THREE.Mesh) => ((m.userData.batch = true), m);
+
 /** One flat 1×1 plane (lane dashes, light pools, chevrons, throws), scaled per mesh. Shared: never disposed. */
 const FLAT_PLANE = new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2);
 const LENS = new THREE.MeshBasicMaterial({ color: 0xffc27a });
@@ -31,7 +35,8 @@ const HEAD = new THREE.MeshBasicMaterial({ color: 0xfff2d8 });
 function freeSegment(g: THREE.Object3D, box: THREE.BufferGeometry) {
   g.traverse((o) => {
     const m = o as THREE.Mesh;
-    if (m.geometry && m.geometry !== box && m.geometry !== FLAT_PLANE) m.geometry.dispose();
+    if ((m as THREE.InstancedMesh).isInstancedMesh) (m as THREE.InstancedMesh).dispose();
+    if (m.geometry && m.geometry !== box && m.geometry !== FLAT_PLANE && m.geometry !== UNIT_CONE) m.geometry.dispose();
     const mat = m.material as THREE.Material | undefined;
     if (mat && !Array.isArray(mat) && mat.transparent && !isToonCached(mat)) mat.dispose();
   });
@@ -278,6 +283,7 @@ export class HighwayView {
   private debrisMesh: THREE.InstancedMesh;
   private debrisCursor = 0;
   private rings: { mesh: THREE.Mesh; t: number; max: number; scale: number; opacity: number }[] = [];
+  private ringPool: THREE.Mesh[] = [];
   private cracks: { mesh: THREE.Mesh; t: number }[] = [];
   private crackCursor = 0;
   private tmp = new THREE.Object3D();
@@ -413,7 +419,14 @@ export class HighwayView {
       sum += m;
     }
     const w = sum / (n + 1);
-    if (this.edgeCache.size > 20000) this.edgeCache.clear();
+    // Evict the oldest entries a few at a time (review #51: clearing 20,000 at once spiked one frame).
+    if (this.edgeCache.size > 20000) {
+      let n = 0;
+      for (const k of this.edgeCache.keys()) {
+        this.edgeCache.delete(k);
+        if (++n >= 64) break;
+      }
+    }
     this.edgeCache.set(key, w);
     return w;
   }
@@ -582,9 +595,11 @@ export class HighwayView {
       const ss = seg.s0 + rng.range(0, seg.length);
       this.sim.track.posAt(ss, left ? -off : this.edgeW(ss) + off, this.pos);
       const scale = rng.range(0.8, 1.5);
-      const crown = new THREE.Mesh(new THREE.ConeGeometry(2.2 * scale, 5 * scale, 6), toon(rng.pick(PALETTE.tree)));
+      const crown = new THREE.Mesh(UNIT_CONE, toon(rng.pick(PALETTE.tree)));
+      crown.scale.set(2.2 * scale, 5 * scale, 2.2 * scale);
       crown.position.set(this.pos.x, 3.5 * scale, this.pos.z);
       const trunk = new THREE.Mesh(this.box, toon(PALETTE.trunk));
+      crown.userData.batch = trunk.userData.batch = true;
       trunk.scale.set(0.4, 1.5 * scale, 0.4);
       trunk.position.set(this.pos.x, 0.75 * scale, this.pos.z);
       group.add(crown, trunk);
@@ -641,10 +656,41 @@ export class HighwayView {
       group.add(g);
     }
     }
+    this.batchStatic(group);
     return group;
   }
 
   /** Phase 2 avenue: storefronts shoulder to shoulder, lit windows at night, awnings at street level. */
+  /**
+   * Static set dressing marked `batch` (storefronts, trees, festoon bulbs) is merged into one instanced draw
+   * per geometry and material (review #48/#49: an avenue segment was 120–250 draw calls).
+   */
+  private batchStatic(group: THREE.Group) {
+    const sets = new Map<string, THREE.Mesh[]>();
+    const keys = new Map<object, number>();
+    const id = (o: object) => keys.get(o) ?? (keys.set(o, keys.size), keys.size - 1);
+    for (const o of group.children) {
+      const m = o as THREE.Mesh;
+      if (!m.isMesh || !m.userData.batch || Array.isArray(m.material)) continue;
+      const k = `${id(m.geometry)}:${id(m.material)}`;
+      let list = sets.get(k);
+      if (!list) sets.set(k, (list = []));
+      list.push(m);
+    }
+    for (const list of sets.values()) {
+      if (list.length < 3) continue;
+      const inst = new THREE.InstancedMesh(list[0].geometry, list[0].material as THREE.Material, list.length);
+      list.forEach((m, i) => {
+        m.updateMatrix();
+        inst.setMatrixAt(i, m.matrix);
+        group.remove(m);
+      });
+      inst.instanceMatrix.needsUpdate = true;
+      inst.computeBoundingSphere();
+      group.add(inst);
+    }
+  }
+
   private buildStorefronts(seg: Segment, group: THREE.Group, rng: Rng) {
     const track = this.sim.track;
     // An exit ramp curves out through the right-hand plots: leave them empty near it.
@@ -668,6 +714,7 @@ export class HighwayView {
           m.scale.set(sx, sy, sz);
           m.position.set(p.x, y, p.z);
           m.rotation.y = rot;
+          m.userData.batch = true;
           group.add(m);
           return m;
         };
@@ -822,7 +869,7 @@ export class HighwayView {
         const bulbs = [0xffd27a, 0xff9a5a, 0xfff2c4];
         for (const s of [seg.s0 + 4, seg.s0 + 19, seg.s0 + 34]) {
           add(s, w / 2, 6.6, 0.05, 0.05, w + 12, toon(0x2a2230));
-          for (let d = -5; d <= w + 5; d += 1.6) add(s, d, 6.45 - 0.25 * Math.sin(((d + 5) / (w + 10)) * Math.PI), 0.22, 0.22, 0.22, toon(bulbs[Math.abs(Math.round(d * 3)) % 3], { emissive: 0xc98a2a }));
+          for (let d = -5; d <= w + 5; d += 1.6) batchable(add(s, d, 6.45 - 0.25 * Math.sin(((d + 5) / (w + 10)) * Math.PI), 0.22, 0.22, 0.22, toon(bulbs[Math.abs(Math.round(d * 3)) % 3], { emissive: 0xc98a2a })));
         }
         break;
       }
@@ -1343,7 +1390,12 @@ export class HighwayView {
 
   /** Expanding ground ring: footfall dust, Shoulder Check shockwave. */
   ring(x: number, z: number, scale: number, color: number, time = 0.45, opacity = 0.5) {
-    const mesh = new THREE.Mesh(this.ringGeo, new THREE.MeshBasicMaterial({ color, transparent: true, opacity, depthWrite: false }));
+    // Pooled (review #47): a finished ring's mesh and material wait in `ringPool` for the next footfall.
+    const mesh = this.ringPool.pop() ?? new THREE.Mesh(this.ringGeo, new THREE.MeshBasicMaterial({ transparent: true, depthWrite: false }));
+    const m = mesh.material as THREE.MeshBasicMaterial;
+    m.color.setHex(color);
+    m.opacity = opacity;
+    mesh.scale.set(1, 1, 1);
     mesh.position.set(x, 0.06, z);
     this.group.add(mesh);
     this.rings.push({ mesh, t: 0, max: time, scale, opacity });
@@ -1440,7 +1492,7 @@ export class HighwayView {
       const k = r.t / r.max;
       if (k >= 1) {
         this.group.remove(r.mesh);
-        (r.mesh.material as THREE.Material).dispose();
+        this.ringPool.push(r.mesh);
         this.rings.splice(i, 1);
         continue;
       }

@@ -239,6 +239,7 @@ export class GiantModel {
       ink.onBeforeCompile = (sh) => {
         sh.vertexShader = sh.vertexShader.replace('#include <skinning_vertex>', `#include <skinning_vertex>\ntransformed += normalize(objectNormal) * ${width.toFixed(4)};`);
       };
+      ink.customProgramCacheKey = () => `ink-${width.toFixed(4)}`; // review #44: the push is baked into the shader
       const hull = new THREE.SkinnedMesh(mesh.geometry, ink);
       hull.bind(mesh.skeleton, mesh.bindMatrix);
       hull.frustumCulled = false;
@@ -264,84 +265,97 @@ export class GiantModel {
     this.setWorld(bone, delta.multiply(restWorld));
   }
 
+  /** Per-frame scratch (review #41: update() allocated ~20 three.js objects a frame). Not shared with aim()/setWorld(). */
+  private sv = Array.from({ length: 12 }, () => new THREE.Vector3());
+  private sq = Array.from({ length: 5 }, () => new THREE.Quaternion());
+  private static readonly X = new THREE.Vector3(1, 0, 0);
+  private static readonly Z = new THREE.Vector3(0, 0, 1);
+  private static readonly FIST = new THREE.Vector3(0, -0.7, 0);
+
   update(g: GreyboxPose) {
     if (!this.loaded) return;
+    const [vRight, vFwd, vMid, vOff, vHip, vKnee, vFoot, vTo, vKneeP, vTmp, vSh, vEl] = this.sv;
+    const [qRoot, qBank, qTmp, qFlat, qClip] = this.sq;
     const b = (n: string) => this.bones.get(n)!;
-    const rootQ = g.root.getWorldQuaternion(new THREE.Quaternion());
-    const right = new THREE.Vector3(0, 0, 1).applyQuaternion(rootQ);
-    this.group.position.copy(g.root.getWorldPosition(new THREE.Vector3()));
+    const rootQ = g.root.getWorldQuaternion(qRoot);
+    const right = vRight.copy(GiantModel.Z).applyQuaternion(rootQ);
+    g.root.getWorldPosition(this.group.position);
     this.group.quaternion.copy(rootQ).multiply(this.face);
     this.group.updateMatrixWorld(true);
 
     const L = g.gait.legs;
     const M = TUNING.giantModel;
     // Lock the clips to the stride: the gait's left plant lines up with each clip's.
-    const leftIdx = Math.sign(this.p[1].copy(v(L[0].hip)).sub(this.group.position).dot(right)) < 0 ? 0 : 1;
+    const leftIdx = Math.sign(v(L[0].hip, this.p[1]).sub(this.group.position).dot(right)) < 0 ? 0 : 1;
     const leftPlanted = L[leftIdx].planted;
     if (leftPlanted && !this.leftWasPlanted) this.gaitLeftPhase = ((g.stepPos % 2) + 2) % 2;
     this.leftWasPlanted = leftPlanted;
     const phase = ((((g.stepPos - this.gaitLeftPhase) % 2) + 2) % 2) / 2;
     const fade = Math.min(1, g.dt / M.clipFade);
-    this.runs.forEach((r, i) => {
+    for (let i = 0; i < this.runs.length; i++) {
+      const r = this.runs[i];
       r.weight += ((i === g.tier ? 1 : 0) - r.weight) * fade;
       r.action.setEffectiveWeight(r.weight);
       r.action.time = (r.leftPlant + phase * r.len) % r.len;
-    });
+    }
     this.mixer!.update(0);
-    this.armBlend += ((g.armsProcedural ? 1 : 0) - this.armBlend) * 0.25;
+    // Arms ease in/out at the same rate whatever the frame rate (review #70: was 0.25 a frame).
+    this.armBlend += ((g.armsProcedural ? 1 : 0) - this.armBlend) * (1 - Math.pow(0.75, g.dt * 60));
 
     // Hips: at the gait's hip height (bound, plant drop), turned by the clip, banked into lane changes.
-    const mid = v(L[0].hip).add(v(L[1].hip, this.p[0])).multiplyScalar(0.5);
+    const mid = v(L[0].hip, vMid).add(v(L[1].hip, this.p[0])).multiplyScalar(0.5);
     mid.y += M.hipRaise;
     const hips = b('Hips');
-    hips.position.copy(hips.parent!.worldToLocal(mid.clone().add(this.hipsOffset.clone().applyQuaternion(rootQ))));
+    hips.position.copy(hips.parent!.worldToLocal(mid.add(vOff.copy(this.hipsOffset).applyQuaternion(rootQ))));
     hips.updateMatrixWorld(true);
-    const bank = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0).applyQuaternion(rootQ), g.bank);
-    this.setWorld(hips, hips.getWorldQuaternion(new THREE.Quaternion()).premultiply(bank));
+    const bank = qBank.setFromAxisAngle(vTmp.copy(GiantModel.X).applyQuaternion(rootQ), g.bank);
+    this.setWorld(hips, hips.getWorldQuaternion(qTmp).premultiply(bank));
 
     // Legs: two-bone IK from his hip to a foot target. Planted (by the gait), the target is the gait's
     // plant spot and the foot lies flat, so nothing slides; in swing it's the clip's own foot arc.
     // Knees bend the way the clip bends them.
-    const fwd = new THREE.Vector3(1, 0, 0).applyQuaternion(rootQ);
+    const fwd = vFwd.copy(GiantModel.X).applyQuaternion(rootQ);
     const plantFade = Math.min(1, g.dt / M.plantBlend);
-    this.legs.forEach((c, li) => {
-      const gi = Math.sign(this.p[1].copy(v(L[0].hip)).sub(this.group.position).dot(right)) === c.side ? 0 : 1;
+    for (let li = 0; li < this.legs.length; li++) {
+      const c = this.legs[li];
+      const gi = Math.sign(v(L[0].hip, this.p[1]).sub(this.group.position).dot(right)) === c.side ? 0 : 1;
       const leg = L[gi];
       this.plantW[li] += ((leg.planted ? 1 : 0) - this.plantW[li]) * plantFade;
       const w = this.plantW[li];
-      const hip = c.upper.getWorldPosition(new THREE.Vector3());
-      const clipKnee = c.lower.getWorldPosition(new THREE.Vector3());
-      const clipFoot = c.end.getWorldPosition(new THREE.Vector3());
+      const hip = c.upper.getWorldPosition(vHip);
+      const clipKnee = c.lower.getWorldPosition(vKneeP);
+      const clipFoot = c.end.getWorldPosition(vFoot);
       clipFoot.y = Math.max(clipFoot.y, M.ankleHeight);
-      const clipFootQ = c.end.getWorldQuaternion(new THREE.Quaternion());
-      const target = clipFoot.lerp(v(leg.foot).setY(Math.max(leg.foot.y, M.ankleHeight)), w);
+      const clipFootQ = c.end.getWorldQuaternion(qClip);
+      const target = clipFoot.lerp(v(leg.foot, vTmp).setY(Math.max(leg.foot.y, M.ankleHeight)), w);
       const a = this.segLen.get(c.upper)!, bl = this.segLen.get(c.lower)!;
-      const toFoot = target.clone().sub(hip);
+      const toFoot = vTo.copy(target).sub(hip);
       const d = Math.min(toFoot.length(), (a + bl) * 0.999);
       const u = toFoot.normalize();
       const cosA = (a * a + d * d - bl * bl) / (2 * a * d);
       const sinA = Math.sqrt(Math.max(0, 1 - cosA * cosA));
       const pole = clipKnee.sub(hip).lerp(fwd, 0.3);
       const n = pole.addScaledVector(u, -pole.dot(u)).normalize();
-      const knee = hip.clone().addScaledVector(u, a * cosA).addScaledVector(n, a * sinA);
-      this.aim(c.upper, knee.clone().sub(hip));
+      const knee = vKnee.copy(hip).addScaledVector(u, a * cosA).addScaledVector(n, a * sinA);
+      this.aim(c.upper, vTmp.copy(knee).sub(hip));
       this.aim(c.lower, hip.addScaledVector(u, d).sub(knee));
-      const flat = new THREE.Quaternion().copy(rootQ).multiply(this.rest.get(c.end)!.world);
+      const flat = qFlat.copy(rootQ).multiply(this.rest.get(c.end)!.world);
       this.setWorld(c.end, clipFootQ.slerp(flat, w));
-    });
+    }
     // Pose / Shoulder Check / Leap: arms along the greybox arm (upper arm to the elbow, forearm to the fist).
     if (this.armBlend < 0.02) return;
     for (const c of this.arms) {
-      const a = g.arms.find((x) => x.side === c.side);
+      let a: (typeof g.arms)[number] | undefined;
+      for (const x of g.arms) if (x.side === c.side) { a = x; break; }
       if (!a) continue;
-      const sh = a.shoulder.getWorldPosition(new THREE.Vector3());
-      const el = a.elbow.getWorldPosition(new THREE.Vector3());
-      const fist = a.elbow.localToWorld(new THREE.Vector3(0, -0.7, 0));
-      const clipUpper = c.upper.quaternion.clone();
-      this.aim(c.upper, el.clone().sub(sh));
+      const sh = a.shoulder.getWorldPosition(vSh);
+      const el = a.elbow.getWorldPosition(vEl);
+      const fist = a.elbow.localToWorld(vFoot.copy(GiantModel.FIST));
+      const clipUpper = qClip.copy(c.upper.quaternion);
+      this.aim(c.upper, vTmp.copy(el).sub(sh));
       c.upper.quaternion.copy(clipUpper.slerp(c.upper.quaternion, this.armBlend));
       c.upper.updateMatrixWorld(true);
-      const clipLower = c.lower.quaternion.clone();
+      const clipLower = qClip.copy(c.lower.quaternion);
       this.aim(c.lower, fist.sub(el));
       c.lower.quaternion.copy(clipLower.slerp(c.lower.quaternion, this.armBlend));
       c.lower.updateMatrixWorld(true);

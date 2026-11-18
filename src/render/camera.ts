@@ -100,6 +100,11 @@ export class CameraRig {
   private tmpA = new THREE.Vector3();
   private tmpB = new THREE.Vector3();
   private tmpC = new THREE.Vector3();
+  private want = { pos: new THREE.Vector3(), look: new THREE.Vector3(), lookAhead: 0 };
+  private bd = [0, 0, 0];
+  private bs = [0, 0, 0];
+  private blo = [0, 0, 0];
+  private bhi = [0, 0, 0];
   private ray = new THREE.Raycaster();
   private ground = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
   private ndcTop = new THREE.Vector2(0, 1);
@@ -286,12 +291,15 @@ export class CameraRig {
     const lookAhead = this.angle.lookBehind ? -this.angle.lookBehind : Math.max(0, Math.min(t.speed * this.leadTime(), this.leadCap));
     const fx = Math.cos(t.travel);
     const fz = Math.sin(t.travel);
-    const look = new THREE.Vector3(t.x + fx * lookAhead, 0, t.z + fz * lookAhead);
+    // Scratch result (review #52): every caller copies it out at once.
+    const r = this.want;
+    const look = r.look.set(t.x + fx * lookAhead, 0, t.z + fz * lookAhead);
     const yaw = t.travel + this.yaw() * DEG;
     const p = this.pitch() * DEG;
     const back = dist * Math.cos(p);
-    const pos = new THREE.Vector3(look.x - Math.cos(yaw) * back, dist * Math.sin(p), look.z - Math.sin(yaw) * back);
-    return { pos, look, lookAhead };
+    r.pos.set(look.x - Math.cos(yaw) * back, dist * Math.sin(p), look.z - Math.sin(yaw) * back);
+    r.lookAhead = lookAhead;
+    return r;
   }
 
   private fov(): number {
@@ -318,10 +326,11 @@ export class CameraRig {
     for (const o of this.occluders) {
       let t0 = 0;
       let t1 = 1;
-      const d = [b.x - a.x, b.y - a.y, b.z - a.z];
-      const s = [a.x, a.y, a.z];
-      const lo = [o.minX, 0, o.minZ];
-      const hi = [o.maxX, o.top, o.maxZ];
+      const d = this.bd, s = this.bs, lo = this.blo, hi = this.bhi;
+      d[0] = b.x - a.x; d[1] = b.y - a.y; d[2] = b.z - a.z;
+      s[0] = a.x; s[1] = a.y; s[2] = a.z;
+      lo[0] = o.minX; lo[1] = 0; lo[2] = o.minZ;
+      hi[0] = o.maxX; hi[1] = o.top; hi[2] = o.maxZ;
       let hit = true;
       for (let k = 0; k < 3; k++) {
         if (Math.abs(d[k]) < 1e-9) {
@@ -332,7 +341,11 @@ export class CameraRig {
         } else {
           let ta = (lo[k] - s[k]) / d[k];
           let tb = (hi[k] - s[k]) / d[k];
-          if (ta > tb) [ta, tb] = [tb, ta];
+          if (ta > tb) {
+            const x = ta;
+            ta = tb;
+            tb = x;
+          }
           t0 = Math.max(t0, ta);
           t1 = Math.min(t1, tb);
           if (t0 > t1) {

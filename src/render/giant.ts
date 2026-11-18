@@ -27,6 +27,15 @@ const PAULDRON_SIDE = -1;
 const OUTLINE_WIDTH = 0.06;
 
 /** Mike's sheet: a plum cape with a cream Greek-key band along the hem. */
+const CAPE_TEXTURES = new Map<string, THREE.CanvasTexture>();
+/** One cape texture per cloth/band pair, kept (review #43: a new canvas on every outfit change). */
+function capeTextureFor(cloth: number, band: number): THREE.CanvasTexture {
+  const key = `${cloth}:${band}`;
+  let t = CAPE_TEXTURES.get(key);
+  if (!t) CAPE_TEXTURES.set(key, (t = capeTexture(cloth, band)));
+  return t;
+}
+
 function capeTexture(cloth: number = PALETTE.giantCape, band: number = PALETTE.giantBone): THREE.CanvasTexture {
   const W = 128, H = 256;
   const c = document.createElement('canvas');
@@ -108,8 +117,7 @@ export class GiantView {
     if (typeof document === 'undefined' || !this.cape) return;
     const o = TUNING.outfits[id];
     const mat = this.cape.material as THREE.MeshToonMaterial;
-    mat.map?.dispose();
-    mat.map = capeTexture(o.cape ?? PALETTE.giantCape, o.band ?? PALETTE.giantBone);
+    mat.map = capeTextureFor(o.cape ?? PALETTE.giantCape, o.band ?? PALETTE.giantBone);
     mat.needsUpdate = true;
   }
   /** Resolves true when the Meshy model is showing (false without a window, or if it failed). */
@@ -129,6 +137,8 @@ export class GiantView {
   private recoil = 0;
   private time = 0;
   private tmp = new THREE.Vector3();
+  /** Per-frame scratch for the braid and cape (review #43: they allocated vectors every frame). */
+  private sc = Array.from({ length: 6 }, () => new THREE.Vector3());
   /** The legs as drawn this frame (gait IK, tucked in a Leap), for the Meshy model. */
   private legPose: GaitFrame['legs'] = [] as unknown as GaitFrame['legs'];
 
@@ -442,12 +452,13 @@ export class GiantView {
     // Braid: a chain from the topknot. Each link chases its rest spot behind the one before,
     // then is pulled back to a fixed link length, so it trails without ever coming apart.
     const M = TUNING.giantModel;
-    const knotWorld = this.head.localToWorld(new THREE.Vector3(-0.15, 0.72, 0));
+    const knotWorld = this.head.localToWorld(this.sc[0].set(-0.15, 0.72, 0));
     let prev = knotWorld;
-    const back = new THREE.Vector3(-Math.cos(p.travel), 0, -Math.sin(p.travel));
+    const back = this.sc[1].set(-Math.cos(p.travel), 0, -Math.sin(p.travel));
     const hang = 1 - Math.min(1, p.speed / 15);
     this.braid.forEach((b, i) => {
-      const rest = prev.clone().addScaledVector(back, M.braidLink * (1 - hang * 0.6)).add(new THREE.Vector3(0, -M.braidLink * (0.45 + hang * 0.9), 0));
+      const rest = this.sc[2].copy(prev).addScaledVector(back, M.braidLink * (1 - hang * 0.6));
+      rest.y -= M.braidLink * (0.45 + hang * 0.9);
       if (b.position.distanceToSquared(rest) > 4) b.position.copy(rest);
       b.position.lerp(rest, k(M.braidFollow * (1 + i * 0.4)));
       const off = this.tmp.subVectors(b.position, prev);
@@ -477,9 +488,9 @@ export class GiantView {
   }
 
   /** Cape top corners: the clasp side sits low under the pauldron, the far side over the bare shoulder. */
-  private capeAnchor(clasp: boolean): THREE.Vector3 {
+  private capeAnchor(clasp: boolean, out: THREE.Vector3): THREE.Vector3 {
     const S = PAULDRON_SIDE;
-    return this.torso.localToWorld(clasp ? new THREE.Vector3(-0.66, 1.2, S * 0.62) : new THREE.Vector3(-0.66, 1.4, -S * 0.6));
+    return this.torso.localToWorld(clasp ? out.set(-0.66, 1.2, S * 0.62) : out.set(-0.66, 1.4, -S * 0.6));
   }
 
   /**
@@ -498,12 +509,13 @@ export class GiantView {
     this.capeAngle += (want - this.capeAngle) * k;
     this.capePhase += dt * T.capeFlutterHz * Math.PI * 2;
 
-    const a = this.capeAnchor(true);
-    const b = this.capeAnchor(false);
-    const top = a.clone().add(b).multiplyScalar(0.5);
-    const halfTop = a.clone().sub(b).multiplyScalar(0.5);
-    const side = halfTop.clone().setY(0).normalize();
-    const back = new THREE.Vector3(-Math.cos(p.travel), 0, -Math.sin(p.travel));
+    const [a, b, top, halfTop, side, back] = this.sc;
+    this.capeAnchor(true, a);
+    this.capeAnchor(false, b);
+    top.copy(a).add(b).multiplyScalar(0.5);
+    halfTop.copy(a).sub(b).multiplyScalar(0.5);
+    side.copy(halfTop).setY(0).normalize();
+    back.set(-Math.cos(p.travel), 0, -Math.sin(p.travel));
     const segLen = M.capeLength / CAPE_SEGS;
     const snap = M.capeSnapPow[p.tier];
     const pos = this.capeGeo.getAttribute('position') as THREE.BufferAttribute;

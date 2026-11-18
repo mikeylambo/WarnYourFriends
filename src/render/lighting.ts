@@ -117,7 +117,8 @@ export class Lighting {
   setMode(mode: TimeOfDay) {
     this.mode = mode;
     const L = (this.look = LOOKS[mode]);
-    this.scene.background = new THREE.Color(L.sky);
+    if (this.scene.background instanceof THREE.Color) this.scene.background.setHex(L.sky);
+    else this.scene.background = new THREE.Color(L.sky);
     this.scene.fog = new THREE.Fog(L.fog, L.fogNear, L.fogFar);
     this.hemi.color.setHex(L.hemiSky);
     this.hemi.groundColor.setHex(L.hemiGround);
@@ -205,18 +206,29 @@ export class Lighting {
 
     // Siren washes: alternate red/blue per cruiser. Reduce Flashes: slow, soft alternation.
     const hz = this.reduceFlashes ? T.sirenHz * 0.35 : T.sirenHz;
-    const active = o.sirens.filter((s) => s.active);
+    // No per-frame arrays (review #52): count the active sirens and find the lead in one pass.
+    let count = 0;
+    let leadCar: (typeof o.sirens)[number] | null = null;
+    let nearest = Infinity;
+    for (const s of o.sirens) {
+      if (!s.active) continue;
+      count++;
+      const d2 = (s.x - o.giantX) ** 2 + (s.z - o.giantZ) ** 2;
+      if (d2 < nearest) {
+        nearest = d2;
+        leadCar = s;
+      }
+    }
     const light = this.sirens[0];
-    if (!active.length) light.intensity = 0;
+    if (!leadCar) light.intensity = 0;
     else {
       // Placed at the lead cruiser (nearest the giant), flashing with it; brighter with more cars behind.
-      const lead = active.reduce((a, b) => ((a.x - o.giantX) ** 2 + (a.z - o.giantZ) ** 2 <= (b.x - o.giantX) ** 2 + (b.z - o.giantZ) ** 2 ? a : b));
-      const ph = (this.time * hz + lead.phase) % 1;
+      const ph = (this.time * hz + leadCar.phase) % 1;
       const red = ph < 0.5;
       light.color.setHex(red ? 0xff1a2a : 0x2a50ff);
       const pulse = this.reduceFlashes ? 0.75 + 0.25 * Math.cos(ph * Math.PI * 4) : 0.55 + 0.45 * Math.abs(Math.sin(ph * Math.PI * 2));
-      light.intensity = L.siren * pulse * (red ? 1 : 1.3) * (1 + 0.25 * (active.length - 1));
-      light.position.set(lead.x, 2.2, lead.z);
+      light.intensity = L.siren * pulse * (red ? 1 : 1.3) * (1 + 0.25 * (count - 1));
+      light.position.set(leadCar.x, 2.2, leadCar.z);
     }
 
     // Faint chopper shadow crossing the road now and then.
