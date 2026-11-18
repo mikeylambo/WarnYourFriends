@@ -591,7 +591,7 @@ export class Sim {
   /** A prop's rank against his: rampOnly things (concrete, police roadblocks) count as unbreakable outside Rampage. */
   rankOf(p: Prop): number {
     // Prototype: a rival station's van is the one vehicle he goes for in Stride.
-    if (TUNING.proto.on && p.kind === 'newsvan') return CLASS_RANK.light;
+    if (TUNING.proto.on && (p.kind === 'newsvan' || (TUNING.proto.small as readonly string[]).includes(p.kind))) return CLASS_RANK.light;
     return p.rampOnly && !this.inRampage && this.giant.shoulderT <= 0 ? CLASS_RANK.immovable : CLASS_RANK[p.cls];
   }
 

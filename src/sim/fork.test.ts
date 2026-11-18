@@ -4,6 +4,9 @@ import { Bot } from './bot';
 import { TUNING } from '../tuning';
 import type { SimEvent } from './types';
 
+// Forks are off in the game (TUNING.forks.at = [], 2026-11-18); this file turns them back on so the dormant code stays sound.
+(TUNING.forks as unknown as { at: number[] }).at = [30, 58, 86];
+
 /** Bot-drive until a fork opens; then hold the right lane (take) or the left lane (stay) to the gore. */
 function toFork(seed: number, take: boolean) {
   const sim = new Sim({ seed });

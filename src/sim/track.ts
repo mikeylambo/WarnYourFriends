@@ -122,6 +122,8 @@ export class Track {
 
   /** Last row actually placed (m), for TUNING.pacing.maxEmpty. */
   private lastRowAt: number = TUNING.props.startAt;
+  /** Prototype: the lanes the last row left open (a close next row keeps one of them open). */
+  private lastOpen: number[] = [];
   private readonly gapScale: number;
   private readonly landmarkScale: number;
 
@@ -434,9 +436,12 @@ export class Track {
       // Only lanes usable through the whole row, so nothing sits in a closing merge lane.
       const lanes = Math.min(this.lanesAt(rowS - 6), this.lanesAt(rowS), this.lanesAt(Math.min(rowS + 6, end - 0.01)));
       if (lanes < 2) continue;
+      const prevRowAt = this.lastRowAt;
       this.lastRowAt = rowS;
-      const maxBlocked = Math.max(1, Math.min(lanes - 1, Math.floor(lanes * P.maxBlockedShare)));
-      const k = rng.int(1, maxBlocked);
+      const PR = TUNING.proto;
+      // Prototype (dodge in Stride): wide roads fill up (up to all but one lane, at least `wideMinBlocked` of them).
+      const maxBlocked = PR.on && lanes >= 4 ? lanes - 1 : Math.max(1, Math.min(lanes - 1, Math.floor(lanes * P.maxBlockedShare)));
+      const k = rng.int(PR.on && lanes >= 4 ? Math.min(maxBlocked, PR.wideMinBlocked) : 1, maxBlocked);
       const order = Array.from({ length: lanes }, (_, i) => i);
       for (let i = order.length - 1; i > 0; i--) {
         const j = rng.int(0, i);
@@ -448,7 +453,15 @@ export class Track {
       const di = Math.min(this.segmentNo, D.dozer.length - 1);
       let hard = 0;
       const hardLanes: number[] = [];
-      for (const lane of order.slice(0, k)) {
+      let blocked = order.slice(0, k);
+      // Prototype: a row this close behind the last can't close every lane the last one left open: there's always
+      // a line through without a lane change he has no time to make (Mike, 2026-11-18: forced hits on 2-lane roads).
+      if (PR.on && rowS - prevRowAt < PR.reachGap && this.lastOpen.length && this.lastOpen.every((l) => blocked.includes(l))) {
+        const keep = this.lastOpen.find((l) => l < lanes);
+        if (keep !== undefined) blocked = blocked.filter((l) => l !== keep);
+      }
+      this.lastOpen = order.filter((l) => !blocked.includes(l));
+      for (const lane of blocked) {
         const mw = TUNING.zones.mediumWeight[seg.zone];
         const heavy = rng.next() >= mw;
         // Never two side by side: a wall of two beside the edge lane left no way out but through one (Law 1).

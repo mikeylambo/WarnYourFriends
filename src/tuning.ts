@@ -104,6 +104,11 @@ export const TUNING = {
     hitAudience: 12,
     caughtBelow: 9,
     /** A hit with police within `tail` m behind him adds `hitPin` to the CAUGHT meter (100 = busted): three sloppy hits with the police on you and it's over. */
+    /** Track: rows closer than this (m, ~2s) keep a lane the last row left open; 4+ lane roads block at least this many lanes a row. */
+    /** The small things that crumble underfoot in Stride (anything with wheels and an engine is a hit). */
+    small: ['sawhorse', 'cart', 'fence', 'scooter', 'tollgate'] as string[],
+    reachGap: 36,
+    wideMinBlocked: 2,
     tail: 22,
     hitPin: 28,
     afterRampage: 55,
@@ -111,7 +116,7 @@ export const TUNING = {
     dodgeGap: 2.2,
     decayMult: 0.6,
     startRatings: 40,
-    gain: { nearMiss: 5, rival: 10, policeCrash: 12, lostTrack: 8, collateral: 1 } as Record<string, number>,
+    gain: { nearMiss: 6.5, rival: 10, policeCrash: 12, lostTrack: 8, collateral: 1 } as Record<string, number>,
   },
 
   sim: {
@@ -596,7 +601,8 @@ export const TUNING = {
    * Staying keeps the highway. Forks open at these broadcast times (s), never within `clearOfExit` m of
    * the sign-off or after `lastAt` s; a missed window waits for the next highway stretch.
    */
-  forks: { at: [30, 58, 86] as number[], lastAt: 108, distance: [150, 330] as [number, number], clearOfExit: 320, propsAfter: 35 },
+  /** Forks off (Mike, 2026-11-18: the cut to a new section "is unneeded; it'll force us to author locations more"). Were [30, 58, 86]. */
+  forks: { at: [] as number[], lastAt: 108, distance: [150, 330] as [number, number], clearOfExit: 320, propsAfter: 35 },
 
   /** HUD scale (Direction B): pieces are laid out for 1280×720 and zoomed by min(w/1280, h/720), clamped. */
   /**

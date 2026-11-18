@@ -20,10 +20,10 @@ describe('prototype core loop', () => {
         const evs = sim.step(bot.input());
         for (const e of evs) {
           if (e.type === 'rampageStart') rampages++;
-          // Outside Rampage only light things and rival vans break, plus Law 1's stumble-through (a hit, with a bounce).
+          // Outside Rampage only small things (proto.small) and rival vans break, plus Law 1's stumble-through (a hit, with a bounce).
           if (e.type === 'smash' && !ramp && !sim.inRampage) {
             const stumbled = evs.some((x) => x.type === 'bounce' && x.propId === e.propId);
-            expect(e.cls === 'light' || kinds.get(e.propId) === 'newsvan' || stumbled).toBe(true);
+            expect(e.cls === 'light' || TUNING.proto.small.includes(kinds.get(e.propId) ?? '') || kinds.get(e.propId) === 'newsvan' || stumbled).toBe(true);
           }
         }
         if (sim.giant.sprint >= 1) sprinted = true;

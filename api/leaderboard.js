@@ -21,6 +21,11 @@ var TUNING = {
     hitAudience: 12,
     caughtBelow: 9,
     /** A hit with police within `tail` m behind him adds `hitPin` to the CAUGHT meter (100 = busted): three sloppy hits with the police on you and it's over. */
+    /** Track: rows closer than this (m, ~2s) keep a lane the last row left open; 4+ lane roads block at least this many lanes a row. */
+    /** The small things that crumble underfoot in Stride (anything with wheels and an engine is a hit). */
+    small: ["sawhorse", "cart", "fence", "scooter", "tollgate"],
+    reachGap: 36,
+    wideMinBlocked: 2,
     tail: 22,
     hitPin: 28,
     afterRampage: 55,
@@ -28,7 +33,7 @@ var TUNING = {
     dodgeGap: 2.2,
     decayMult: 0.6,
     startRatings: 40,
-    gain: { nearMiss: 5, rival: 10, policeCrash: 12, lostTrack: 8, collateral: 1 }
+    gain: { nearMiss: 6.5, rival: 10, policeCrash: 12, lostTrack: 8, collateral: 1 }
   },
   sim: {
     /** §29 fixed step. */
@@ -517,7 +522,8 @@ var TUNING = {
    * Staying keeps the highway. Forks open at these broadcast times (s), never within `clearOfExit` m of
    * the sign-off or after `lastAt` s; a missed window waits for the next highway stretch.
    */
-  forks: { at: [30, 58, 86], lastAt: 108, distance: [150, 330], clearOfExit: 320, propsAfter: 35 },
+  /** Forks off (Mike, 2026-11-18: the cut to a new section "is unneeded; it'll force us to author locations more"). Were [30, 58, 86]. */
+  forks: { at: [], lastAt: 108, distance: [150, 330], clearOfExit: 320, propsAfter: 35 },
   /** HUD scale (Direction B): pieces are laid out for 1280×720 and zoomed by min(w/1280, h/720), clamped. */
   /**
    * HUD triage (Mike, 2026-11-17): the producer's asks show for `asksIntro` s at the top of a segment and
@@ -1354,6 +1360,8 @@ var Track = class {
   rng;
   /** Last row actually placed (m), for TUNING.pacing.maxEmpty. */
   lastRowAt = TUNING.props.startAt;
+  /** Prototype: the lanes the last row left open (a close next row keeps one of them open). */
+  lastOpen = [];
   gapScale;
   landmarkScale;
   /** Which segment of the run this road is for (difficulty, pacing). */
@@ -1608,9 +1616,11 @@ var Track = class {
       if (skip && !overdue) continue;
       const lanes = Math.min(this.lanesAt(rowS - 6), this.lanesAt(rowS), this.lanesAt(Math.min(rowS + 6, end - 0.01)));
       if (lanes < 2) continue;
+      const prevRowAt = this.lastRowAt;
       this.lastRowAt = rowS;
-      const maxBlocked = Math.max(1, Math.min(lanes - 1, Math.floor(lanes * P.maxBlockedShare)));
-      const k = rng.int(1, maxBlocked);
+      const PR = TUNING.proto;
+      const maxBlocked = PR.on && lanes >= 4 ? lanes - 1 : Math.max(1, Math.min(lanes - 1, Math.floor(lanes * P.maxBlockedShare)));
+      const k = rng.int(PR.on && lanes >= 4 ? Math.min(maxBlocked, PR.wideMinBlocked) : 1, maxBlocked);
       const order = Array.from({ length: lanes }, (_, i) => i);
       for (let i = order.length - 1; i > 0; i--) {
         const j = rng.int(0, i);
@@ -1620,7 +1630,13 @@ var Track = class {
       const di = Math.min(this.segmentNo, D.dozer.length - 1);
       let hard = 0;
       const hardLanes = [];
-      for (const lane of order.slice(0, k)) {
+      let blocked = order.slice(0, k);
+      if (PR.on && rowS - prevRowAt < PR.reachGap && this.lastOpen.length && this.lastOpen.every((l) => blocked.includes(l))) {
+        const keep = this.lastOpen.find((l) => l < lanes);
+        if (keep !== void 0) blocked = blocked.filter((l) => l !== keep);
+      }
+      this.lastOpen = order.filter((l) => !blocked.includes(l));
+      for (const lane of blocked) {
         const mw = TUNING.zones.mediumWeight[seg.zone];
         const heavy = rng.next() >= mw;
         const canHard = hard < D.hardPerRow[di] && rowS >= this.hardFrom && !hardLanes.some((l) => Math.abs(l - lane) === 1);
@@ -3630,7 +3646,7 @@ var Sim = class {
   }
   /** A prop's rank against his: rampOnly things (concrete, police roadblocks) count as unbreakable outside Rampage. */
   rankOf(p) {
-    if (TUNING.proto.on && p.kind === "newsvan") return CLASS_RANK.light;
+    if (TUNING.proto.on && (p.kind === "newsvan" || TUNING.proto.small.includes(p.kind))) return CLASS_RANK.light;
     return p.rampOnly && !this.inRampage && this.giant.shoulderT <= 0 ? CLASS_RANK.immovable : CLASS_RANK[p.cls];
   }
   /** In Rampage (the burst), not just at top speed. */

@@ -461,7 +461,7 @@ if (nets.maxPerSegment > Math.max(...TUNING.pursuit.net.perSegment)) fail(`polic
 if (!nets.tells || !nets.escaped) fail(`police net never played out (${JSON.stringify(nets)})`);
 if (!carriers.drops) fail('car carrier never dropped a car');
 if (Object.keys(landmarks).length < 4) fail(`landmarks: only ${Object.keys(landmarks).join(', ')} passed in ${seeds} seeds`);
-if (!forks.taken || !forks.stayed) fail(`forks: taken ${forks.taken}, stayed ${forks.stayed} in ${seeds} seeds`);
+if (TUNING.forks.at.length && (!forks.taken || !forks.stayed)) fail(`forks: taken ${forks.taken}, stayed ${forks.stayed} in ${seeds} seeds`);
 if (!p2.choppersShaken) fail(`no police chopper was ever shaken in ${seeds} seeds`);
 if (!p2.policeCrash) fail(`no police crash in ${seeds} seeds`);
 if (p2.crashOffscreen > p2.policeCrash * 0.1) fail(`${p2.crashOffscreen}/${p2.policeCrash} police crashes outside the frame`);
