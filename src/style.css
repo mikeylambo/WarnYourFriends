@@ -674,7 +674,8 @@ html.attract #ratings { display: none; }
 html.touch #chyron { right: 128px; }
 #chyron .place { display: none; }
 #chyron .kicker { background: var(--c-red); color: var(--c-text); padding: 0 calc(var(--d-chy) * 0.4) 0 calc(var(--d-chy) * 0.46); font: italic 900 calc(var(--d-chy) * 0.44)/1 var(--f-head); letter-spacing: 0.02em; clip-path: polygon(calc(var(--d-chy) * 0.24) 0, 100% 0, 100% 100%, 0 100%); }
-#chyron .kicker.breaking { background: var(--c-paper); color: var(--c-red); }
+/* BREAKING is red (Mike, 2026-11-18: on paper it vanished into the bar). */
+#chyron .kicker.breaking { background: var(--c-red); color: var(--c-text); }
 #chyron .kicker.busted { background: var(--c-red); color: var(--c-text); }
 #chyron .kicker.signoff { background: var(--c-alt); color: var(--c-text); }
 #chyron .text { flex: 1; background: var(--c-paper); color: var(--c-on-paper); font: 900 calc(var(--d-chy) * 0.44)/var(--d-chy) var(--f-head); letter-spacing: -0.01em; clip-path: polygon(0 0, 100% 0, calc(100% - calc(var(--d-chy) * 0.24)) 100%, 0 100%); }
@@ -1022,3 +1023,15 @@ html.replay #rampslam, html.title #rampslam { display: none; }
 #recap .meeting .lock b { display: block; font-size: 14px; }
 #recap .meeting .lock small { display: block; font-size: 12px; opacity: 0.85; }
 #recap .meeting .lock i { display: block; height: 3px; margin-top: 4px; background: linear-gradient(90deg, currentColor var(--p), rgba(127, 127, 127, 0.3) var(--p)); }
+
+/* Settings tabs (2026-11-18): the first four choices are a tab row; the rest are the open tab's settings. */
+#ui .wyf-tabbed .slu-choices { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; }
+#ui .wyf-tabbed .slu-choices > .slu-choice:not(.wyf-tab) { grid-column: 1 / -1; }
+#ui .wyf-tabbed .slu-choice[hidden] { display: none; }
+#ui .wyf-tabbed .slu-choice.wyf-tab { justify-content: center; text-align: center; clip-path: none; margin: 0 0 8px; padding: 8px 4px; background: var(--c-panel); transform: none; min-width: 0; }
+#ui .wyf-tabbed .slu-choice.wyf-tab .slu-choice-label { font-size: 14px; color: var(--c-mute); overflow: hidden; text-overflow: ellipsis; }
+/* The open tab is red; focus on a tab is an outline, so it never looks like a second open tab. */
+#ui .wyf-tabbed .slu-choice.wyf-tab.on { background: var(--c-red); }
+#ui .wyf-tabbed .slu-choice.wyf-tab.on .slu-choice-label { color: var(--c-text); }
+#ui .wyf-tabbed .slu-choice.wyf-tab[data-focused="true"], #ui .wyf-tabbed .slu-choice.wyf-tab:focus-visible { outline: 2px solid var(--c-text); outline-offset: -2px; }
+#ui .wyf-tabbed .slu-choice.wyf-tab:not(.on)[data-focused="true"], #ui .wyf-tabbed .slu-choice.wyf-tab:not(.on):focus-visible { background: var(--c-panel); }

@@ -30,7 +30,7 @@ import coverUrl from './assets/title-cover.webp';
 import { UPGRADE_ART } from './upgradeArt';
 import { PlayLog, appendLog, exportLog, type PlayEntry } from './playlog';
 import { readFlags } from './debug';
-import { dailySeed, dayKey, encodeInputs, type BoardMode, type Submission } from './leaderboard/verify';
+import { encodeInputs, type Submission } from './leaderboard/verify';
 import { mountBoard, prefetchSeed, takeSeed } from './leaderboardClient';
 import { Onboarding, type PromptId } from './onboarding';
 import { AWARDS, loadProfile, outfitUnlocked, record, rewardLine, saveProfile, unlockEdition, upgradePool, type Award } from './awards';
@@ -362,7 +362,7 @@ let lastEntry: PlayEntry | null = null;
 let simOpts: { seed: number; segment: number; upgrades: UpgradeId[]; levels: Partial<Record<AbilityId, number>>; growth: boolean; guided?: boolean; edition?: number } = { seed: 0, segment: 0, upgrades: [], levels: {}, growth: false };
 const inputLog: SimInput[] = [];
 /** Leaderboard: this broadcast's (or run's) seed, each segment's inputs and the meeting buys, for the server to re-play. */
-let lb: { mode: BoardMode; seed: number; segments: string[]; buys: UpgradeId[][]; pool: UpgradeId[]; guided?: boolean; edition?: number } = { mode: 'broadcast', seed: 0, segments: [], buys: [], pool: [] };
+let lb: { mode: 'run' | 'broadcast'; seed: number; segments: string[]; buys: UpgradeId[][]; pool: UpgradeId[]; guided?: boolean; edition?: number } = { mode: 'broadcast', seed: 0, segments: [], buys: [], pool: [] };
 /** Why this browser's scores can't go on the board (a setting that changes the sim), or null. */
 const lbBlocked = () =>
   flags.bot || flags.seg !== null || flags.ability || flags.heat !== null || flags.nodecay || flags.god || (flags.size !== null && flags.size !== 'growth') || tuningChanged()
@@ -1733,15 +1733,13 @@ function start() {
 function beginBroadcast(mode = 'broadcast') {
   attract = false;
   document.documentElement.classList.remove('attract');
-  // The Daily Broadcast: everyone gets the same road today (UTC), five segments at the base edition, its own board.
-  const daily = mode === 'daily';
-  const seed = daily ? dailySeed(dayKey(Date.now())) : (nextSeed ?? takeSeed() ?? (Math.random() * 1e9) | 0);
+  const seed = nextSeed ?? takeSeed() ?? (Math.random() * 1e9) | 0;
   nextSeed = null;
   // The very first broadcast a player goes live in is the guided one (TUNING.guided): its first segment opens calm.
-  const guided = !daily && !flags.bot && !flags.autostart && !briefingSeen();
+  const guided = !flags.bot && !flags.autostart && !briefingSeen();
   const edition = mode === 'run' ? profile.chosenEdition : 0;
-  lb = { mode: daily ? 'daily' : mode === 'run' ? 'run' : 'broadcast', seed, segments: [], buys: [], pool: upgradePool(profile), ...(guided ? { guided } : {}), ...(edition ? { edition } : {}) };
-  if (mode === 'run' || daily) {
+  lb = { mode: mode === 'run' ? 'run' : 'broadcast', seed, segments: [], buys: [], pool: upgradePool(profile), ...(guided ? { guided } : {}), ...(edition ? { edition } : {}) };
+  if (mode === 'run') {
     run = new RunState(seed, lb.pool, edition); // Awards unlock the rest of the pool
     newRun(run.segmentSeed(), 0, [], {}, guided);
   } else {
@@ -1829,7 +1827,7 @@ window.addEventListener('keydown', (e) => {
   if (e.code === 'KeyC' && playing) setAngle(director.current + 1, director.side); // dev: next angle (held until C comes back to Chase High)
   if (e.code === 'KeyR' && playing) {
     nextSeed = flags.seedFixed ? flags.seed : null;
-    beginBroadcast(run ? (lb.mode === 'daily' ? 'daily' : 'run') : 'broadcast');
+    beginBroadcast(run ? 'run' : 'broadcast');
   }
 });
 
@@ -1841,7 +1839,6 @@ const wyfAssembly = (shell: SLUWebShell<CoreSettings>): FrameAssembly => {
     menuFlow: [],
     modes: [
       { id: 'run', label: 'Full Broadcast', description: 'Five segments. Spend your ratings between them.', leaderboardKey: 'runScore' },
-      { id: 'daily', label: 'Daily Broadcast', description: "Today's road, the same for everyone. Its own board.", leaderboardKey: 'runScore' },
       { id: 'broadcast', label: 'Single Segment', description: 'Keep the ratings up. Take the exit before the chopper runs out of fuel.', leaderboardKey: 'banked' },
     ],
     statKeys: ['broadcasts', 'signOffs', 'bestBanked', 'bestPeak'],
@@ -1892,6 +1889,30 @@ resize();
 
 enterAttract();
 prefetchSeed(); // the first broadcast's road, ready before Go Live
+type SettingsTab = 'game' | 'controls' | 'display' | 'audio';
+type UIChoiceLite = { id: string; label: string; description?: string };
+const SETTINGS_TABS: [SettingsTab, string][] = [['game', 'Game'], ['controls', 'Controls'], ['display', 'Display'], ['audio', 'Audio']];
+let settingsTab: SettingsTab = 'game';
+/** The shell's own settings, by tab (they always render last in its list; the others are hidden and skipped). */
+const SHELL_SETTING_TAB: Record<string, SettingsTab> = { 'master-down': 'audio', 'master-up': 'audio', vibration: 'audio', 'reduced-motion': 'display', 'screen-shake': 'display', fullscreen: 'display' };
+function settingsTabsDom(root: HTMLElement) {
+  const screen = root.querySelector<HTMLElement>('[data-screen-id="settings"]');
+  if (!screen) return;
+  screen.classList.add('wyf-tabbed');
+  for (const b of screen.querySelectorAll<HTMLButtonElement>('[data-choice-id]')) {
+    const id = b.dataset.choiceId ?? '';
+    if (id.startsWith('wyf-tab-')) {
+      b.classList.add('wyf-tab');
+      b.classList.toggle('on', id === `wyf-tab-${settingsTab}`);
+    }
+    const tab = SHELL_SETTING_TAB[id];
+    if (tab && tab !== settingsTab) {
+      b.hidden = true;
+      b.disabled = true; // out of gamepad / arrow-key focus too
+    }
+  }
+}
+new MutationObserver(() => settingsTabsDom($('ui'))).observe($('ui'), { childList: true, subtree: true });
 app = await createGameApp({
   gameId: 'warn-your-friends',
   gameName: 'Giant at Large',
@@ -1904,25 +1925,37 @@ app = await createGameApp({
   pwa: false,
   flow: {
     settingsExtension: {
-      choices: () => [
-        { id: 'wyf-howto', label: 'How to Play' },
-        { id: 'wyf-controls', label: 'Controls', description: 'Rebind the keyboard' },
-        { id: 'wyf-tips', label: 'Replay Tips', description: 'Show the in-game control tips again' },
-        // Playtest (Mike, 2026-11-17: "missed copying the run data"): every broadcast's numbers, any time. Hide before release.
-        { id: 'wyf-playdata', label: 'Copy Play Data', description: 'Copies every broadcast you have played (or saves a file)' },
-        { id: 'wyf-brake', label: `Brake: ${settings.brakeToggle ? 'Toggle' : 'Hold'}`, description: 'Toggle: press once to brake, again to run' },
-        { id: 'wyf-hudsize', label: `HUD Size: ${Math.round(settings.hudSize * 100)}%` },
-        { id: 'wyf-auto', label: `Auto Rampage: ${onOff(settings.autoRampage)}`, description: 'Rampage fires by itself the moment the meter is full' },
-        { id: 'wyf-speed', label: `Game Speed: ${Math.round(settings.gameSpeed * 100)}%`, description: 'Slower gives more time to react. Below 100% scores stay off the leaderboard' },
-        { id: 'wyf-cuts', label: `Camera Cuts: ${onOff(settings.cameraCuts)}`, description: 'Off holds the Chase High shot' },
-        { id: 'wyf-livetime', label: `LIVE TIME: ${onOff(settings.liveTime)}`, description: 'Lighting follows your clock; off is always night' },
-        { id: 'wyf-flashes', label: `Reduce Flashes: ${onOff(settings.reduceFlashes)}` },
-        { id: 'wyf-bloom', label: `Bloom: ${onOff(settings.bloom)}`, description: 'Glow on lights, sparks and Rampage. Off is lighter on phones.' },
-        { id: 'wyf-colors', label: `HUD Colours: ${settings.hudColors === 'network' ? 'Network' : 'WYF 6'}`, description: 'The station\'s purple and cream, or network red, blue and white' },
-        // Dev only: the overlay's switch shows with ?debug (or for a player who already turned it on).
-        ...(flags.debug !== null || settings.debugChosen ? [{ id: 'wyf-debug', label: `Debug Overlay: ${onOff(settings.debug)}` }] : []),
-      ],
+      // Tabbed (Mike, 2026-11-18): a tab row, then only that tab's settings. The shell's own settings (volume,
+      // motion, shake, vibration, fullscreen) are filed under their tabs by settingsTabsDom.
+      choices: () => {
+        const all: (UIChoiceLite & { tab: SettingsTab })[] = [
+          { tab: 'game', id: 'wyf-auto', label: `Auto Rampage: ${onOff(settings.autoRampage)}`, description: 'Rampage fires by itself the moment the meter is full' },
+          { tab: 'game', id: 'wyf-speed', label: `Game Speed: ${Math.round(settings.gameSpeed * 100)}%`, description: 'Slower gives more time to react. Below 100% scores stay off the leaderboard' },
+          { tab: 'game', id: 'wyf-howto', label: 'How to Play' },
+          { tab: 'game', id: 'wyf-tips', label: 'Replay Tips', description: 'Show the in-game control tips again' },
+          // Playtest (Mike, 2026-11-17: "missed copying the run data"): every broadcast's numbers, any time. Hide before release.
+          { tab: 'game', id: 'wyf-playdata', label: 'Copy Play Data', description: 'Copies every broadcast you have played (or saves a file)' },
+          { tab: 'controls', id: 'wyf-controls', label: 'Rebind Keys' },
+          { tab: 'controls', id: 'wyf-brake', label: `Brake: ${settings.brakeToggle ? 'Toggle' : 'Hold'}`, description: 'Toggle: press once to brake, again to run' },
+          { tab: 'display', id: 'wyf-hudsize', label: `HUD Size: ${Math.round(settings.hudSize * 100)}%` },
+          { tab: 'display', id: 'wyf-colors', label: `HUD Colours: ${settings.hudColors === 'network' ? 'Network' : 'WYF 6'}`, description: 'The station\'s purple and cream, or network red, blue and white' },
+          { tab: 'display', id: 'wyf-cuts', label: `Camera Cuts: ${onOff(settings.cameraCuts)}`, description: 'Off holds the Chase High shot' },
+          { tab: 'display', id: 'wyf-livetime', label: `LIVE TIME: ${onOff(settings.liveTime)}`, description: 'Lighting follows your clock; off is always night' },
+          { tab: 'display', id: 'wyf-bloom', label: `Bloom: ${onOff(settings.bloom)}`, description: 'Glow on lights, sparks and Rampage. Off is lighter on phones.' },
+          { tab: 'display', id: 'wyf-flashes', label: `Reduce Flashes: ${onOff(settings.reduceFlashes)}` },
+          // Dev only: the overlay's switch shows with ?debug (or for a player who already turned it on).
+          ...(flags.debug !== null || settings.debugChosen ? [{ tab: 'display' as const, id: 'wyf-debug', label: `Debug Overlay: ${onOff(settings.debug)}` }] : []),
+        ];
+        return [
+          ...SETTINGS_TABS.map(([t, label]) => ({ id: `wyf-tab-${t}`, label })),
+          ...all.filter((c) => c.tab === settingsTab).map(({ tab: _t, ...c }) => c),
+        ];
+      },
       handle: async (id) => {
+        if (id.startsWith('wyf-tab-')) {
+          settingsTab = id.slice(8) as SettingsTab;
+          return true; // the shell redraws Settings on the new tab
+        }
         if (id === 'wyf-howto') {
           await openBriefing(false);
           return true; // the shell shows Settings again
@@ -1983,13 +2016,13 @@ function refreshMainMenu() {
   app!.ui.updateScreen('main-menu', {
     title: 'Giant\nat Large',
     choices: [
-      // One mode on the menu (Mike, 2026-11-17: Single Segment adds no challenge; maybe a daily mode later).
+      // One mode on the menu (Mike, 2026-11-17: Single Segment adds no challenge; 2026-11-18: no daily mode).
       // 'broadcast' (one segment) stays reachable by ?mode=broadcast for tests and evidence tools.
-      { id: 'run', label: 'Go Live', description: profile.chosenEdition ? `${E.name}: five segments, score ×${E.score}` : 'Five segments, upgrades between them' },
+      // No subcopy (Mike, 2026-11-18): the labels say it.
+      { id: 'run', label: profile.chosenEdition ? `Go Live · ${E.name}` : 'Go Live' },
       // Editions (2026-11-17): shown once a full run has unlocked the next one.
-      ...(profile.edition > 0 ? [{ id: 'edition', label: `Edition: ${E.name}`, description: profile.chosenEdition ? `Harder, score ×${E.score}. Win a full run to unlock the next` : 'Win a full run to unlock the next edition' }] : []),
-      { id: 'daily', label: 'Daily Broadcast', description: `Today's road (${dayKey(Date.now())} UTC), the same for everyone. Its own board` },
-      { id: 'awards', label: 'Awards', description: 'Milestones, unlocks and outfits' },
+      ...(profile.edition > 0 ? [{ id: 'edition', label: `Edition: ${E.name}` }] : []),
+      { id: 'awards', label: 'Awards' },
       { id: 'howto', label: 'How to Play' },
       { id: 'settings', label: 'Settings' },
     ],
@@ -2008,7 +2041,7 @@ refreshMainMenu();
       refreshMainMenu();
       app!.ui.show('main-menu');
     }
-    else if (screen === 'main-menu' && (choice === 'run' || choice === 'daily' || choice === 'broadcast')) flowActivate('mode-select', choice);
+    else if (screen === 'main-menu' && (choice === 'run' || choice === 'broadcast')) flowActivate('mode-select', choice);
     else flowActivate(screen, choice);
   };
 }

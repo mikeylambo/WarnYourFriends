@@ -946,8 +946,6 @@ export const TUNING = {
     perMinuteAll: 120,
     /** A road the server hands out stays rankable for this player this long (s): Run Again on it counts, a road picked by hand doesn't. */
     ticketTtl: 6 * 3600,
-    /** A day's Daily Broadcast board is kept a week (seconds), then expires: the day is over and nothing reads it. */
-    dailyTtl: 8 * 86400,
     /** Roads handed out per player per minute. */
     ticketsPerMinute: 10,
     /** Never on the board (rule 10: never mean). Matched inside the name's letters. */

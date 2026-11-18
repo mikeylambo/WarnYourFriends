@@ -1,5 +1,5 @@
 import { TUNING } from './tuning';
-import { cleanName, dayKey, type BoardMode, type Submission } from './leaderboard/verify';
+import { cleanName, type BoardMode, type Submission } from './leaderboard/verify';
 
 /**
  * The recap's leaderboard panel. Posts the run's inputs to /api/leaderboard (the server re-plays
@@ -81,7 +81,7 @@ function rows(top: Row[], you: { rank: number; score: number } | null): string {
  * With a saved name it posts straight away; the first time, it asks for one.
  */
 export function mountBoard(el: HTMLElement, mode: BoardMode, sub: Submission | null, why?: string) {
-  const title = mode === 'run' ? 'Full Broadcast board' : mode === 'daily' ? `Daily Broadcast board · ${dayKey(Date.now())}` : 'Single Segment board';
+  const title = mode === 'run' ? 'Full Broadcast board' : 'Single Segment board';
   const head = (right = '') => `<div class="hd">${title}<span>${right}</span></div>`;
   const player = playerId();
   let posted = false;
@@ -145,7 +145,7 @@ export function mountBoard(el: HTMLElement, mode: BoardMode, sub: Submission | n
   el.hidden = false;
   void (async () => {
     try {
-      const r = await fetch(`${API}?mode=${mode}&player=${player}${mode === 'daily' ? `&day=${dayKey(Date.now())}` : ''}`);
+      const r = await fetch(`${API}?mode=${mode}&player=${player}`);
       if (!r.ok) throw new Error(String(r.status));
       const body = (await r.json()) as { top: Row[]; you: { rank: number; score: number } | null };
       const saved = cleanName(store(NAME_KEY));

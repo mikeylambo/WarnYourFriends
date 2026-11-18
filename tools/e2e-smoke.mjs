@@ -342,6 +342,22 @@ try {
     if (end.live || end.state === 'live') fail(`segment still live after 170s (${end.state})`);
     else ok(`segment ended: ${end.state}${end.reason ? ' (' + end.reason + ')' : ''}, peak Ratings ${end.peak.toFixed(0)}, banked ${Math.round(end.banked)}`);
     if (mid.score.replace(/\D/g, '') !== String(Math.floor(mid.show.banked))) fail(`HUD score ${mid.score} != banked ${Math.floor(mid.show.banked)}`);
+    // Regressions (2026-11-18): the Rampage frame never shows over the recap (it was re-set every frame while he was
+    // still in Rampage), and BREAKING on the chyron is red, not paper.
+    const rc = await page.evaluate(async () => {
+      document.documentElement.classList.add('rampage');
+      await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+      const k = document.querySelector('#chyron .kicker');
+      const had = k.classList.contains('breaking');
+      k.classList.remove('breaking');
+      const plain = getComputedStyle(k).backgroundColor;
+      k.classList.add('breaking');
+      const breaking = getComputedStyle(k).backgroundColor;
+      if (!had) k.classList.remove('breaking');
+      return { rampage: document.documentElement.classList.contains('rampage'), plain, breaking };
+    });
+    if (rc.rampage) fail('the Rampage frame shows over the recap');
+    if (rc.breaking !== rc.plain) fail(`BREAKING kicker is ${rc.breaking}, not the kicker red ${rc.plain}`);
     if (!recap?.title) fail('no recap after the broadcast ended');
     else ok(`recap: "${recap.title}" · ${recap.outcome}`);
     // Playtest export: this broadcast is in the log with the sim's own score, and the button exports JSON.
@@ -388,6 +404,8 @@ try {
     await page.screenshot({ path: 'test-results/e2e-meeting.png' });
     // One press opens the meeting; it must not also pick a pitch.
     if (!pitches) fail('run: one Enter opened the meeting and chose on it (double activation)');
+    // Regression (2026-11-18): no quotes on the cards; the effect is the copy.
+    if (await page.evaluate(() => !!document.querySelector('#recap .pitch q, #recap .pitch .said'))) fail('meeting cards show a quote');
     if (!pitches || pitches.length !== 3) fail(`run: meeting should pitch 3 upgrades (${JSON.stringify(pitches)})`);
     else ok(`run: Producer's Meeting pitches ${pitches.map((p) => p.id + (p.disabled ? ' (over budget)' : '')).join(', ')}`);
     const pick = pitches?.find((p) => !p.disabled)?.id;
@@ -426,7 +444,19 @@ try {
     await page.waitForSelector('#ui [data-screen-id="pause"]', { timeout: 3000 }).catch(() => {});
     await page.click('[data-choice-id="settings"]');
     await page.waitForTimeout(200);
-    const labels = await page.evaluate(() => [...document.querySelectorAll('#ui .slu-choice-label')].map((e) => e.textContent));
+    // Settings are tabbed (2026-11-18): Game opens; Display holds the camera and look; Audio the shell's volume.
+    const visibleIds = () => page.evaluate(() => [...document.querySelectorAll('#ui [data-choice-id]')].filter((e) => !e.hidden).map((e) => e.dataset.choiceId));
+    const tabs0 = await visibleIds();
+    if (tabs0.slice(0, 4).join('|') !== 'wyf-tab-game|wyf-tab-controls|wyf-tab-display|wyf-tab-audio') fail(`settings tab row missing (${tabs0.join('|')})`);
+    if (tabs0.includes('master-down') || tabs0.includes('wyf-cuts')) fail(`Game tab shows other tabs' settings (${tabs0.join('|')})`);
+    await page.click('[data-choice-id="wyf-tab-audio"]');
+    await page.waitForTimeout(200);
+    const audioIds = await visibleIds();
+    if (!audioIds.includes('master-down') || audioIds.includes('wyf-auto')) fail(`Audio tab (${audioIds.join('|')})`);
+    else ok('settings tabs: Game · Controls · Display · Audio');
+    await page.click('[data-choice-id="wyf-tab-display"]');
+    await page.waitForTimeout(200);
+    const labels = await page.evaluate(() => [...document.querySelectorAll('#ui .slu-choice-label')].filter((e) => !e.closest('[hidden]')).map((e) => e.textContent));
     if (!labels.includes('Camera Cuts: Off') || !labels.includes('LIVE TIME: Off')) fail(`shell settings missing the game's settings (${labels.join(' | ')})`);
     else ok(`shell settings: ${labels.slice(0, 4).join(' · ')}`);
     await page.click('[data-back]');
@@ -441,7 +471,9 @@ try {
       hud: !!document.getElementById('hud')?.checkVisibility?.(),
       asks: !!document.getElementById('asks')?.checkVisibility?.(),
       choices: [...document.querySelectorAll('#ui [data-choice-id]')].map((e) => e.dataset.choiceId).join('|'),
+      desc: document.querySelectorAll('#ui [data-screen-id="main-menu"] .slu-choice-desc').length,
     }));
+    if (m.desc) fail(`main menu items have subcopy (${m.desc})`); // Mike, 2026-11-18: labels only
     // How to Play from the menu survives the attract broadcast behind it ending and rolling over.
     await page.click('[data-choice-id="howto"]');
     await page.waitForSelector('#recap .briefing', { timeout: 3000 }).catch(() => {});
