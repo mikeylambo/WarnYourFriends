@@ -195,6 +195,9 @@ export class Track {
         m.s = clamp(mv.meet - mv.v * t, mv.min + m.hl, mv.max - m.hl);
       }
       m.s = clamp(m.s + mv.v * dt, mv.min + m.hl, mv.max - m.hl);
+      // Never off the road: a merge past its chunk can't take its lane out from under it.
+      const w = this.widthAt(m.s);
+      m.d = clamp(m.d, Math.min(m.hw + 0.2, w / 2), Math.max(w / 2, w - m.hw - 0.2));
     }
   }
 

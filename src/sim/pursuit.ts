@@ -246,6 +246,15 @@ export class Pursuit {
       else this.carrierAt = sim.time + 3;
     }
     for (const u of this.units) if (u.alive) this.update(u, dt);
+    // On the road, always (Mike, 2026-11-18: vehicles off the side of a bridge): a ground unit whose lane has ended
+    // (a merge onto a bridge, into a tunnel) takes the last lane there, and none is ever past the road's edge.
+    for (const u of this.units) {
+      if (!u.alive || u.unit === 'chopper') continue;
+      const L = sim.track.lanesAt(u.s);
+      if (u.lane >= L) u.lane = L - 1;
+      const w = sim.track.widthAt(u.s);
+      u.d = clamp(u.d, Math.min(u.hw + 0.2, w / 2), Math.max(w / 2, w - u.hw - 0.2));
+    }
     // Tidy: units well behind are gone.
     for (let i = this.units.length - 1; i >= 0; i--) {
       const u = this.units[i];
@@ -862,7 +871,11 @@ export class Pursuit {
       for (let lane = 0; lane < L; lane++) {
         if (lane === gap) continue;
         const left = lane < gap;
-        const park = left ? -3.2 : w + 3.2;
+        // Appears in its lane, far ahead and off camera (it used to slide in from parked on the shoulder: over the
+        // water on a bridge, Mike 2026-11-18). `left` and `w` stay for the old spawn spot's side.
+        void left;
+        void w;
+        const park = track.laneCenter(lane);
         const u = this.make('cruiser', 'roadblock', s + (lane - gap) * 0.6, park, lane);
         u.rampOnly = true; // Rampage timing: a roadblock only breaks in Rampage (or take the gap)
         u.group = grp;

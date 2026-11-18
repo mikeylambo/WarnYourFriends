@@ -1501,6 +1501,8 @@ var Track = class {
         m.s = clamp(mv.meet - mv.v * t, mv.min + m.hl, mv.max - m.hl);
       }
       m.s = clamp(m.s + mv.v * dt, mv.min + m.hl, mv.max - m.hl);
+      const w = this.widthAt(m.s);
+      m.d = clamp(m.d, Math.min(m.hw + 0.2, w / 2), Math.max(w / 2, w - m.hw - 0.2));
     }
   }
   prune(s) {
@@ -2509,6 +2511,13 @@ var Pursuit = class {
       else this.carrierAt = sim.time + 3;
     }
     for (const u of this.units) if (u.alive) this.update(u, dt);
+    for (const u of this.units) {
+      if (!u.alive || u.unit === "chopper") continue;
+      const L = sim.track.lanesAt(u.s);
+      if (u.lane >= L) u.lane = L - 1;
+      const w = sim.track.widthAt(u.s);
+      u.d = clamp(u.d, Math.min(u.hw + 0.2, w / 2), Math.max(w / 2, w - u.hw - 0.2));
+    }
     for (let i = this.units.length - 1; i >= 0; i--) {
       const u = this.units[i];
       const behind = sim.giant.s - u.s;
@@ -3054,7 +3063,9 @@ var Pursuit = class {
       for (let lane = 0; lane < L; lane++) {
         if (lane === gap) continue;
         const left = lane < gap;
-        const park = left ? -3.2 : w + 3.2;
+        void left;
+        void w;
+        const park = track.laneCenter(lane);
         const u = this.make("cruiser", "roadblock", s + (lane - gap) * 0.6, park, lane);
         u.rampOnly = true;
         u.group = grp;
