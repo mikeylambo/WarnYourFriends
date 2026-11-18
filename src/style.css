@@ -694,7 +694,6 @@ html.touch #ticker { right: 128px; }
 #gears i::after, #gears[data-tier='1'] i::after, #gears[data-tier='2'] i::after { background: var(--c-gear); }
 #gears i.filling::after { background: rgba(255, 255, 255, 0.55) !important; }
 #gears .nm { margin-left: 8px; }
-#gears .x { margin-left: 10px; font: 900 22px/1 var(--f-num); color: var(--c-accent); }
 #chain.banked .stunt { color: var(--c-accent); }
 #chain.dropped .stunt { color: #ff6b6b; }
 #chain.dropped .pts { opacity: 0.45; text-decoration: line-through; }

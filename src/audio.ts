@@ -75,7 +75,7 @@ export class Audio {
   }
   /** Stingers duck the effects for a moment so the news cue cuts through. */
   private duck(depth: number, hold: number) {
-    if (!this.ctx) return;
+    if (!this.ctx || this.hushed) return; // never un-hush: the duck's recovery would bring the bus back up
     const t = this.ctx.currentTime;
     const g = this.buses.sfx.gain;
     g.cancelScheduledValues(t);
@@ -168,6 +168,9 @@ export class Audio {
     // Hushed (the cover art is up): every game bus is silent, the theme bed and the station's voice too (Mike, 2026-11-17:
     // nothing plays behind the main menu until the game starts or the attract broadcast shows).
     const on = this.hushed ? 0 : 1;
+    // A duck's scheduled recovery must not override a mute or hush set after it (review #85).
+    const now = this.ctx.currentTime;
+    for (const b of [this.buses.music, this.buses.sfx, this.buses.voice]) b.gain.cancelScheduledValues(now);
     this.buses.music.gain.setTargetAtTime(0.55 * this.vol.music * on, this.ctx.currentTime, 0.12);
     this.buses.sfx.gain.setTargetAtTime(this.vol.sfx * on, this.ctx.currentTime, 0.12);
     this.buses.voice.gain.setTargetAtTime(on, this.ctx.currentTime, 0.12);

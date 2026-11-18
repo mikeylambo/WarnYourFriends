@@ -16,6 +16,9 @@ const STORE = 'wyf.prompts.v2';
 /** Builds the prompt text with the current device's buttons (HTML: <kbd> for keys). */
 export type PromptText = (id: PromptId) => string;
 
+/** Prompts about a threat or a deadline happening now. */
+const URGENT = new Set<PromptId>(['boxed', 'caught', 'exit', 'ram']);
+
 export class Onboarding {
   private seen: Set<PromptId>;
   private showing: { id: PromptId; until: number } | null = null;
@@ -50,7 +53,15 @@ export class Onboarding {
   /** Ask for a prompt; it shows if it's new and the screen is free (else it waits a moment for its turn). */
   private want(id: PromptId) {
     if (this.seen.has(id) || this.showing?.id === id) return;
-    if (!this.queued) this.queued = id;
+    // Warnings that matter right now jump the queue and cut a tip short (review #95: they waited behind tips).
+    if (URGENT.has(id)) {
+      if (this.queued && URGENT.has(this.queued)) return;
+      this.queued = id;
+      if (this.showing && !URGENT.has(this.showing.id)) {
+        this.hide();
+        this.lastAt = -Infinity;
+      }
+    } else if (!this.queued) this.queued = id;
   }
 
   /** Sim events that start a lesson. */

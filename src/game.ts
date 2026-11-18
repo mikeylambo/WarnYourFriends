@@ -111,7 +111,6 @@ const STUNT_LABEL: Record<string, string> = { rival: 'RIVAL NEWS VAN', medium: '
 let chainResultT = 0;
 const gearPips = [...gearsEl.querySelectorAll('i')] as HTMLElement[];
 const gearName = gearsEl.querySelector('.nm') as HTMLElement;
-const gearMultEl = gearsEl.querySelector('.x') as HTMLElement;
 /** A shockwave waits for the first footfall after a gear-up (it lands with his foot). */
 let gearShockPending = false;
 const tierName = tierbar.querySelector('.name') as HTMLElement;
@@ -1930,16 +1929,16 @@ function frame(now: number) {
   document.documentElement.classList.toggle('touch', input.device === 'touch');
 
   let frozen = false;
-  if (started && !paused && !flags.stepMode) {
+  if (started && !paused && !flags.stepMode && hitstop > 0) {
+    // Hitstop runs on the wall clock (review #90: it was counted in sim ticks, so a slower Game Speed stretched every freeze).
+    // Presses during it stay latched and land on the first tick after.
+    hitstop = Math.max(0, hitstop - realDt * 60 * flags.timescale);
+    frozen = true;
+  } else if (started && !paused && !flags.stepMode) {
     acc += realDt * flags.timescale * replayRate * settings.gameSpeed;
     let steps = 0;
     while (acc >= SIM_DT && steps < 8) {
       acc -= SIM_DT;
-      if (hitstop > 0) {
-        hitstop--;
-        frozen = true;
-        continue;
-      }
       const human = input.sample(); // always drain edges, even while the bot drives
       let inp = replay ? replayInput() : bot ? bot.input() : human;
       // Lane input follows the screen: when travel points down (Head-On, or past halfway through
@@ -2383,7 +2382,6 @@ function updateHud(dt: number) {
     if (tick >= 0 && !replay) audio.gearTick(1 - g.rampT / TUNING.hud.rampWarn);
     rampTick = tick;
   }
-  gearMultEl.textContent = `×${TUNING.show.bankMult[g.tier]}`;
   heatStars.forEach((el, i) => el.classList.toggle('on', i < sh.heat));
   // The asks: at the top of a segment and when one lands, then out of the way (HUD triage, 2026-11-17).
   asksEl.classList.toggle('show', sim.live && sim.time < Math.max(asksUntil, TUNING.hud.asksIntro));

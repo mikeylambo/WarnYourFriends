@@ -40,13 +40,20 @@ export class Coverage {
     this.time = 0;
     this.coldUntil = TUNING.coverage.coldOpen;
     this.deskUntil = 0;
-    this.root.className = '';
+    this.setTierClass(-1);
+    this.tickerPool = []; // review #75: last broadcast's late-run texts must not open the next
     this.cold.hidden = false;
     this.cold.classList.remove('found');
     document.documentElement.classList.add('coldopen');
     this.desk.hidden = true;
     this.ticker.hidden = true;
     this.aired.clear();
+  }
+
+  /** Only the coverage tier class changes on the HUD root (review #76: className overwrote its other classes). */
+  private setTierClass(tier: number) {
+    for (let i = 0; i <= 5; i++) this.root.classList.remove(`cov${i}`);
+    if (tier >= 0) this.root.classList.add(`cov${tier}`);
   }
 
   /** Viewer texts that already ran on the ticker this broadcast. */
@@ -63,7 +70,15 @@ export class Coverage {
 
   private nextTicker() {
     const pool = BANK.texts.filter(([, t]) => (t as number) <= Math.max(1, this.tier)).map(([s]) => s as string);
-    if (!this.tickerPool.length) this.tickerPool = pool.slice().sort(() => Math.random() - 0.5);
+    if (!this.tickerPool.length) {
+      // Fisher–Yates (review #75: sort by a random comparator is biased). Cosmetic, so Math.random.
+      const p = pool.slice();
+      for (let i = p.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [p[i], p[j]] = [p[j], p[i]];
+      }
+      this.tickerPool = p;
+    }
     const a = this.tickerPool.pop() ?? pool[0];
     const b = this.tickerPool.pop() ?? pool[1];
     this.aired.add(a).add(b);
@@ -82,7 +97,7 @@ export class Coverage {
     if (ratingsTier !== this.tier) {
       const up = ratingsTier > this.tier;
       this.tier = ratingsTier;
-      this.root.className = `cov${ratingsTier}`;
+      this.setTierClass(ratingsTier);
       if (ratingsTier >= 1 && this.ticker.hidden) {
         this.ticker.hidden = false;
         this.nextTicker();
