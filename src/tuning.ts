@@ -1082,7 +1082,8 @@ export const TUNING = {
   /** Phase 0c look: night by default; LIVE TIME follows the local clock. */
   look: {
     /** Bloom (Settings; review #66): only the brightest things glow (lights, sparks, embers, lit windows at night). */
-    bloom: { strength: 0.55, radius: 0.35, threshold: 0.82 },
+    /** By look: daylight lifts the road and cars near white, so the day threshold sits above them (Mike, 2026-11-18: "entirely too much"). */
+    bloom: { radius: 0.35, night: { strength: 0.55, threshold: 0.82 }, dusk: { strength: 0.35, threshold: 0.9 }, day: { strength: 0.15, threshold: 0.97 } },
     /**
      * Adaptive resolution (phones): every 0.5s window under `lowFps` counts; `downAfter` in a row drops the pixel
      * ratio by `step` (not below `minRatio`); `upAfter` windows over `highFps` raise it again (not past the device's,

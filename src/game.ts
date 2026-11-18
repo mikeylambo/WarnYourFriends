@@ -80,7 +80,8 @@ function updateRampageFx(dt: number, now: number) {
     RIM.strength.value = rimBaseStrength + (hot - rimBaseStrength) * rampK;
   }
   RIM.color.value.copy(rimBaseColor).lerp(rimHot, rampK);
-  document.documentElement.classList.toggle('rampage', rampK > 0.5);
+  // Never over the recap or the meeting (he can still be in Rampage when the broadcast ends).
+  document.documentElement.classList.toggle('rampage', rampK > 0.5 && recapEl.hidden);
   document.documentElement.classList.toggle('reduceflashes', settings.reduceFlashes);
 }
 const debugEl = $('debug');
@@ -163,7 +164,7 @@ const res = { max: Math.min(window.devicePixelRatio, RES.maxRatio), ratio: Math.
 renderer.setPixelRatio(res.ratio);
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 // Optional bloom (review #66; Settings → Bloom): lights, sparks and embers glow. Built on first use.
-let composer: { c: EffectComposer; pass: RenderPass } | null = null;
+let composer: { c: EffectComposer; pass: RenderPass; bloom: UnrealBloomPass } | null = null;
 function draw(cam: THREE.Camera) {
   if (!settings.bloom) {
     renderer.render(scene, cam);
@@ -174,13 +175,18 @@ function draw(cam: THREE.Camera) {
     const pass = new RenderPass(scene, cam);
     c.addPass(pass);
     const B = TUNING.look.bloom;
-    c.addPass(new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), B.strength, B.radius, B.threshold));
+    const bloom = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), B.night.strength, B.radius, B.night.threshold);
+    c.addPass(bloom);
     c.addPass(new OutputPass());
     c.setPixelRatio(renderer.getPixelRatio());
     c.setSize(window.innerWidth, window.innerHeight);
-    composer = { c, pass };
+    composer = { c, pass, bloom };
   }
   composer.pass.camera = cam;
+  // Bloom by the look: in daylight the road and cars are bright enough that night's threshold makes everything glow.
+  const L = TUNING.look.bloom[lighting.mode];
+  composer.bloom.strength = L.strength;
+  composer.bloom.threshold = L.threshold;
   composer.c.render();
 }
 const scene = new THREE.Scene();
