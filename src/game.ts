@@ -13,6 +13,7 @@ import { Lighting, timeOfDayAt } from './render/lighting';
 import { CruiserView } from './render/cruisers';
 import { UnitViews } from './render/units';
 import { ViewerVideo } from './render/pip';
+import { Vfx } from './render/vfx';
 import { Coverage } from './broadcast/coverage';
 import { measureSilhouette } from './render/silhouette';
 import { Newsroom, compass, type Headline } from './broadcast/headlines';
@@ -252,6 +253,9 @@ scene.add(pinRing);
 const recapEl = $('recap');
 const coverage = new Coverage();
 const pip = new ViewerVideo($('pip'));
+const vfx = new Vfx();
+scene.add(vfx.group);
+vfx.reduceFlashes = settings.reduceFlashes;
 /** Run stats for the recap, counted from sim events. */
 const runStats = { heavy: 0, units: 0, crashes: 0, bestChain: 0, lost: 0, dodged: 0, nearMiss: 0, best: null as Headline | null, bestRatings: -1 };
 let news: Newsroom;
@@ -422,6 +426,7 @@ function newRun(seed: number, segment = 0, upgrades: UpgradeId[] = [], levels: P
   cruisers = new CruiserView(sim);
   cruisers.reduceFlashes = settings.reduceFlashes;
   units = new UnitViews(sim, highway);
+  vfx.reset();
   units.reduceFlashes = settings.reduceFlashes;
   news = new Newsroom(seed, sim.show.heat);
   propKinds.clear();
@@ -1038,6 +1043,14 @@ function present(e: SimEvent) {
       else highway.smash(e.propId, dirX, dirZ, e.speed, side);
       giant.onSmash(e.cls === 'heavy', side);
       audio.smash(e.cls, where(e.s, e.d));
+      {
+        // Smoke on a heavy, a little dust on a medium; sparks off metal (review #64).
+        const V = TUNING.vfx;
+        sim.track.posAt(e.s, e.d, pos);
+        const [n, size, life, alpha] = e.cls === 'heavy' ? V.heavySmoke : V.mediumDust;
+        if (e.cls === 'heavy' || e.cls === 'medium') vfx.puff(pos.x, 0.6, pos.z, n, e.cls === 'heavy' ? 0x8b857c : 0xa49987, size, life, alpha);
+        if (e.mat === 'metal') vfx.spark(pos.x, 1, pos.z, dirX, dirZ, e.cls === 'heavy' ? V.metalSparks : V.metalSparks / 2);
+      }
       hitstop = Math.max(hitstop, k.hitstop);
       rig.jolt(k.shake, e.cls === 'heavy' ? TUNING.camera.joltTime : 0.08);
       flash(k.flashFrames);
@@ -1053,6 +1066,7 @@ function present(e: SimEvent) {
       haptic(k.haptic, k.hapticStrength);
       sim.track.posAt(e.s, e.d, pos);
       highway.spawnDebris(pos.x, pos.z, -Math.cos(h), -Math.sin(h), 3, 6, [0xd9d2c4, 0xbdb6aa], [0.1, 0.3]);
+      vfx.spark(pos.x, 1.2, pos.z, -Math.cos(h), -Math.sin(h), TUNING.vfx.bounceSparks);
       break;
     }
     case 'wallBump': {
@@ -1287,6 +1301,16 @@ function present(e: SimEvent) {
       units.smash(e.id, Math.cos(h), Math.sin(h), e.speed, side);
       if (e.propSmashed) (e.propId >= 1_000_000 ? units : highway).smash(e.propId, Math.cos(h), Math.sin(h), e.speed * 0.6, side);
       audio.smash('heavy', where(e.s, e.d));
+      {
+        // The wreck: sparks off the bodywork, a cloud, and tyre marks where it braked (review #64).
+        const V = TUNING.vfx;
+        sim.track.posAt(e.s, e.d, pos);
+        const [n, size, life, alpha] = V.crashSmoke;
+        vfx.puff(pos.x, 0.7, pos.z, n, 0x77716a, size, life, alpha);
+        vfx.spark(pos.x, 0.9, pos.z, Math.cos(h), Math.sin(h), V.crashSparks);
+        sim.track.posAt(e.s - 4, e.d, pos);
+        vfx.skid(pos.x, pos.z, h, 7);
+      }
       if (!e.onAir) break; // behind the frame: it still wrecks, it just isn't the show
       hitstop = Math.max(hitstop, TUNING.impact.medium.hitstop);
       rig.jolt(TUNING.impact.medium.shake, 0.12);
@@ -1703,6 +1727,24 @@ function requestPause() {
 }
 input.onPadDisconnect = requestPause;
 window.addEventListener('blur', requestPause); // §20 focus loss auto-pauses
+
+// The graphics context can vanish mid-broadcast (a GPU reset, too many tabs, a phone backgrounding the browser).
+// Pause behind a station card and wait: three rebuilds its GPU state when the browser hands the context back.
+let contextLost = false;
+const standby = Object.assign(document.createElement('div'), { id: 'standby', hidden: true, innerHTML: '<div class="card"><b>PLEASE STAND BY</b><span>We are experiencing technical difficulties.</span><small>The picture will be right back.</small></div>' });
+document.body.appendChild(standby);
+canvas.addEventListener('webglcontextlost', (e) => {
+  e.preventDefault(); // without this the browser never restores it
+  contextLost = true;
+  standby.hidden = false;
+  requestPause();
+});
+canvas.addEventListener('webglcontextrestored', () => {
+  contextLost = false;
+  standby.hidden = true;
+  pausedDrawn = false;
+  resize();
+});
 document.addEventListener('visibilitychange', () => document.hidden && requestPause());
 
 function applyDebug() {
@@ -1842,7 +1884,7 @@ app = await createGameApp({
           settings.liveTime = !settings.liveTime;
           forcedLook = null;
           applyLook();
-        } else if (id === 'wyf-flashes') settings.reduceFlashes = lighting.reduceFlashes = cruisers.reduceFlashes = units.reduceFlashes = !settings.reduceFlashes;
+        } else if (id === 'wyf-flashes') settings.reduceFlashes = lighting.reduceFlashes = cruisers.reduceFlashes = units.reduceFlashes = vfx.reduceFlashes = !settings.reduceFlashes;
         else if (id === 'wyf-colors') {
           settings.hudColors = settings.hudColors === 'network' ? 'wyf' : 'network';
           applyHudColors();
@@ -2020,6 +2062,8 @@ function frame(now: number) {
       const side = gf.plantedNow === 0 ? -1 : 1;
       const kx = -Math.cos(t.travel) * 0.4 - Math.sin(t.travel) * side;
       const kz = -Math.sin(t.travel) * 0.4 + Math.cos(t.travel) * side;
+      const puffs = TUNING.vfx.stepDust[g.tier] ?? 0;
+      if (puffs) vfx.puff(f.x + kx * 0.6, 0.25, f.z + kz * 0.6, puffs, 0x8d7f6c, TUNING.vfx.stepDustSize * gScale, 0.6, 0.3, 0.5);
       if (kick) highway.spawnDebris(f.x, f.z, kx, kz, 2 + g.tier * 1.5, kick, [0x6e6152, 0x857664, 0x4a4038], [0.16, 0.34 + g.tier * 0.1], 0.4); // darker than the lit pool he runs in
       rig.jolt(TUNING.footfall.pulsePx, TUNING.footfall.pulseTime);
       audio.footfall(g.tier);
@@ -2047,6 +2091,7 @@ function frame(now: number) {
   highway.update(animDt, t.x, t.z, s, d);
   cruisers.update(animDt);
   units.update(animDt);
+  vfx.update(animDt);
   // Broadcast graphics run on wall-clock time (a slow frame must not stretch the cold open).
   coverage.update(paused ? 0 : (now - lastCoverage) / 1000, sim.show.tier, started);
   lastCoverage = now;
@@ -2133,14 +2178,14 @@ function frame(now: number) {
     poseCam.position.set(t.x + rx * 9 + Math.cos(t.travel) * 0.5, 2.0, t.z + rz * 9 + Math.sin(t.travel) * 0.5);
     poseCam.lookAt(t.x + Math.cos(t.travel) * 0.5, 1.5, t.z + Math.sin(t.travel) * 0.5);
     renderer.render(scene, poseCam);
-  } else if (paused && !attract && pausedDrawn) {
+  } else if (contextLost || (paused && !attract && pausedDrawn)) {
     // Paused: the last frame stays on the canvas; no 3D work until something changes.
   } else if (updateTitleShot(realDt, t)) renderer.render(scene, titleCam);
   else renderer.render(scene, rig.camera);
   pausedDrawn = paused && !attract;
   // The recap's picture: the replay's own frame just as the moment lands (before the viewer-video window draws).
   if (replay && !recapShot && moment && (replay.grab || replay.sim.time >= moment.t + TUNING.replay.shotAfter)) grabShot();
-  if (!paused || attract) pip.render(renderer, scene);
+  if ((!paused || attract) && !contextLost) pip.render(renderer, scene);
   updateHud(realDt);
   updateGlyphs();
   onboarding.update(sim, performance.now() / 1000, sim.live && started && !paused && !attract && !replay && !bot);

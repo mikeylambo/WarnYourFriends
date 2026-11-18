@@ -580,6 +580,19 @@ export const TUNING = {
   hud: { minScale: 0.5, maxScale: 1.3, asksIntro: 8, asksFlash: 3, rampWarn: 1.5 },
 
   /** Footfall presentation (v0.3). */
+  /**
+   * Impact effects (review #64/#65): pooled smoke/dust puffs, metal sparks and skid marks. Puffs stay soft and
+   * low so they never hide his next move (rule 2: readable from the chopper).
+   */
+  vfx: {
+    puffMax: 72, sparkMax: 160, skidMax: 12, skidLife: 6, skidAlpha: 0.55,
+    /** Heavy smash: puffs, size (m), life (s), alpha. */ heavySmoke: [5, 3.6, 1.4, 0.68] as number[],
+    /** Medium smash: a little dust. */ mediumDust: [3, 2.2, 0.9, 0.5] as number[],
+    /** Police crash: puffs and sparks. */ crashSmoke: [6, 4, 1.7, 0.72] as number[], crashSparks: 18,
+    /** Metal smashed, and a bounce off something he can't break. */ metalSparks: 12, bounceSparks: 8,
+    /** Stride / Rampage footfall dust puffs (per tier), size (m, scales with him). */ stepDust: [0, 1, 2] as number[], stepDustSize: 1.7,
+  },
+
   footfall: {
     /** 2px camera pulse on every plant. */
     pulsePx: 2,
