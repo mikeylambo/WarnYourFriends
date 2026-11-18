@@ -58,10 +58,19 @@ export function rimToonMap(map: THREE.Texture, side: THREE.Side = THREE.FrontSid
 }
 
 const cache = new Map<string, THREE.MeshToonMaterial>();
+const cached = new Set<THREE.Material>();
+
+/** Is this one of toon()'s shared materials (never dispose it)? */
+export function isToonCached(m: THREE.Material): boolean {
+  return cached.has(m);
+}
 export function toon(color: number, extra: THREE.MeshToonMaterialParameters = {}): THREE.MeshToonMaterial {
   const key = `${color}:${JSON.stringify(extra)}`;
   let m = cache.get(key);
-  if (!m) cache.set(key, (m = new THREE.MeshToonMaterial({ color, gradientMap: toonRamp(), ...extra })));
+  if (!m) {
+    cache.set(key, (m = new THREE.MeshToonMaterial({ color, gradientMap: toonRamp(), ...extra })));
+    cached.add(m);
+  }
   return m;
 }
 

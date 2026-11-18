@@ -6,13 +6,36 @@ import type { Segment } from '../sim/track';
 import type { Prop, PropKind } from '../sim/types';
 import { Rng } from '../sim/rng';
 import { KIND_COLORS, MATERIAL_DEBRIS, PALETTE } from './palette';
-import { crackTexture, toon, toonRamp } from './toon';
+import { crackTexture, isToonCached, toon, toonRamp } from './toon';
 import { GLOW, facade } from './glow';
 import type { LampPos } from './lighting';
 
+const basicMats = new Map<number, THREE.MeshBasicMaterial>();
+/** Unlit double-sided colour, one material per colour (was one per sweep). */
+function basicDouble(color: number): THREE.MeshBasicMaterial {
+  let m = basicMats.get(color);
+  if (!m) basicMats.set(color, (m = new THREE.MeshBasicMaterial({ color, side: THREE.DoubleSide })));
+  return m;
+}
+
+/** One flat 1×1 plane (lane dashes, light pools, chevrons, throws), scaled per mesh. Shared: never disposed. */
+const FLAT_PLANE = new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2);
 const LENS = new THREE.MeshBasicMaterial({ color: 0xffc27a });
 const TAIL = new THREE.MeshBasicMaterial({ color: 0xd01818 });
 const HEAD = new THREE.MeshBasicMaterial({ color: 0xfff2d8 });
+
+/**
+ * A segment view leaving the road: free its own geometry, and its own fading materials (tunnel roofs,
+ * overpasses, gantries are per-instance so each fades alone). Shared geometry and cached materials stay.
+ */
+function freeSegment(g: THREE.Object3D, box: THREE.BufferGeometry) {
+  g.traverse((o) => {
+    const m = o as THREE.Mesh;
+    if (m.geometry && m.geometry !== box && m.geometry !== FLAT_PLANE) m.geometry.dispose();
+    const mat = m.material as THREE.Material | undefined;
+    if (mat && !Array.isArray(mat) && mat.transparent && !isToonCached(mat)) mat.dispose();
+  });
+}
 
 const signTex = new Map<string, THREE.Texture>();
 /** Exit sign faces: "EXIT 6 / SIGN-OFF" for the sign-off, "EXIT 6A / {road}" for a fork. Drawn once each. */
@@ -342,7 +365,7 @@ export class HighwayView {
     for (const [i, g] of this.segViews) {
       if (!live.has(i)) {
         this.group.remove(g);
-        g.traverse((o) => (o as THREE.Mesh).geometry !== this.box && (o as THREE.Mesh).geometry?.dispose());
+        freeSegment(g, this.box);
         this.segViews.delete(i);
         this.lampsDirty = true;
       }
@@ -447,7 +470,7 @@ export class HighwayView {
     const W = TUNING.lanes.width;
     const wallH = TUNING.track.wallHeight;
     const add = (geo: THREE.BufferGeometry, color: number, basic = false, paint = false) => {
-      const m = new THREE.Mesh(geo, basic ? new THREE.MeshBasicMaterial({ color, side: THREE.DoubleSide }) : toon(color, paint ? { side: THREE.DoubleSide, emissive: PAINT_GLOW } : { side: THREE.DoubleSide }));
+      const m = new THREE.Mesh(geo, basic ? basicDouble(color) : toon(color, paint ? { side: THREE.DoubleSide, emissive: PAINT_GLOW } : { side: THREE.DoubleSide }));
       group.add(m);
       return m;
     };
@@ -482,8 +505,7 @@ export class HighwayView {
 
     // Dashed lane lines (3m dash, 6m gap), only where both lanes exist: an opening lane gets its line once it's
     // nearly full width (a line hugging the tapering edge read as a mistake; Mike, 2026-11-16).
-    const dashGeo = new THREE.PlaneGeometry(1, 1);
-    dashGeo.rotateX(-Math.PI / 2);
+    const dashGeo = FLAT_PLANE;
     const dashes: [number, number, number][] = [];
     for (let i = 0; i < seg.length; i++) {
       const s = seg.s0 + i + 0.5;
@@ -857,8 +879,7 @@ export class HighwayView {
     const lamps: LampPos[] = [];
     const sp = TUNING.look.lampSpacing;
     const track = this.sim.track;
-    const pool = new THREE.PlaneGeometry(1, 1);
-    pool.rotateX(-Math.PI / 2);
+    const pool = FLAT_PLANE;
     for (let s = Math.ceil(seg.s0 / sp) * sp; s < seg.s0 + seg.length; s += sp) {
       const w = this.edgeW(s);
       const h = track.headingAt(s);
@@ -922,7 +943,7 @@ export class HighwayView {
       const g = this.segViews.get(i);
       if (!g) continue;
       this.group.remove(g);
-      g.traverse((o) => (o as THREE.Mesh).geometry !== this.box && (o as THREE.Mesh).geometry?.dispose());
+      freeSegment(g, this.box);
       this.segViews.delete(i);
     }
     this.lampsDirty = true;
@@ -953,8 +974,7 @@ export class HighwayView {
     }
     // Gore chevrons where the ramp splits.
     if (seg === ex) {
-      const dash = new THREE.PlaneGeometry(1, 1);
-      dash.rotateX(-Math.PI / 2);
+      const dash = FLAT_PLANE;
       for (let k = 0; k < 4; k++) {
         const s = seg.s0 + TUNING.segment.goreAt - 6 + k * 3;
         const w = track.widthAt(s);
@@ -1086,8 +1106,7 @@ export class HighwayView {
       body.add(hz);
       hazards.push(hz);
     }
-    const throwGeo = new THREE.PlaneGeometry(1, 1);
-    throwGeo.rotateX(-Math.PI / 2);
+    const throwGeo = FLAT_PLANE;
     const beam = new THREE.Mesh(throwGeo, GLOW.headPool);
     beam.position.set(L / 2 + 6.5, 0.055, 0);
     beam.scale.set(13, 1, 6.5);

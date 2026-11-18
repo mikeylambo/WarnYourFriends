@@ -506,6 +506,8 @@ export const TUNING = {
    */
   replay: {
     lead: 2.2, slow: 0.35, slowBefore: 0.35, slowAfter: 1.0, after: 1.6, angle: 'Long Lens',
+    /** Outro frames spend up to this long (ms) fast-forwarding the replay's sim, so starting it doesn't hitch. */
+    prerollMs: 4,
     /** The recap's picture: grabbed this long after the moment (debris in the air), at this width in px (a still, not a screenshot). */
     shotAfter: 0.2, shotWidth: 960,
     /** The recap's looping clip: recorded off the canvas during the replay at this frame rate and bitrate; under `clipMin` s (skipped early) the still stays. */

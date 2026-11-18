@@ -1,0 +1,67 @@
+<!doctype html><html><head><meta charset="utf-8"><style>
+:root{--red:#ab2530;--ink:#1e1821;--cream:#ece0c8;--purple:#4b2a63}
+body{margin:0;background:#120e16;color:var(--cream);font:600 14px/1.35 'Segoe UI',Roboto,system-ui,sans-serif;width:1360px;padding:28px 32px;box-sizing:border-box}
+h1{font:italic 900 30px/1 system-ui;letter-spacing:.03em;margin:0 0 4px;text-transform:uppercase}
+.sub{opacity:.7;margin:0 0 22px}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:26px 28px}
+.tile h2{font:italic 900 17px/1 system-ui;text-transform:uppercase;margin:0 0 8px;letter-spacing:.04em}
+.tile h2 i{font-style:normal;background:var(--red);padding:2px 7px;margin-right:8px;font-size:13px}
+.shot{position:relative;width:640px;height:360px;background-size:cover;background-position:center;overflow:hidden;border-radius:4px}
+.tile p{margin:8px 0 0;opacity:.85;font-weight:500}
+.prop{position:absolute;outline:2px dashed #ffd23f;outline-offset:3px}
+.tag{position:absolute;right:8px;top:8px;background:#ffd23f;color:#111;font:900 10px/1 system-ui;padding:4px 6px;letter-spacing:.1em}
+.chip{background:var(--red);color:var(--cream);font:italic 900 15px/1 system-ui;letter-spacing:.08em;padding:6px 14px;clip-path:polygon(8px 0,100% 0,calc(100% - 8px) 100%,0 100%)}
+.cover{position:absolute;background:rgba(14,10,18,.92)}
+</style></head><body>
+<h1>Design picks: proposed</h1>
+<p class="sub">Mockups over real frames from the build. The new pieces have yellow dashed outlines. Nothing here is implemented yet.</p>
+<div class="grid">
+
+<div class="tile"><h2><i>1</i>Three ways to lose</h2>
+<div class="shot" style="background-image:url(../evidence/recap/run-desktop.png)">
+ <div class="cover" style="left:0;top:0;width:640px;height:360px;background:rgba(14,10,18,.55)"></div>
+ <div class="prop" style="left:40px;top:70px;display:flex;flex-direction:column;gap:14px">
+  <div style="display:flex;gap:10px;align-items:center"><span class="chip" style="font-size:22px">BUSTED</span><span>Police caught him. Siren sting, cuffs graphic.</span></div>
+  <div style="display:flex;gap:10px;align-items:center"><span class="chip" style="font-size:22px;background:#465a7a">CUT TO COMMERCIAL</span><span>Audience gone. Bumper card, jingle.</span></div>
+  <div style="display:flex;gap:10px;align-items:center"><span class="chip" style="font-size:22px;background:#333;color:#ddd;filter:contrast(1.4)">SIGNAL LOST</span><span>Missed the exit. Static, color bars.</span></div>
+ </div><span class="tag">PROPOSED</span></div>
+<p>Today every loss says BUSTED. Each loss gets its own stamp, sound and recap line, so the player knows what went wrong.</p></div>
+
+<div class="tile"><h2><i>2</i>Rampage running out</h2>
+<div class="shot" style="background-image:url(../evidence/hud/wyf-desktop.png)">
+ <div style="position:absolute;inset:0;box-shadow:inset 0 0 70px 10px rgba(171,37,48,.55)"></div>
+ <div class="cover" style="left:4px;top:278px;width:250px;height:34px"></div>
+ <div class="prop" style="left:12px;top:282px;display:flex;gap:8px;align-items:center"><span class="chip">RAMPAGE</span><span style="font:900 15px system-ui;color:#ffd23f">ENDING 1.0</span></div>
+ <span class="tag">PROPOSED</span></div>
+<p>In the last second, the screen edge pulses red, the gear chip counts down, his cadence slows and the music drops a layer. You know you're about to be vulnerable again.</p></div>
+
+<div class="tile"><h2><i>3</i>The clock becomes "Sign-off in"</h2>
+<div class="shot" style="background-image:url(../evidence/hud/wyf-desktop.png)">
+ <div class="cover" style="left:4px;top:4px;width:220px;height:38px"></div>
+ <div class="prop" style="left:8px;top:8px;display:flex;gap:6px;align-items:center"><span class="chip">● LIVE</span><span style="font:900 12px system-ui;letter-spacing:.1em;opacity:.8">SIGN-OFF IN</span><span style="font:900 20px system-ui">0:38</span></div>
+ <span class="tag">PROPOSED</span></div>
+<p>Once the exit ramp opens, the elapsed clock flips to a labeled countdown. It changes meaning, and the screen says so.</p></div>
+
+<div class="tile"><h2><i>4</i>One word, one meaning</h2>
+<div class="shot" style="background-image:url(../evidence/hud/wyf-desktop.png)">
+ <div class="cover" style="left:4px;top:42px;width:220px;height:40px"></div>
+ <div class="prop" style="left:10px;top:46px;line-height:1.1"><div style="font:900 24px system-ui">34,488 <span style="font-size:10px;opacity:.7">SCORE</span></div><div style="font:900 11px system-ui;letter-spacing:.12em;color:#ffd23f">AUDIENCE · MUST-SEE TV</div></div>
+ <span class="tag">PROPOSED</span></div>
+<p>"RAMPAGE" means only the ability. The top audience tier gets its own on-air name (working pick: MUST-SEE TV), so the chyron and the meter never compete for the word.</p></div>
+
+<div class="tile"><h2><i>5</i>Brake on</h2>
+<div class="shot" style="background-image:url(../evidence/hud/wyf-desktop.png)">
+ <div class="prop" style="left:250px;top:232px;text-align:center"><span class="chip" style="background:#d98f16;color:#111">BRAKE ON</span><div style="font:700 11px system-ui;margin-top:4px;text-shadow:0 1px 3px #000">Brake again to run</div></div>
+ <span class="tag">PROPOSED</span></div>
+<p>With toggle braking, a steady chip near his feet shows the brake is held, and the prompt says "brake again to run", not "let go".</p></div>
+
+<div class="tile"><h2><i>6</i>Thick Skin charge</h2>
+<div class="shot" style="background-image:url(../evidence/hud/wyf-desktop.png)">
+ <div class="prop" style="left:178px;top:262px;display:flex;gap:10px;align-items:center;background:rgba(14,10,18,.9);padding:4px 8px">
+  <svg width="26" height="30" viewBox="0 0 26 30"><path d="M13 1 L25 5 V14 C25 22 19 27 13 29 C7 27 1 22 1 14 V5Z" fill="#ece0c8" stroke="#ab2530" stroke-width="2"/></svg>
+  <span style="opacity:.5">→</span>
+  <svg width="26" height="30" viewBox="0 0 26 30"><path d="M13 1 L25 5 V14 C25 22 19 27 13 29 C7 27 1 22 1 14 V5Z" fill="none" stroke="#777" stroke-width="2" stroke-dasharray="3 2"/><path d="M8 6 L14 14 L10 18 L16 26" stroke="#ab2530" stroke-width="2" fill="none"/></svg>
+ </div><span class="tag">PROPOSED</span></div>
+<p>A small shield next to the gear bar while Thick Skin is ready. It cracks with a crunch when it soaks a hit and comes back next segment.</p></div>
+
+</div></body></html>

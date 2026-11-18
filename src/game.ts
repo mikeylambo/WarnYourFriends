@@ -325,7 +325,8 @@ const lbBlocked = () =>
     : settings.gameSpeed < 1
       ? 'Game Speed is below 100%, so this score stays off the board.'
       : null;
-let moment: { t: number; score: number; kind: string; event: SimEvent; headline: Headline | null } | null = null;
+type Moment = { t: number; score: number; kind: string; event: SimEvent; headline: Headline | null };
+let moment: Moment | null = null;
 let replayRate = 1;
 const replayEl = $('replay');
 type Parked = { sim: Sim; highway: HighwayView; gait: Gait; cruisers: CruiserView; units: UnitViews; director: Director; news: Newsroom; bot: Bot | null; prev: typeof prev; runStats: typeof runStats; propKinds: Map<number, PropKind>; recent: SimEvent[] };
@@ -404,6 +405,7 @@ function newRun(seed: number, segment = 0, upgrades: UpgradeId[] = [], levels: P
   input.resetLatches();
   audio.setGear(0, true);
   moment = null;
+  preroll = null;
   recapShot = null;
   dropClip();
   highway = new HighwayView(sim);
@@ -1521,12 +1523,28 @@ function disposeTree(root: THREE.Object3D) {
   });
 }
 
+/** The replay's sim, fast-forwarded toward its lead-in during the outro (review #82: it was one synchronous burst). */
+let preroll: { sim: Sim; tick: number; target: number; m: Moment } | null = null;
+function prerollReplay(budgetMs: number) {
+  const m = moment!;
+  if (!preroll || preroll.m !== m) {
+    const rs = new Sim(simOpts);
+    preroll = { sim: rs, tick: 0, target: Math.min(inputLog.length, Math.round(Math.max(0, m.t - TUNING.replay.lead) / rs.dt)), m };
+  }
+  const p = preroll;
+  const until = performance.now() + budgetMs;
+  while (p.tick < p.target) {
+    p.sim.step(inputLog[p.tick++]);
+    if ((p.tick & 63) === 0 && performance.now() > until) break;
+  }
+}
+
 function startReplay(done: () => void) {
   const R = TUNING.replay;
   const m = moment!;
-  const rs = new Sim(simOpts);
-  const startTick = Math.round(Math.max(0, m.t - R.lead) / rs.dt);
-  for (let i = 0; i < startTick && i < inputLog.length; i++) rs.step(inputLog[i]);
+  prerollReplay(Infinity); // whatever the outro didn't get to
+  const rs = preroll!.sim;
+  preroll = null;
   const live: Parked = { sim, highway, gait, cruisers, units, director, news, bot, prev: { ...prev }, runStats: { ...runStats }, propKinds: new Map(propKinds), recent: recentEvents.slice() };
   scene.remove(highway.group, cruisers.group, units.group);
   sim = rs;
@@ -2034,6 +2052,8 @@ function frame(now: number) {
     pinRing.geometry.setDrawRange(0, Math.ceil((sim.show.pin / 100) * 64) * 6);
   }
   if (endedFor >= 0 && !paused) endedFor += realDt * flags.timescale;
+  // While the outro holds, fast-forward the replay a few ms a frame so starting it doesn't hitch.
+  if (endedFor >= 0 && !recapShown && !attract && !replay && moment && flags.replay) prerollReplay(TUNING.replay.prerollMs);
   if (endedFor >= 0 && !recapShown && endedFor > (sim.show.state === 'cleared' ? TUNING.camera.signOffHold : 2.2)) {
     recapShown = true;
     if (attract) enterAttract(); // behind the menus: just roll another broadcast
