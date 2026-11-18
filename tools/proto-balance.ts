@@ -3,12 +3,12 @@ import { TUNING, enableProto } from '../src/tuning';
 import { Sim } from '../src/sim/sim';
 import { Bot } from '../src/sim/bot';
 if (process.env.PROTO !== '0') enableProto();
-const N = 40, seg = Number(process.env.SEG ?? 0);
+const dist: number[] = [], dur: number[] = []; const N = 40, seg = Number(process.env.SEG ?? 0);
 const ends: Record<string, number> = {}; let ramps = 0, firstR: number[] = [], hits = 0, near = 0, smash = 0, time = 0;
 for (let seed = 1; seed <= N; seed++) {
   const sim = new Sim({ seed, segment: seg, upgrades: [], growth: true });
   const bot = new Bot(sim); let fr = -1;
-  for (let i = 0; i < 60 * 200 && sim.live; i++) {
+  for (let i = 0; i < 60 * 420 && sim.live; i++) {
     for (const e of sim.step(bot.input())) {
       if (e.type === 'rampageStart') { ramps++; if (fr < 0) fr = sim.time; }
       if (e.type === 'bounce') hits++;
@@ -16,10 +16,11 @@ for (let seed = 1; seed <= N; seed++) {
       if (e.type === 'smash') smash++;
     }
   }
-  time += sim.time; if (fr >= 0) firstR.push(fr);
+  time += sim.time; if (fr >= 0) firstR.push(fr); dist.push(sim.track.segmentAt(sim.giant.s).district ?? -1); dur.push(sim.time);
   const k = sim.show.state === 'cleared' ? 'signoff' : `${sim.show.reason}${sim.show.reason === 'pin' ? ':' + sim.show.pinCause : ''}`;
   ends[k] = (ends[k] ?? 0) + 1;
 }
 firstR.sort((a, b) => a - b);
 console.log(`proto=${TUNING.proto.on} seg=${seg} ends ${JSON.stringify(ends)}`);
 console.log(`rampages/min ${(ramps / (time / 60)).toFixed(2)}, first ${firstR.length}/${N} median ${firstR[firstR.length >> 1]?.toFixed(0)}s; hits/min ${(hits / (time / 60)).toFixed(1)}, dodges/min ${(near / (time / 60)).toFixed(1)}, smashes/min ${(smash / (time / 60)).toFixed(1)}`);
+dur.sort((a, b) => a - b); console.log(`run length median ${dur[N >> 1].toFixed(0)}s; furthest district reached: ${JSON.stringify(dist.reduce((m: Record<number, number>, d) => ((m[d] = (m[d] ?? 0) + 1), m), {}))}`);

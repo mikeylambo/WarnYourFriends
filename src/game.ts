@@ -158,6 +158,17 @@ let boxedFam = '';
 const exitDistEl = $('exitdist');
 const signoffArrow = signoffEl.querySelector('.arrow') as HTMLElement;
 const segEl = $('segno');
+/** Story run: the district title card. */
+const districtEl = $('district');
+districtEl.addEventListener('animationend', () => districtEl.classList.remove('in'));
+let firstCardShown = false;
+function showDistrict(d: number) {
+  const D = TUNING.proto.story.districts;
+  districtEl.innerHTML = `<small>${d === D.length - 1 ? 'FINAL DISTRICT' : `DISTRICT ${d + 1} OF ${D.length}`}</small><b>${esc(D[d].name)}</b>`;
+  districtEl.classList.remove('in');
+  void districtEl.offsetWidth;
+  districtEl.classList.add('in');
+}
 const abilEl = $('abil');
 const abilName = abilEl.querySelector('.nm') as HTMLElement;
 const abilIcon = abilEl.querySelector('.ic') as HTMLImageElement;
@@ -419,6 +430,7 @@ const where = (s: number, d: number) => sim.track.posAt(s, d, { x: 0, z: 0 });
 const sirenRight = new THREE.Vector3();
 
 function newRun(seed: number, segment = 0, upgrades: UpgradeId[] = [], levels: Partial<Record<AbilityId, number>> = {}, guided = false) {
+  firstCardShown = false;
   forkSwap = null; // a fork wipe from the last broadcast never swaps this one's road
   forkWipe.classList.remove('in');
   if (replay) {
@@ -924,7 +936,7 @@ function showRecap() {
   // Three ways to lose, each its own package (review pick 1): the police, the audience, the exit.
   const lost = reason === 'pin' ? 'busted' : reason === 'ratings' ? 'commercial' : 'signal';
   const stamp = won ? 'FULL BROADCAST' : cleared ? 'SIGNED OFF' : lost === 'busted' ? 'BUSTED' : lost === 'commercial' ? 'CUT TO COMMERCIAL' : 'SIGNAL LOST';
-  const why = won ? 'Every segment, start to finish.' : cleared ? 'He took the exit. Coverage complete.' : reason === 'pin' ? (sim.show.pinCause === 'caught' ? 'The police caught up.' : 'Boxed in by the police.') : reason === 'ratings' ? 'The viewers changed the channel.' : 'He missed the exit.';
+  const why = won ? (PROTO ? 'Across town, start to finish.' : 'Every segment, start to finish.') : cleared ? 'He took the exit. Coverage complete.' : reason === 'pin' ? (sim.show.pinCause === 'caught' ? 'The police caught up.' : 'Boxed in by the police.') : reason === 'ratings' ? 'The viewers changed the channel.' : 'He missed the exit.';
   // Hero numbers: what this screen is about. A run segment reports the budget; a finished run, the run.
   const hero = run && run.phase === 'meeting'
     ? Math.round(sh.banked) === run.purse ? [['Budget', n(run.purse), 'score']] : [['Added to budget', `+${n(sh.banked)}`, 'score'], ['Budget', n(run.purse), '']]
@@ -1205,6 +1217,12 @@ function present(e: SimEvent) {
       rig.jolt(3, 0.15);
       haptic(110, 0.6);
       break;
+    case 'zone': {
+      // Story run: a title card as he enters each district (never covers the road; fades on its own).
+      const d = PROTO && !replay ? sim.track.segmentAt(sim.giant.s).district : undefined;
+      if (d !== undefined && !attract) showDistrict(d);
+      break;
+    }
     case 'exitOpen':
       highway.rebuild([e.segment - 1, e.segment, e.segment + 1, e.segment + 2]);
       break;
@@ -2605,7 +2623,16 @@ function updateHud(dt: number) {
   asksEl.classList.toggle('show', sim.live && sim.time < Math.max(asksUntil, TUNING.hud.asksIntro));
   // Phase 3: segment number and the ability chip (cooldown fills back up).
   segEl.hidden = !run;
-  if (run) segEl.textContent = `${run.segment + 1}/${TUNING.run.segments}`;
+  if (run) {
+    // Story run: the first district's card once the cold open has swung home.
+    if (PROTO && !attract && !replay && !firstCardShown && sim.time > TUNING.onboarding.lanesAfter && sim.time < TUNING.onboarding.lanesAfter + 3) {
+      firstCardShown = true;
+      showDistrict(0);
+    }
+    // Story run (prototype): the district he's in, of the five.
+    const dIdx = PROTO ? sim.track.segmentAt(g.s).district : undefined;
+    segEl.textContent = dIdx !== undefined ? `${dIdx + 1}/${TUNING.proto.story.districts.length}` : `${run.segment + 1}/${TUNING.run.segments}`;
+  }
   const ab = sim.ability;
   abilEl.hidden = !ab || attract;
   abilBtn.disabled = !ab;

@@ -112,6 +112,22 @@ export const TUNING = {
     chunkReact: 0.45,
     /** Chunk level climbs one step every this many metres (and one per run segment). */
     levelEvery: 700,
+    /**
+     * The story run (Mike, 2026-11-18: "an authored run through the different districts... with an end"; one unbroken
+     * run). Five districts in order, each its own road (lane count by zone), name and chunk level; the sign-off ramp is
+     * at the end of the last. `segments` are 40m road segments (~2.3s each at Stride with some sprint). The chopper's
+     * fuel (`fuel` s, plus the usual grace) is the run's clock: a sloppy run can run dry before the end.
+     */
+    story: {
+      fuel: 345,
+      districts: [
+        { zone: 'highway', name: 'Mile Zero Interstate', segments: 30, level: 1 },
+        { zone: 'bridge', name: 'Saltmarsh Bridge', segments: 16, level: 2 },
+        { zone: 'avenue', name: 'Downtown', segments: 32, level: 3 },
+        { zone: 'tunnel', name: 'Old Harbor Tunnel', segments: 16, level: 4 },
+        { zone: 'highway', name: 'Uptown Expressway', segments: 34, level: 5 },
+      ] as { zone: 'highway' | 'avenue' | 'bridge' | 'tunnel'; name: string; segments: number; level: number }[],
+    },
     reachGap: 36,
     wideMinBlocked: 2,
     tail: 22,
@@ -1186,7 +1202,12 @@ export type Tuning = typeof TUNING;
 export function enableProto() {
   const t = TUNING as unknown as { proto: { on: boolean }; run: { segments: number; abilitySlots: number }; show: { gain: Record<string, number> } };
   t.proto.on = true;
-  t.run.segments = 3; // ~6 minutes a run
+  // The story run: one unbroken run (no Producer's Meeting), the fuel tank as its clock; the exit opens at the end of
+  // the last district (Sim.stepExit), not on the clock.
+  t.run.segments = 1;
   t.run.abilitySlots = 1;
+  const seg = (TUNING as unknown as { segment: { length: number; exitOpensAt: number } }).segment;
+  seg.length = TUNING.proto.story.fuel;
+  seg.exitOpensAt = TUNING.proto.story.fuel - 30; // the HUD's SIGN-OFF IN countdown; the sim opens the exit by distance
   for (const [k, v] of Object.entries(TUNING.proto.gain)) t.show.gain[k] = v;
 }

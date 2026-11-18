@@ -29,6 +29,22 @@ var TUNING = {
     chunkReact: 0.45,
     /** Chunk level climbs one step every this many metres (and one per run segment). */
     levelEvery: 700,
+    /**
+     * The story run (Mike, 2026-11-18: "an authored run through the different districts... with an end"; one unbroken
+     * run). Five districts in order, each its own road (lane count by zone), name and chunk level; the sign-off ramp is
+     * at the end of the last. `segments` are 40m road segments (~2.3s each at Stride with some sprint). The chopper's
+     * fuel (`fuel` s, plus the usual grace) is the run's clock: a sloppy run can run dry before the end.
+     */
+    story: {
+      fuel: 345,
+      districts: [
+        { zone: "highway", name: "Mile Zero Interstate", segments: 30, level: 1 },
+        { zone: "bridge", name: "Saltmarsh Bridge", segments: 16, level: 2 },
+        { zone: "avenue", name: "Downtown", segments: 32, level: 3 },
+        { zone: "tunnel", name: "Old Harbor Tunnel", segments: 16, level: 4 },
+        { zone: "highway", name: "Uptown Expressway", segments: 34, level: 5 }
+      ]
+    },
     reachGap: 36,
     wideMinBlocked: 2,
     tail: 22,
@@ -1386,6 +1402,12 @@ var Track = class {
     this.nextRowS = TUNING.props.startAt;
     this.zoneName = this.nameFor("highway");
     this.zoneLeft = T.runwaySegments + this.rng.int(TUNING.zones.length.highway[0], TUNING.zones.length.highway[1]);
+    if (this.district === 0) {
+      const d0 = TUNING.proto.story.districts[0];
+      this.zone = d0.zone;
+      this.zoneName = d0.name;
+      this.zoneLeft = T.runwaySegments + d0.segments;
+    }
     this.ensure(T.aheadDistance);
   }
   seed;
@@ -1463,7 +1485,14 @@ var Track = class {
     const Z = TUNING.zones;
     const nearReserve = this.reserved(s0 + 3 * T.segmentLength) || this.reserved(s0);
     if (nearReserve && (this.zone === "tunnel" || this.zone === "bridge") && this.zoneLeft > 0 && !this.nextZone) this.zoneLeft = 0;
-    if (index >= T.runwaySegments && this.zoneLeft <= 0 && !this.nextZone) {
+    const D = TUNING.proto.story.districts;
+    if (this.district >= 0 && index >= T.runwaySegments && this.zoneLeft <= 0 && !this.nextZone) {
+      if (this.district + 1 < D.length) {
+        this.district++;
+        this.nextZone = D[this.district].zone;
+        this.zoneTarget = Z.lanes[this.nextZone];
+      } else this.zoneLeft = 1e9;
+    } else if (index >= T.runwaySegments && this.zoneLeft <= 0 && !this.nextZone) {
       const options = Object.keys(Z.lanes).filter((z) => z !== this.zone && !(nearReserve && (z === "tunnel" || z === "bridge")));
       this.nextZone = this.pickZone(options);
       this.zoneTarget = this.nextZone === "highway" ? rng.chance(0.7) ? 4 : 3 : Z.lanes[this.nextZone];
@@ -1474,6 +1503,16 @@ var Track = class {
       this.nextZone = null;
       this.zoneLeft = rng.int(Z.length[this.zone][0], Z.length[this.zone][1]);
       this.zoneJustStarted = true;
+      if (this.district >= 0) {
+        this.zoneDistrict = this.district;
+        const d = D[this.district];
+        this.zoneName = d.name;
+        this.zoneLeft = d.segments;
+        if (this.district === D.length - 1) {
+          this.courseEnd = s0 + d.segments * T.segmentLength;
+          this.reserveExit(this.courseEnd - 420, this.courseEnd + 60);
+        }
+      }
     }
     if (index >= T.runwaySegments) {
       if (this.nextZone && lanes0 !== this.zoneTarget) {
@@ -1521,7 +1560,7 @@ var Track = class {
       zs[i] = zs[i - 1] + Math.sin(hm);
       hs[i] = hNow;
     }
-    const seg = { index, kind, s0, length: n, h0, h1, lanes0, lanes1, xs, zs, hs, zone, zoneName: this.zoneName, zoneStart, overpass, landmark, landmarkName };
+    const seg = { index, kind, s0, length: n, h0, h1, lanes0, lanes1, xs, zs, hs, zone, zoneName: this.zoneName, zoneStart, overpass, landmark, landmarkName, ...this.district >= 0 ? { district: this.zoneDistrict } : {} };
     this.segments.push(seg);
     this.addProps(seg);
   }
@@ -1730,9 +1769,15 @@ var Track = class {
   /** Prototype: the chunk being laid down (its start, the next row to place), and where the next may start. */
   chunk = null;
   nextChunkS = TUNING.props.startAt;
+  /** Story run: the district being generated (-1 before the course), and where the course ends (m, once known). */
+  district = TUNING.proto.on ? 0 : -1;
+  courseEnd = Infinity;
+  /** Story run: the district the road is in now (the counter above runs ahead of it through the merge into the next). */
+  zoneDistrict = 0;
   lastChunkId = "";
   /** Chunk level (1–5) at `s`: climbs with distance and the run's segment. */
   levelAt(s) {
+    if (this.district >= 0) return TUNING.proto.story.districts[Math.min(this.district, TUNING.proto.story.districts.length - 1)].level;
     return Math.max(1, Math.min(5, 1 + this.segmentNo + Math.floor(s / TUNING.proto.levelEvery)));
   }
   /**
@@ -3671,12 +3716,15 @@ var Sim = class {
     const X = TUNING.segment;
     const g = this.giant;
     const now = this.time + this.dt;
-    if (!this.exitPlanned && now >= X.exitOpensAt - X.planAhead) {
+    const story = TUNING.proto.on;
+    if (story) {
+      if (!this.exit && this.track.courseEnd < Infinity && g.s >= this.track.courseEnd - 400 && now < X.length + X.grace) this.openExit();
+    } else if (!this.exitPlanned && now >= X.exitOpensAt - X.planAhead) {
       this.exitPlanned = true;
       const at = Math.max(this.track.end, g.s + Math.min(g.speed, TUNING.tiers[1].topSpeed) * X.planAhead + X.exitDistance[0] - 30);
       this.track.reserveExit(at, at + X.planLength);
     }
-    if (!this.exit && !this.fork && now >= X.exitOpensAt && now < X.length + X.grace) {
+    if (!story && !this.exit && !this.fork && now >= X.exitOpensAt && now < X.length + X.grace) {
       this.openExit();
       if (this.exit && TUNING.difficulty.finaleRoadblock && this.show.segment >= TUNING.run.segments - 1) this.pursuit.spawnFinale();
     }

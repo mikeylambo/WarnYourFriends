@@ -41,6 +41,8 @@ export interface Segment {
   /** Content pass: a landmark set piece on this segment (its own prop pattern and scenery), and its name. */
   landmark?: LandmarkKind;
   landmarkName?: string;
+  /** Story run: which district (index into TUNING.proto.story.districts). */
+  district?: number;
   /** Centre-reference samples every metre: left-edge position and heading. */
   xs: Float64Array;
   zs: Float64Array;
@@ -150,6 +152,12 @@ export class Track {
     this.nextRowS = TUNING.props.startAt;
     this.zoneName = this.nameFor('highway');
     this.zoneLeft = T.runwaySegments + this.rng.int(TUNING.zones.length.highway[0], TUNING.zones.length.highway[1]);
+    if (this.district === 0) {
+      const d0 = TUNING.proto.story.districts[0];
+      this.zone = d0.zone;
+      this.zoneName = d0.name;
+      this.zoneLeft = T.runwaySegments + d0.segments;
+    }
     this.ensure(T.aheadDistance);
   }
 
@@ -193,7 +201,15 @@ export class Track {
     // Coming up on the reserved exit stretch inside a tunnel or on a bridge: wrap it up now (merges take a few segments).
     const nearReserve = this.reserved(s0 + 3 * T.segmentLength) || this.reserved(s0);
     if (nearReserve && (this.zone === 'tunnel' || this.zone === 'bridge') && this.zoneLeft > 0 && !this.nextZone) this.zoneLeft = 0;
-    if (index >= T.runwaySegments && this.zoneLeft <= 0 && !this.nextZone) {
+    const D = TUNING.proto.story.districts;
+    if (this.district >= 0 && index >= T.runwaySegments && this.zoneLeft <= 0 && !this.nextZone) {
+      // Story run: the next district, in order; after the last, the road just runs on past the sign-off.
+      if (this.district + 1 < D.length) {
+        this.district++;
+        this.nextZone = D[this.district].zone;
+        this.zoneTarget = Z.lanes[this.nextZone];
+      } else this.zoneLeft = 1e9;
+    } else if (index >= T.runwaySegments && this.zoneLeft <= 0 && !this.nextZone) {
       const options = (Object.keys(Z.lanes) as ZoneKind[]).filter((z) => z !== this.zone && !(nearReserve && (z === 'tunnel' || z === 'bridge')));
       this.nextZone = this.pickZone(options);
       this.zoneTarget = this.nextZone === 'highway' ? (rng.chance(0.7) ? 4 : 3) : Z.lanes[this.nextZone];
@@ -204,6 +220,17 @@ export class Track {
       this.nextZone = null;
       this.zoneLeft = rng.int(Z.length[this.zone][0], Z.length[this.zone][1]);
       this.zoneJustStarted = true;
+      if (this.district >= 0) {
+        this.zoneDistrict = this.district;
+        const d = D[this.district];
+        this.zoneName = d.name;
+        this.zoneLeft = d.segments;
+        // The last district: the course (and the sign-off) ends where it does; keep that stretch ramp-friendly.
+        if (this.district === D.length - 1) {
+          this.courseEnd = s0 + d.segments * T.segmentLength;
+          this.reserveExit(this.courseEnd - 420, this.courseEnd + 60);
+        }
+      }
     }
     if (index >= T.runwaySegments) {
       if (this.nextZone && lanes0 !== this.zoneTarget) {
@@ -254,7 +281,7 @@ export class Track {
       zs[i] = zs[i - 1] + Math.sin(hm);
       hs[i] = hNow;
     }
-    const seg: Segment = { index, kind, s0, length: n, h0, h1, lanes0, lanes1, xs, zs, hs, zone, zoneName: this.zoneName, zoneStart, overpass, landmark, landmarkName };
+    const seg: Segment = { index, kind, s0, length: n, h0, h1, lanes0, lanes1, xs, zs, hs, zone, zoneName: this.zoneName, zoneStart, overpass, landmark, landmarkName, ...(this.district >= 0 ? { district: this.zoneDistrict } : {}) };
     this.segments.push(seg);
     this.addProps(seg);
   }
@@ -499,10 +526,16 @@ export class Track {
   /** Prototype: the chunk being laid down (its start, the next row to place), and where the next may start. */
   private chunk: { c: Chunk; s0: number; row: number; last: number } | null = null;
   private nextChunkS: number = TUNING.props.startAt;
+  /** Story run: the district being generated (-1 before the course), and where the course ends (m, once known). */
+  private district = TUNING.proto.on ? 0 : -1;
+  courseEnd = Infinity;
+  /** Story run: the district the road is in now (the counter above runs ahead of it through the merge into the next). */
+  private zoneDistrict = 0;
   private lastChunkId = '';
 
   /** Chunk level (1–5) at `s`: climbs with distance and the run's segment. */
   levelAt(s: number): number {
+    if (this.district >= 0) return TUNING.proto.story.districts[Math.min(this.district, TUNING.proto.story.districts.length - 1)].level;
     return Math.max(1, Math.min(5, 1 + this.segmentNo + Math.floor(s / TUNING.proto.levelEvery)));
   }
 

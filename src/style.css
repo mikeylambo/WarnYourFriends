@@ -1065,3 +1065,11 @@ html.proto #gears .lbl.proto { display: inline; }
 html.proto #gears.ramp .lbl.proto::after { content: ' · RAMPAGE'; }
 html.proto #gears.sprint .lbl.proto::after { content: ' · SPRINT ×2'; color: #f2a516; }
 html.proto #ratingsbar, html.proto #ratings .bar, html.proto #ratings .aud, html.proto #asks { display: none !important; }
+
+/* Story run: district title card (top centre, under the HUD row; fades in, holds, fades out). */
+#district { position: absolute; left: 50%; top: 13%; transform: translateX(-50%); z-index: 4; pointer-events: none; text-align: center; opacity: 0; }
+#district small { display: block; font: italic 900 14px/1 var(--f-head); letter-spacing: 0.22em; color: var(--c-text); text-shadow: 0 2px 8px rgba(0, 0, 0, 0.7); }
+#district b { display: inline-block; margin-top: 8px; padding: 6px 18px 8px; background: var(--c-red); color: var(--c-text); font: italic 900 clamp(26px, 3.6vw, 46px)/1 var(--f-head); text-transform: uppercase; }
+#district.in { animation: district 3.2s ease-out both; }
+@keyframes district { 0% { opacity: 0; transform: translate(-50%, -10px); } 12%, 78% { opacity: 1; transform: translate(-50%, 0); } 100% { opacity: 0; transform: translate(-50%, 0); } }
+@media (prefers-reduced-motion: reduce) { #district.in { animation-name: districtfade; } @keyframes districtfade { 0%, 100% { opacity: 0; } 12%, 78% { opacity: 1; } } }

@@ -482,13 +482,17 @@ export class Sim {
     const now = this.time + this.dt;
     // Plan the ramp's stretch of road before it's generated (the road exists `aheadDistance` ahead), from
     // where he'll be when it opens: keep it ramp-friendly so the exit always lands in reach.
-    if (!this.exitPlanned && now >= X.exitOpensAt - X.planAhead) {
+    // Story run (prototype): the exit opens by distance, at the end of the last district; fuel is the clock.
+    const story = TUNING.proto.on;
+    if (story) {
+      if (!this.exit && this.track.courseEnd < Infinity && g.s >= this.track.courseEnd - 400 && now < X.length + X.grace) this.openExit();
+    } else if (!this.exitPlanned && now >= X.exitOpensAt - X.planAhead) {
       this.exitPlanned = true;
       // Planned at Stride pace (the base gear): planned mid-Rampage, it landed out of reach at Stride later.
       const at = Math.max(this.track.end, g.s + Math.min(g.speed, TUNING.tiers[1].topSpeed) * X.planAhead + X.exitDistance[0] - 30);
       this.track.reserveExit(at, at + X.planLength);
     }
-    if (!this.exit && !this.fork && now >= X.exitOpensAt && now < X.length + X.grace) {
+    if (!story && !this.exit && !this.fork && now >= X.exitOpensAt && now < X.length + X.grace) {
       this.openExit();
       // Difficulty curve: the last segment's way out runs through a police roadblock (Rampage it, or take the gap).
       if (this.exit && TUNING.difficulty.finaleRoadblock && this.show.segment >= TUNING.run.segments - 1) this.pursuit.spawnFinale();

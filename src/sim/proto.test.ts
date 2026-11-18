@@ -34,6 +34,6 @@ describe('prototype core loop', () => {
     }
     expect(rampages).toBeGreaterThan(0);
     expect(sprinted).toBe(true);
-    expect(TUNING.run.segments).toBe(3);
+    expect(TUNING.run.segments).toBe(1); // the story run: one unbroken run
   });
 });
