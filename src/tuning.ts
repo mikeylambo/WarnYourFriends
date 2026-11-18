@@ -237,8 +237,6 @@ export const TUNING = {
     /** §7 0.25s burst that smashes one mass class up (unchanged in v0.3). */
     duration: 0.25,
     cooldown: 3,
-    /** Extra speed during the burst; a lunge, not a dash. */
-    burstSpeed: 3,
     /** §8 5-frame input buffer. */
     bufferFrames: 5,
   },
@@ -796,8 +794,8 @@ export const TUNING = {
       fixated: true,
       /** Kiting window (Mike, 2026-11-17: "still not able to kite cops into bulldozers"): alongside him it rides beside him this long before winding up a ram (it used to wind up at once). */
       holdAlongside: 3,
-      /** A ram that connects costs a gear even at Rampage (Mike, 2026-11-16: Rampage is defended, not kept); a Shoulder Check into it still flattens it. */
-      ramBeatsRampage: true,
+      /** A ram never beats Rampage: at Rampage he flattens a ramming cruiser (Mike, 2026-11-17, reversing 2026-11-16). Outside Rampage only a Shoulder Check does. */
+      ramBeatsRampage: false,
       /**
        * Kiting (Mike, 2026-11-16: "still not able to kite the following police"): with no room beside him a cruiser
        * tails him `gap` m back in his lane, steering at `sideSpeed` m/s for where he was `react` s ago; it gives up

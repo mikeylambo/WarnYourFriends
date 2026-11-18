@@ -238,7 +238,7 @@ export class Pursuit {
     if (this.units.some((u) => u.alive && u.unit === 'roadblock' && u.s > sim.giant.s)) return false;
     if (k === 'net') {
       const N = TUNING.pursuit.net;
-      if (this.nets >= N.perSegment[sim.show.heat - 1] || sim.time - this.netAt < N.minGap) return false;
+      if (this.nets >= N.perSegment[Math.min(sim.show.segment, N.perSegment.length - 1)] || sim.time - this.netAt < N.minGap) return false;
       if (this.units.some((u) => u.alive && (u.unit === 'net' || u.unit === 'rolling' || u.unit === 'carrier'))) return false;
     }
     if (k === 'cruiser') return this.units.filter((u) => u.alive && u.unit === 'cruiser' && !u.lost).length < 2;
@@ -376,7 +376,7 @@ export class Pursuit {
         }
         // Contained: the truck close ahead in his lane and every flanker alongside him.
         const flankers = crew.filter((x) => x !== truck);
-        const inBox = u.s - g.s < 30 && u.s > g.s && Math.abs(u.d - g.d) < W * 0.6 && flankers.every((f) => Math.abs(f.s - g.s) < 7);
+        const inBox = u.s - g.s < 30 && u.s > g.s && Math.abs(u.d - g.d) < W * 0.6 && flankers.length > 0 && flankers.every((f) => Math.abs(f.s - g.s) < 7);
         const out = inBox ? 0 : (this.outOfBox.get(u.group) ?? 0) + dt;
         this.outOfBox.set(u.group, out);
         if (out >= N.escapeAfter || u.phaseT >= N.actMax) {
@@ -494,6 +494,10 @@ export class Pursuit {
       // Never the drop that closes the last open lane there.
       const blocked = new Set<number>([lane]);
       for (const p of track.propsBetween(at - 5, at + 5)) if (p.alive) blocked.add(Math.floor(p.d / W));
+      // Never onto a police unit, and police count toward closing the road.
+      const police = this.solidBetween(at - 5, at + 5).filter((x) => x !== u);
+      if (police.some((x) => Math.abs(x.d - track.laneCenter(lane)) < x.hw + 1)) continue;
+      for (const x of police) blocked.add(Math.floor(x.d / W));
       if (blocked.size >= L) continue;
       const p = track.drop('car', at, track.laneCenter(lane) + this.rng.range(-0.4, 0.4));
       sim.emitPublic({ type: 'carrierDrop', carrierId: u.id, propId: p.id, s: p.s, d: p.d });
@@ -936,7 +940,7 @@ export class Pursuit {
         u.d += clamp(g.d - u.d, -H.trackSpeed * dt, H.trackSpeed * dt);
         u.shakeT += dt;
         if (u.shakeT > H.shakeWindow) u.shakes = 0;
-        if (g.move === null && g.lane !== u.lane) {
+        if (g.move !== 'wallBump' && g.lane !== u.lane) {
           u.lane = g.lane;
           u.shakes = u.shakeT <= H.shakeWindow || u.shakes === 0 ? u.shakes + 1 : 1;
           u.shakeT = 0;

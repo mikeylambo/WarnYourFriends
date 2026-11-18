@@ -128,6 +128,8 @@ export class Sim {
     this.track = new Track(opts.seed, opts.segment ?? 0, this.guided, this.edition.hard);
     this.escort = new Escort(opts.seed, this.track);
     this.pursuit = new Pursuit(opts.seed, this);
+    const scratch: Unit[] = [];
+    this.escort.solid = (a, b) => this.pursuit.solidBetween(a, b, scratch);
     this.upgrades = new Set(opts.upgrades ?? []);
     // In the order bought (opts.upgrades keeps it), at most `abilitySlots`.
     this.abilities = (opts.upgrades ?? []).filter((u): u is AbilityId => (['leap', 'stare', 'breakaway', 'primeTime', 'shoulder'] as string[]).includes(u)).slice(0, TUNING.run.abilitySlots);
@@ -795,7 +797,7 @@ export class Sim {
     if (g.air > 0) {
       g.air = Math.max(0, g.air - dt);
       // Never land inside something he can't flatten (a bulldozer, an armored truck): carry on over it.
-      if (g.air === 0 && g.airDur - 0 < A.landExtendMax + (g.airKind === 'breakaway' ? A.breakaway.time[2] : A.leap.time[2]) && this.landingBlocked()) {
+      if (g.air === 0 && g.airDur - 0 < A.landExtendMax + (g.airKind === 'breakaway' ? A.breakaway.time[this.levelOf('breakaway') - 1] : A.leap.time[this.levelOf('leap') - 1]) && this.landingBlocked()) {
         g.air = dt;
         g.airDur += dt;
       }
@@ -808,7 +810,10 @@ export class Sim {
     if (input.ability2) g.ability2Buffer = A.bufferFrames;
     // Slot 1 then slot 2, each with its own buffer and cooldown (an airborne ability blocks both until it lands).
     if (g.abilityBuffer > 0 && this.ability) {
-      if (g.abilityCd > 0 || g.stumble > 0 || g.air > 0) g.abilityBuffer--;
+      if (g.abilityCd > 0 || g.stumble > 0 || g.air > 0) {
+        // The press ran out its buffer while he couldn't: tell him (a dud).
+        if (--g.abilityBuffer === 0) this.emit({ type: 'ability', id: this.ability, ok: false, level: this.levelOf(this.ability), slot: 1 });
+      }
       else {
         g.abilityBuffer = 0;
         g.abilityCd = this.fire(this.ability);
@@ -816,7 +821,10 @@ export class Sim {
       }
     }
     if (g.ability2Buffer > 0 && this.ability2) {
-      if (g.ability2Cd > 0 || g.stumble > 0 || g.air > 0) g.ability2Buffer--;
+      if (g.ability2Cd > 0 || g.stumble > 0 || g.air > 0) {
+        // The press ran out its buffer while he couldn't: tell him (a dud).
+        if (--g.ability2Buffer === 0) this.emit({ type: 'ability', id: this.ability2, ok: false, level: this.levelOf(this.ability2), slot: 2 });
+      }
       else {
         g.ability2Buffer = 0;
         g.ability2Cd = this.fire(this.ability2);
@@ -860,7 +868,7 @@ export class Sim {
     const r = this.radius();
     const all = g.airKind === 'leap' && this.levelOf('leap') >= 3;
     const near: Prop[] = [...this.track.propsBetween(g.s - r - 4, g.s + r + 4), ...this.pursuit.solidBetween(g.s - r - 4, g.s + r + 4)];
-    return near.some((p) => p.alive && (p.cls === 'immovable' || (p as Unit).ram) && !all && Math.abs(p.s - g.s) < p.hl + r && Math.abs(p.d - g.d) < p.hw + r);
+    return near.some((p) => p.alive && (this.rankOf(p) === CLASS_RANK.immovable || (p as Unit).ram) && !all && Math.abs(p.s - g.s) < p.hl + r && Math.abs(p.d - g.d) < p.hw + r);
   }
 
   /** A landing shockwave: smashes everything within `R` up to Heavy (or anything, `all`), never landing inside a car. */
@@ -895,7 +903,7 @@ export class Sim {
     const smashed = this.slam(TUNING.abilities.breakaway.shockRadius[L], false);
     g.speed = Math.min(g.speed, this.tierTuning.topSpeed); // the landing takes the dive's extra speed
     const shaken = this.pursuit.loseAllBehind();
-    if (L >= 2) this.startRampage();
+    if (L >= 2 && !this.inRampage) this.startRampage();
     this.emit({ type: 'breakawayLand', s: g.s, d: g.d, smashed, shaken });
   }
 
@@ -910,9 +918,10 @@ export class Sim {
     const W = TUNING.lanes.width;
     const moved: { id: number; from: number; to: number }[] = [];
     const myC = this.track.laneCenter(g.lane);
-    const free = (p: Prop, c: number) => !this.track.propsBetween(p.s - p.hl - 3, p.s + p.hl + 3).some((q) => q !== p && Math.abs(q.d - c) < q.hw + p.hw + 0.4);
+    const free = (p: Prop, c: number) =>
+      ![...this.track.propsBetween(p.s - p.hl - 3, p.s + p.hl + 3), ...this.pursuit.solidBetween(p.s - p.hl - 3, p.s + p.hl + 3)].some((q) => q !== p && q.alive && Math.abs(q.d - c) < q.hw + p.hw + 0.4);
     // Nearest lanes first, so a car next to him can move out before one in his lane moves in beside it.
-    const props = this.track.propsBetween(g.s, g.s + A.reach[this.levelOf('stare') - 1]).filter((p) => p.alive && p.cls !== 'immovable' && Math.abs(p.d - myC) <= W * A.lanesEitherSide + p.hw);
+    const props = this.track.propsBetween(g.s, g.s + A.reach[this.levelOf('stare') - 1]).filter((p) => p.alive && this.rankOf(p) !== CLASS_RANK.immovable && Math.abs(p.d - myC) <= W * A.lanesEitherSide + p.hw);
     props.sort((a, b) => Math.abs(b.d - myC) - Math.abs(a.d - myC));
     for (const p of props) {
       const lanes = this.track.lanesAt(p.s);
@@ -939,7 +948,7 @@ export class Sim {
   private stepSpeed(input: SimInput, dt: number) {
     const g = this.giant;
     const tier = this.tierTuning;
-    const top = tier.topSpeed + (g.shoulderT > 0 ? TUNING.shoulderCheck.burstSpeed : 0);
+    const top = tier.topSpeed + (g.shoulderT > 0 ? TUNING.abilities.shoulder.burst : 0);
     // In the air (Leap, Breakaway) the brake does nothing.
     const brake = input.brake && g.air <= 0;
     g.braking = brake;
@@ -1049,7 +1058,7 @@ export class Sim {
       // A Police Net flanker breaks only to a Shoulder Check (then it's Heavy); otherwise nothing moves it.
       const u = p as Unit;
       // A cruiser mid-ram is driving into him: it can't be shrugged off at Rampage (only a Shoulder Check flattens it).
-      const ramming = u.unit === 'cruiser' && u.phase === 'act' && TUNING.pursuit.cruiser.ramBeatsRampage && this.giant.shoulderT <= 0 && !this.inRampage;
+      const ramming = u.unit === 'cruiser' && u.phase === 'act' && this.giant.shoulderT <= 0 && (TUNING.pursuit.cruiser.ramBeatsRampage || !this.inRampage);
       const pr = ramming ? CLASS_RANK.immovable : u.ram && this.giant.shoulderT > 0 ? CLASS_RANK.heavy : this.rankOf(p);
       if (pr <= rank) {
         // Smash, forward or across: the same class rule either way (v0.3 smash-across).

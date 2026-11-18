@@ -154,8 +154,6 @@ var TUNING = {
     /** §7 0.25s burst that smashes one mass class up (unchanged in v0.3). */
     duration: 0.25,
     cooldown: 3,
-    /** Extra speed during the burst; a lunge, not a dash. */
-    burstSpeed: 3,
     /** §8 5-frame input buffer. */
     bufferFrames: 5
   },
@@ -714,8 +712,8 @@ var TUNING = {
       fixated: true,
       /** Kiting window (Mike, 2026-11-17: "still not able to kite cops into bulldozers"): alongside him it rides beside him this long before winding up a ram (it used to wind up at once). */
       holdAlongside: 3,
-      /** A ram that connects costs a gear even at Rampage (Mike, 2026-11-16: Rampage is defended, not kept); a Shoulder Check into it still flattens it. */
-      ramBeatsRampage: true,
+      /** A ram never beats Rampage: at Rampage he flattens a ramming cruiser (Mike, 2026-11-17, reversing 2026-11-16). Outside Rampage only a Shoulder Check does. */
+      ramBeatsRampage: false,
       /**
        * Kiting (Mike, 2026-11-16: "still not able to kite the following police"): with no room beside him a cruiser
        * tails him `gap` m back in his lane, steering at `sideSpeed` m/s for where he was `react` s ago; it gives up
@@ -1291,6 +1289,7 @@ var Track = class {
     this.zoneTarget = Z.lanes[zone];
     this.zoneJustStarted = true;
     this.forceLanes = Z.lanes[zone];
+    this.nextMerge = Math.max(this.nextMerge, fromIndex + this.zoneLeft + TUNING.track.mergeEvery[0]);
     this.nextRowS = propsFrom;
     this.lastRowAt = propsFrom;
   }
@@ -1555,6 +1554,8 @@ var Escort = class {
   /** Giant's path: lateral offset `d` sampled along `s`, oldest first. */
   pathS = [];
   pathD = [];
+  /** Police units on the road (pursuit), so the escort steers round them too. */
+  solid = () => [];
   /** Giant's lateral offset where it was at `s` (interpolated). */
   pathAt(s) {
     const S = this.pathS;
@@ -1576,6 +1577,9 @@ var Escort = class {
   blocked(s, d) {
     for (const p of this.track.propsBetween(s - 4, s + 10)) {
       if (Math.abs(p.d - d) < p.hw + 1.1) return true;
+    }
+    for (const p of this.solid(s - 4, s + 10)) {
+      if (p.alive && Math.abs(p.d - d) < p.hw + 1.1) return true;
     }
     return false;
   }
@@ -2046,7 +2050,7 @@ var Pursuit = class {
     if (this.units.some((u) => u.alive && u.unit === "roadblock" && u.s > sim.giant.s)) return false;
     if (k === "net") {
       const N = TUNING.pursuit.net;
-      if (this.nets >= N.perSegment[sim.show.heat - 1] || sim.time - this.netAt < N.minGap) return false;
+      if (this.nets >= N.perSegment[Math.min(sim.show.segment, N.perSegment.length - 1)] || sim.time - this.netAt < N.minGap) return false;
       if (this.units.some((u) => u.alive && (u.unit === "net" || u.unit === "rolling" || u.unit === "carrier"))) return false;
     }
     if (k === "cruiser") return this.units.filter((u) => u.alive && u.unit === "cruiser" && !u.lost).length < 2;
@@ -2176,7 +2180,7 @@ var Pursuit = class {
           break;
         }
         const flankers = crew.filter((x) => x !== truck);
-        const inBox = u.s - g.s < 30 && u.s > g.s && Math.abs(u.d - g.d) < W * 0.6 && flankers.every((f) => Math.abs(f.s - g.s) < 7);
+        const inBox = u.s - g.s < 30 && u.s > g.s && Math.abs(u.d - g.d) < W * 0.6 && flankers.length > 0 && flankers.every((f) => Math.abs(f.s - g.s) < 7);
         const out = inBox ? 0 : (this.outOfBox.get(u.group) ?? 0) + dt;
         this.outOfBox.set(u.group, out);
         if (out >= N.escapeAfter || u.phaseT >= N.actMax) {
@@ -2278,6 +2282,9 @@ var Pursuit = class {
       const lane = options[this.rng.int(0, options.length - 1)];
       const blocked = /* @__PURE__ */ new Set([lane]);
       for (const p2 of track.propsBetween(at - 5, at + 5)) if (p2.alive) blocked.add(Math.floor(p2.d / W));
+      const police = this.solidBetween(at - 5, at + 5).filter((x) => x !== u);
+      if (police.some((x) => Math.abs(x.d - track.laneCenter(lane)) < x.hw + 1)) continue;
+      for (const x of police) blocked.add(Math.floor(x.d / W));
       if (blocked.size >= L) continue;
       const p = track.drop("car", at, track.laneCenter(lane) + this.rng.range(-0.4, 0.4));
       sim.emitPublic({ type: "carrierDrop", carrierId: u.id, propId: p.id, s: p.s, d: p.d });
@@ -2670,7 +2677,7 @@ var Pursuit = class {
         u.d += clamp(g.d - u.d, -H.trackSpeed * dt, H.trackSpeed * dt);
         u.shakeT += dt;
         if (u.shakeT > H.shakeWindow) u.shakes = 0;
-        if (g.move === null && g.lane !== u.lane) {
+        if (g.move !== "wallBump" && g.lane !== u.lane) {
           u.lane = g.lane;
           u.shakes = u.shakeT <= H.shakeWindow || u.shakes === 0 ? u.shakes + 1 : 1;
           u.shakeT = 0;
@@ -2975,6 +2982,8 @@ var Sim = class {
     this.track = new Track(opts.seed, opts.segment ?? 0, this.guided, this.edition.hard);
     this.escort = new Escort(opts.seed, this.track);
     this.pursuit = new Pursuit(opts.seed, this);
+    const scratch = [];
+    this.escort.solid = (a, b) => this.pursuit.solidBetween(a, b, scratch);
     this.upgrades = new Set(opts.upgrades ?? []);
     this.abilities = (opts.upgrades ?? []).filter((u) => ["leap", "stare", "breakaway", "primeTime", "shoulder"].includes(u)).slice(0, TUNING.run.abilitySlots);
     this.levels = { ...opts.levels ?? {} };
@@ -3594,7 +3603,7 @@ var Sim = class {
     }
     if (g.air > 0) {
       g.air = Math.max(0, g.air - dt);
-      if (g.air === 0 && g.airDur - 0 < A2.landExtendMax + (g.airKind === "breakaway" ? A2.breakaway.time[2] : A2.leap.time[2]) && this.landingBlocked()) {
+      if (g.air === 0 && g.airDur - 0 < A2.landExtendMax + (g.airKind === "breakaway" ? A2.breakaway.time[this.levelOf("breakaway") - 1] : A2.leap.time[this.levelOf("leap") - 1]) && this.landingBlocked()) {
         g.air = dt;
         g.airDur += dt;
       }
@@ -3606,16 +3615,18 @@ var Sim = class {
     if (input.ability) g.abilityBuffer = A2.bufferFrames;
     if (input.ability2) g.ability2Buffer = A2.bufferFrames;
     if (g.abilityBuffer > 0 && this.ability) {
-      if (g.abilityCd > 0 || g.stumble > 0 || g.air > 0) g.abilityBuffer--;
-      else {
+      if (g.abilityCd > 0 || g.stumble > 0 || g.air > 0) {
+        if (--g.abilityBuffer === 0) this.emit({ type: "ability", id: this.ability, ok: false, level: this.levelOf(this.ability), slot: 1 });
+      } else {
         g.abilityBuffer = 0;
         g.abilityCd = this.fire(this.ability);
         this.emit({ type: "ability", id: this.ability, ok: true, level: this.levelOf(this.ability), slot: 1 });
       }
     }
     if (g.ability2Buffer > 0 && this.ability2) {
-      if (g.ability2Cd > 0 || g.stumble > 0 || g.air > 0) g.ability2Buffer--;
-      else {
+      if (g.ability2Cd > 0 || g.stumble > 0 || g.air > 0) {
+        if (--g.ability2Buffer === 0) this.emit({ type: "ability", id: this.ability2, ok: false, level: this.levelOf(this.ability2), slot: 2 });
+      } else {
         g.ability2Buffer = 0;
         g.ability2Cd = this.fire(this.ability2);
         this.emit({ type: "ability", id: this.ability2, ok: true, level: this.levelOf(this.ability2), slot: 2 });
@@ -3655,7 +3666,7 @@ var Sim = class {
     const r = this.radius();
     const all = g.airKind === "leap" && this.levelOf("leap") >= 3;
     const near = [...this.track.propsBetween(g.s - r - 4, g.s + r + 4), ...this.pursuit.solidBetween(g.s - r - 4, g.s + r + 4)];
-    return near.some((p) => p.alive && (p.cls === "immovable" || p.ram) && !all && Math.abs(p.s - g.s) < p.hl + r && Math.abs(p.d - g.d) < p.hw + r);
+    return near.some((p) => p.alive && (this.rankOf(p) === CLASS_RANK.immovable || p.ram) && !all && Math.abs(p.s - g.s) < p.hl + r && Math.abs(p.d - g.d) < p.hw + r);
   }
   /** A landing shockwave: smashes everything within `R` up to Heavy (or anything, `all`), never landing inside a car. */
   slam(R, all) {
@@ -3687,7 +3698,7 @@ var Sim = class {
     const smashed = this.slam(TUNING.abilities.breakaway.shockRadius[L], false);
     g.speed = Math.min(g.speed, this.tierTuning.topSpeed);
     const shaken = this.pursuit.loseAllBehind();
-    if (L >= 2) this.startRampage();
+    if (L >= 2 && !this.inRampage) this.startRampage();
     this.emit({ type: "breakawayLand", s: g.s, d: g.d, smashed, shaken });
   }
   /**
@@ -3701,8 +3712,8 @@ var Sim = class {
     const W = TUNING.lanes.width;
     const moved = [];
     const myC = this.track.laneCenter(g.lane);
-    const free = (p, c) => !this.track.propsBetween(p.s - p.hl - 3, p.s + p.hl + 3).some((q) => q !== p && Math.abs(q.d - c) < q.hw + p.hw + 0.4);
-    const props = this.track.propsBetween(g.s, g.s + A2.reach[this.levelOf("stare") - 1]).filter((p) => p.alive && p.cls !== "immovable" && Math.abs(p.d - myC) <= W * A2.lanesEitherSide + p.hw);
+    const free = (p, c) => ![...this.track.propsBetween(p.s - p.hl - 3, p.s + p.hl + 3), ...this.pursuit.solidBetween(p.s - p.hl - 3, p.s + p.hl + 3)].some((q) => q !== p && q.alive && Math.abs(q.d - c) < q.hw + p.hw + 0.4);
+    const props = this.track.propsBetween(g.s, g.s + A2.reach[this.levelOf("stare") - 1]).filter((p) => p.alive && this.rankOf(p) !== CLASS_RANK.immovable && Math.abs(p.d - myC) <= W * A2.lanesEitherSide + p.hw);
     props.sort((a, b) => Math.abs(b.d - myC) - Math.abs(a.d - myC));
     for (const p of props) {
       const lanes = this.track.lanesAt(p.s);
@@ -3726,7 +3737,7 @@ var Sim = class {
   stepSpeed(input, dt) {
     const g = this.giant;
     const tier = this.tierTuning;
-    const top = tier.topSpeed + (g.shoulderT > 0 ? TUNING.shoulderCheck.burstSpeed : 0);
+    const top = tier.topSpeed + (g.shoulderT > 0 ? TUNING.abilities.shoulder.burst : 0);
     const brake = input.brake && g.air <= 0;
     g.braking = brake;
     if (brake) {
@@ -3819,7 +3830,7 @@ var Sim = class {
       const dd = g.d - cd;
       if (ds * ds + dd * dd >= r * r) continue;
       const u = p;
-      const ramming = u.unit === "cruiser" && u.phase === "act" && TUNING.pursuit.cruiser.ramBeatsRampage && this.giant.shoulderT <= 0 && !this.inRampage;
+      const ramming = u.unit === "cruiser" && u.phase === "act" && this.giant.shoulderT <= 0 && (TUNING.pursuit.cruiser.ramBeatsRampage || !this.inRampage);
       const pr = ramming ? CLASS_RANK.immovable : u.ram && this.giant.shoulderT > 0 ? CLASS_RANK.heavy : this.rankOf(p);
       if (pr <= rank) {
         p.alive = false;

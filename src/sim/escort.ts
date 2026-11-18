@@ -33,6 +33,9 @@ export class Escort {
   private pathS: number[] = [];
   private pathD: number[] = [];
 
+  /** Police units on the road (pursuit), so the escort steers round them too. */
+  solid: (s0: number, s1: number) => { d: number; hw: number; alive: boolean }[] = () => [];
+
   constructor(seed: number, private track: Track) {
     const E = TUNING.escort;
     const rng = new Rng((seed ^ 0xe5c0e5c0) >>> 0);
@@ -66,6 +69,9 @@ export class Escort {
   private blocked(s: number, d: number): boolean {
     for (const p of this.track.propsBetween(s - 4, s + 10)) {
       if (Math.abs(p.d - d) < p.hw + 1.1) return true;
+    }
+    for (const p of this.solid(s - 4, s + 10)) {
+      if (p.alive && Math.abs(p.d - d) < p.hw + 1.1) return true;
     }
     return false;
   }

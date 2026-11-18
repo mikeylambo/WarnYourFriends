@@ -77,12 +77,22 @@ describe('police chopper spotlight (v0.3 §11)', () => {
     expect(sim.pursuit.marked).toBe(false);
   });
 
+  it('a queued lane change counts as a shake', () => {
+    const sim = emptySim();
+    const u = locked(sim);
+    run(sim, 1 / HZ, { ...NO_INPUT, lane: 1 });
+    run(sim, 1 / HZ, { ...NO_INPUT, lane: -1 }); // queued behind the first (back, away from any wall)
+    run(sim, 1);
+    expect(u.phase).toBe('leave');
+  });
+
   it('lane changes too far apart do not add up', () => {
     const sim = emptySim();
     const u = locked(sim);
-    run(sim, 0.05, { ...NO_INPUT, lane: 1 });
+    // Single-frame taps: a held key queues a second change, and every change counts (queued ones too).
+    run(sim, 1 / HZ, { ...NO_INPUT, lane: 1 });
     run(sim, TUNING.pursuit.chopper.shakeWindow + 0.5);
-    run(sim, 0.05, { ...NO_INPUT, lane: -1 });
+    run(sim, 1 / HZ, { ...NO_INPUT, lane: -1 });
     run(sim, 0.6);
     expect(u.phase).toBe('act');
   });

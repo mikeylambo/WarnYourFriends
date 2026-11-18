@@ -302,6 +302,8 @@ export class Track {
     this.zoneTarget = Z.lanes[zone];
     this.zoneJustStarted = true;
     this.forceLanes = Z.lanes[zone];
+    // The merge clock restarts from the branch, so coming back to a highway never merges at once.
+    this.nextMerge = Math.max(this.nextMerge, fromIndex + this.zoneLeft + TUNING.track.mergeEvery[0]);
     this.nextRowS = propsFrom;
     this.lastRowAt = propsFrom;
   }
