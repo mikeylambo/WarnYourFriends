@@ -26,7 +26,7 @@ import { UPGRADE_ART } from './upgradeArt';
 import { PlayLog, appendLog, exportLog, type PlayEntry } from './playlog';
 import { readFlags } from './debug';
 import { encodeInputs, type Submission } from './leaderboard/verify';
-import { mountBoard } from './leaderboardClient';
+import { mountBoard, prefetchSeed, takeSeed } from './leaderboardClient';
 import { Onboarding, type PromptId } from './onboarding';
 import { AWARDS, loadProfile, outfitUnlocked, record, rewardLine, saveProfile, unlockEdition, upgradePool, type Award } from './awards';
 import { GAME_SPEEDS, HUD_SIZES, loadSettings, saveSettings } from './settings';
@@ -1655,7 +1655,7 @@ function start() {
 function beginBroadcast(mode = 'broadcast') {
   attract = false;
   document.documentElement.classList.remove('attract');
-  const seed = nextSeed ?? (Math.random() * 1e9) | 0;
+  const seed = nextSeed ?? takeSeed() ?? (Math.random() * 1e9) | 0;
   nextSeed = null;
   // The very first broadcast a player goes live in is the guided one (TUNING.guided): its first segment opens calm.
   const guided = !flags.bot && !flags.autostart && !briefingSeen();
@@ -1777,6 +1777,7 @@ window.addEventListener('resize', resize);
 resize();
 
 enterAttract();
+prefetchSeed(); // the first broadcast's road, ready before Go Live
 app = await createGameApp({
   gameId: 'warn-your-friends',
   gameName: 'Giant at Large',

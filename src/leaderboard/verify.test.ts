@@ -5,7 +5,7 @@ import { RunState } from '../sim/run';
 import type { SimInput } from '../sim/types';
 import type { UpgradeId } from '../tuning';
 import { cleanName, decodeInputs, encodeInputs, verify, type Submission } from './verify';
-import { handle, memoryStore } from '../../server/leaderboard';
+import { handle, memoryStore, ticketKey } from '../../server/leaderboard';
 
 /** Play a segment with the bot the way the game does: every step's input logged, plus a short outro. */
 function playLogged(sim: Sim): SimInput[] {
@@ -113,13 +113,19 @@ describe('leaderboard verify', () => {
 
 describe('leaderboard API', () => {
   const player = 'abcdef0123456789';
+  const secret = 'secretsecretsecretsecret01';
+  /** A submission on a road the server issued to `who`. */
+  const issued = async <S extends { seed: number }>(store: ReturnType<typeof memoryStore>, who: string, sub: S): Promise<S> => {
+    await store.run([['SET', ticketKey(who, sub.seed), 1]]);
+    return sub;
+  };
   it('stores the verified best per player and ranks it', async () => {
     const store = memoryStore();
-    const sub = botRun(81);
-    const post = await handle(store, 'POST', {}, { ...sub, player, name: 'Tester' }, '1.1.1.1');
+    const sub = await issued(store, player, botRun(81));
+    const post = await handle(store, 'POST', {}, { ...sub, player, secret, name: 'Tester' }, '1.1.1.1');
     expect(post.status).toBe(200);
     expect(post.body).toMatchObject({ ok: true, score: sub.claimed, rank: 1 });
-    const other = await handle(store, 'POST', {}, { ...botRun(82), player: 'fedcba9876543210', name: 'Other' }, '1.1.1.2');
+    const other = await handle(store, 'POST', {}, { ...(await issued(store, 'fedcba9876543210', botRun(82))), player: 'fedcba9876543210', secret: 'othersecretothersecret0123', name: 'Other' }, '1.1.1.2');
     expect(other.status).toBe(200);
     const get = await handle(store, 'GET', { mode: 'run', player }, null, '1.1.1.1');
     const body = get.body as { top: { name: string; score: number; you: boolean }[]; you: { rank: number } };
@@ -131,10 +137,39 @@ describe('leaderboard API', () => {
 
   it('refuses an inflated claim, and counts it', async () => {
     const store = memoryStore();
-    const sub = botRun(83);
-    const r = await handle(store, 'POST', {}, { ...sub, claimed: sub.claimed * 2, player, name: 'Cheat' }, '1.1.1.1');
+    const sub = await issued(store, player, botRun(83));
+    const r = await handle(store, 'POST', {}, { ...sub, claimed: sub.claimed * 2, player, secret, name: 'Cheat' }, '1.1.1.1');
     expect(r.status).toBe(422);
     expect((await store.run([['INCR', 'wyf:lb:mismatch']]))[0]).toBe(2);
+  });
+
+  it('only ranks roads it issued, to the player it issued them to', async () => {
+    const store = memoryStore();
+    const t = await handle(store, 'GET', { ticket: '1', player }, null, '1.1.1.1');
+    expect(t.status).toBe(200);
+    const seed = (t.body as { seed: number }).seed;
+    expect((await store.run([['EXISTS', ticketKey(player, seed)]]))[0]).toBe(1);
+    const sub = botRun(84);
+    expect((await handle(store, 'POST', {}, { ...sub, player, secret, name: 'Picker' }, '1.1.1.1')).body).toEqual({ error: 'seed' });
+    await issued(store, 'fedcba9876543210', sub);
+    expect((await handle(store, 'POST', {}, { ...sub, player, secret, name: 'Picker' }, '1.1.1.1')).body).toEqual({ error: 'seed' });
+  });
+
+  it('lets only the first secret post for a player id', async () => {
+    const store = memoryStore();
+    const sub = await issued(store, player, botRun(85));
+    expect((await handle(store, 'POST', {}, { ...sub, player, secret, name: 'Owner' }, '1.1.1.1')).status).toBe(200);
+    const r = await handle(store, 'POST', {}, { ...sub, player, secret: 'impostorimpostorimpostor00', name: 'Impostor' }, '1.1.1.2');
+    expect(r.status).toBe(403);
+    expect((await handle(store, 'POST', {}, { ...sub, player, name: 'NoKey' }, '1.1.1.3')).status).toBe(400);
+  });
+
+  it('refuses a pool missing base upgrades, and ranks the guided broadcast once', async () => {
+    const store = memoryStore();
+    const sub = await issued(store, player, botRun(86));
+    expect((await handle(store, 'POST', {}, { ...sub, pool: ['leap'], player, secret, name: 'Thin' }, '1.1.1.1')).body).toEqual({ error: 'pool' });
+    await store.run([['HSETNX', 'wyf:lb:guided', player, 1]]);
+    expect((await handle(store, 'POST', {}, { ...sub, guided: true, player, secret, name: 'Again' }, '1.1.1.1')).body).toEqual({ error: 'guided' });
   });
 
   it('rate-limits, and says when it is not configured', async () => {

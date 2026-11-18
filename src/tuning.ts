@@ -926,6 +926,12 @@ export const TUNING = {
     tolerance: 0.005,
     /** Submissions per IP per minute (the server's own guard; a run takes minutes). */
     perMinute: 12,
+    /** Submissions per minute across everyone (each one re-plays up to five segments on the server). */
+    perMinuteAll: 120,
+    /** A road the server hands out stays rankable for this player this long (s): Run Again on it counts, a road picked by hand doesn't. */
+    ticketTtl: 6 * 3600,
+    /** Roads handed out per player per minute. */
+    ticketsPerMinute: 10,
     /** Never on the board (rule 10: never mean). Matched inside the name's letters. */
     blocked: ['fuck', 'shit', 'cunt', 'nigg', 'fag', 'rape', 'nazi', 'hitler', 'retard', 'whore', 'slut', 'bitch', 'cock', 'pussy', 'kike', 'chink', 'spic', 'tranny'],
   },

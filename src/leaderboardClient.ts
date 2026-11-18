@@ -29,6 +29,43 @@ function playerId(): string {
   return id;
 }
 
+const SECRET_KEY = 'wyf.lb.secret';
+/** This browser's private key: the server lets only it post for (and rename) this player id. */
+function secret(): string {
+  let s = store(SECRET_KEY);
+  if (!s || !/^[a-z0-9]{24,64}$/.test(s)) {
+    const b = new Uint8Array(24);
+    crypto.getRandomValues(b);
+    s = store(SECRET_KEY, [...b].map((x) => x.toString(36).padStart(2, '0')).join('').slice(0, 40)) ?? '';
+  }
+  return s;
+}
+
+/**
+ * Roads the station issues (only issued roads rank). One is fetched ahead so a broadcast never waits for it;
+ * offline or local, there is none and the broadcast runs on a road of its own (it plays the same, unranked).
+ */
+let issued: number | null = null;
+let fetching = false;
+export function prefetchSeed() {
+  if (issued !== null || fetching) return;
+  fetching = true;
+  fetch(`${API}?ticket=1&player=${playerId()}`)
+    .then((r) => (r.ok ? r.json() : null))
+    .then((b: { seed?: unknown } | null) => {
+      if (b && Number.isSafeInteger(b.seed)) issued = b.seed as number;
+    })
+    .catch(() => {})
+    .finally(() => (fetching = false));
+}
+/** The issued road for a fresh broadcast (and fetch the next), or null. */
+export function takeSeed(): number | null {
+  const s = issued;
+  issued = null;
+  prefetchSeed();
+  return s;
+}
+
 type Row = { rank: number; name: string; score: number; you?: boolean };
 const esc = (s: string) => s.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
 const n = (x: number) => Math.round(x).toLocaleString();
@@ -65,10 +102,10 @@ export function mountBoard(el: HTMLElement, mode: BoardMode, sub: Submission | n
     if (!sub) return;
     el.classList.add('busy');
     try {
-      const r = await fetch(API, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...sub, player, name }) });
+      const r = await fetch(API, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...sub, player, secret: secret(), name }) });
       const body = (await r.json().catch(() => ({}))) as { top?: Row[]; rank?: number; best?: number; score?: number; error?: string };
       if (!r.ok) {
-        const msg = body.error === 'name' ? 'That name can’t go on air. Try another.' : body.error === 'mismatch' || body.error === 'unfinished' ? 'The replay didn’t check out, so it wasn’t posted.' : 'Couldn’t reach the board. Try again in a moment.';
+        const msg = body.error === 'name' ? 'That name can’t go on air. Try another.' : body.error === 'seed' ? 'This road wasn’t issued by the station (were you offline?), so it can’t be ranked.' : body.error === 'guided' ? 'The guided broadcast ranks once. Your next one counts.' : body.error === 'mismatch' || body.error === 'unfinished' ? 'The replay didn’t check out, so it wasn’t posted.' : 'Couldn’t reach the board. Try again in a moment.';
         if (body.error === 'name') store(NAME_KEY, '');
         const note = el.querySelector('.note') ?? el.appendChild(Object.assign(document.createElement('p'), { className: 'note' }));
         note.textContent = msg;
