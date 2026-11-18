@@ -328,7 +328,8 @@ var TUNING = {
    * concrete) for the first `clearFor` m, while the onboarding prompts walk him through lanes, smashing and Rampage.
    * Landmarks keep their own patterns. The flag rides the leaderboard submission so the server replays it the same.
    */
-  guided: { calmFor: 25, clearFor: 400 },
+  /** meterGain: Rampage meter gains × this during the calm, so a first-timer's first Rampage lands inside it (bot: 21s → ~12s). */
+  guided: { calmFor: 25, clearFor: 400, meterGain: 1.8 },
   /**
    * Things worth aiming for (Mike, 2026-11-17: "not enough to do during the runs, especially during Rampage").
    * - Rival news vans (a rival station's van, dish on the roof): `newsvanChance` of Heavy traffic slots. Flattening one
@@ -500,6 +501,34 @@ var TUNING = {
   /** `rampWarn`: Rampage's last this-many seconds pulse red and tick (review pick 2: see it ending). */
   hud: { minScale: 0.5, maxScale: 1.3, asksIntro: 8, asksFlash: 3, rampWarn: 1.5 },
   /** Footfall presentation (v0.3). */
+  /**
+   * Impact effects (review #64/#65): pooled smoke/dust puffs, metal sparks and skid marks. Puffs stay soft and
+   * low so they never hide his next move (rule 2: readable from the chopper).
+   */
+  vfx: {
+    puffMax: 72,
+    sparkMax: 220,
+    /** Rampage aura (review #65): embers a second off him (× how far into Rampage), and speed lines streaking past (off under Reduced Motion). */
+    emberRate: 45,
+    speedLineRate: 22,
+    speedLineMax: 48,
+    skidMax: 12,
+    skidLife: 6,
+    skidAlpha: 0.55,
+    /** Heavy smash: puffs, size (m), life (s), alpha. */
+    heavySmoke: [5, 3.6, 1.4, 0.68],
+    /** Medium smash: a little dust. */
+    mediumDust: [3, 2.2, 0.9, 0.5],
+    /** Police crash: puffs and sparks. */
+    crashSmoke: [6, 4, 1.7, 0.72],
+    crashSparks: 18,
+    /** Metal smashed, and a bounce off something he can't break. */
+    metalSparks: 12,
+    bounceSparks: 8,
+    /** Stride / Rampage footfall dust puffs (per tier), size (m, scales with him). */
+    stepDust: [0, 1, 2],
+    stepDustSize: 1.7
+  },
   footfall: {
     /** 2px camera pulse on every plant. */
     pulsePx: 2,
@@ -881,7 +910,17 @@ var TUNING = {
    * road ahead of a police car alongside him.
    */
   /** lanesAfter: the first lesson waits for the opening's head-on shot and swing home (mirrored steering) to end. */
-  onboarding: { lanesAfter: 5.2, quietStart: 4, blockedLead: 2.2, audienceBelow: 12, kiteAhead: 30, gap: 7, hold: 4.5 },
+  onboarding: {
+    lanesAfter: 5.2,
+    quietStart: 4,
+    blockedLead: 2.2,
+    audienceBelow: 12,
+    kiteAhead: 30,
+    gap: 7,
+    hold: 4.5,
+    /** The RAMPAGE READY prompt holds until he fires, up to this many s. */
+    readyHold: 15
+  },
   /**
    * Outfits (Awards, Mike 2026-11-17: "recolors for now"): the Meshy texture's plum cloth takes `hue` (deg) with
    * saturation × `sat` and lightness × `light`; the bone plates blend `plateMix` toward `plate` (null = as painted).
@@ -998,6 +1037,15 @@ var TUNING = {
   },
   /** Phase 0c look: night by default; LIVE TIME follows the local clock. */
   look: {
+    /** Bloom (Settings; review #66): only the brightest things glow (lights, sparks, embers, lit windows at night). */
+    /** By look: daylight lifts the road and cars near white, so the day threshold sits above them (Mike, 2026-11-18: "entirely too much"). */
+    bloom: { radius: 0.35, night: { strength: 0.55, threshold: 0.82 }, dusk: { strength: 0.35, threshold: 0.9 }, day: { strength: 0.15, threshold: 0.97 } },
+    /**
+     * Adaptive resolution (phones): every 0.5s window under `lowFps` counts; `downAfter` in a row drops the pixel
+     * ratio by `step` (not below `minRatio`); `upAfter` windows over `highFps` raise it again (not past the device's,
+     * capped at `maxRatio`). Slow to rise so it doesn't hunt; fast enough to drop that a stutter lasts ~1s.
+     */
+    resolution: { maxRatio: 2, minRatio: 1, step: 0.25, lowFps: 50, highFps: 57, downAfter: 2, upAfter: 12 },
     /** Local hours (24h): day from dayStart, dusk from duskStart, night from nightStart; dawn counts as dusk. */
     dawnStart: 5,
     dayStart: 7,
@@ -3595,7 +3643,8 @@ var Sim = class {
     }
     if (g.meter >= 100) return;
     const D = TUNING.difficulty;
-    let add = (R.gain[cause] ?? 0) * this.edition.meter * D.meterGain[Math.min(this.show.segment, D.meterGain.length - 1)] * (this.upgrades.has("shortFuse") ? TUNING.passives.shortFuseMult : 1);
+    const teach = this.guided && this.time < TUNING.guided.calmFor ? TUNING.guided.meterGain : 1;
+    let add = teach * (R.gain[cause] ?? 0) * this.edition.meter * D.meterGain[Math.min(this.show.segment, D.meterGain.length - 1)] * (this.upgrades.has("shortFuse") ? TUNING.passives.shortFuseMult : 1);
     if (g.shoulderT > 0 && this.levelOf("shoulder") >= 3 && (cause === "medium" || cause === "heavy" || cause === "unit")) add += TUNING.abilities.shoulder.meterPerSmash;
     g.meter = Math.min(100, g.meter + add);
     if (g.meter >= 100) this.emit({ type: "meterFull" });
