@@ -5,7 +5,7 @@ import { Bot } from '../src/sim/bot';
 if (process.env.PROTO !== '0') enableProto();
 const dist: number[] = [], dur: number[] = []; const N = 40, seg = Number(process.env.SEG ?? 0);
 const ends: Record<string, number> = {}; let ramps = 0, firstR: number[] = [], hits = 0, near = 0, smash = 0, time = 0;
-for (let seed = 1; seed <= N; seed++) {
+for (let seed = 1 + Number(process.env.FROM ?? 0); seed <= N + Number(process.env.FROM ?? 0); seed++) {
   const sim = new Sim({ seed, segment: seg, upgrades: [], growth: true });
   const bot = new Bot(sim); let fr = -1;
   for (let i = 0; i < 60 * 420 && sim.live; i++) {

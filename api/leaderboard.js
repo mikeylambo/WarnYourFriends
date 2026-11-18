@@ -29,6 +29,10 @@ var TUNING = {
     chunkReact: 0.45,
     /** Chunk level climbs one step every this many metres (and one per run segment). */
     levelEvery: 700,
+    /** Moving traffic: oncoming cars (m/s toward him), slow box trucks (m/s his way), and how far ahead of him they wake (m, off camera). */
+    oncomingSpeed: 12,
+    truckSpeed: 7,
+    moverWake: 150,
     /** Endless: the audience drain grows by its base rate every this many seconds (×2 at 2 min, ×3 at 4). */
     endlessRamp: 120,
     /**
@@ -1334,10 +1338,23 @@ var CHUNKS = [
   { id: "four-rival", lanes: 4, level: 2, rows: [[0, "cv.c"], [32, ".cnv"], [64, "c.vc"], [92, "s.s."]] },
   { id: "four-wall", lanes: 4, level: 3, rows: [[0, "cvc."], [36, ".cvc"], [72, "cv.c"]] },
   { id: "four-zig", lanes: 4, level: 4, rows: [[0, "ccc."], [38, ".ccc"], [76, "ccc."], [114, "c.cc"]] },
+  // Two-way expressway (Mike, 2026-11-18): the left lanes come at him. Optional lanes, so never a forced hit.
+  { id: "four-oncoming", lanes: 4, level: 4, zones: ["highway"], oncoming: "oo..", rows: [[0, "o.c."], [20, ".o.."], [30, "o..c"], [48, ".o.."], [60, "n.c."], [76, "o..."], [92, ".o.c"]] },
+  { id: "four-oncoming-rush", lanes: 4, level: 5, zones: ["highway"], oncoming: "oo..", rows: [[0, "o.v."], [14, ".o.."], [30, "o..c"], [44, ".o.s"], [62, "oo.v"], [94, "o.c."], [108, ".o.."]] },
+  // Long and slow (box trucks): its lane is closed for the chunk; he overtakes on the open side.
+  { id: "four-convoy", lanes: 4, level: 3, rows: [[0, ".t.c"], [30, "c.c."], [60, "..c."], [88, "s..c"]] },
+  { id: "three-truck", lanes: 3, level: 3, rows: [[0, "t.c"], [30, ".c."], [60, "..c"], [86, "s.s"]] },
   { id: "four-blockade", lanes: 4, level: 5, rows: [[0, "bdc."], [34, "c.vd"], [64, ".cbd"], [94, "cv.d"], [124, "d.cv"]] }
 ];
-var CHUNK_KINDS = { c: "car", v: "van", n: "newsvan", d: "dozer", b: "barricade", f: "foodtruck", s: "small" };
+var CHUNK_KINDS = { c: "car", v: "van", n: "newsvan", d: "dozer", b: "barricade", f: "foodtruck", s: "small", o: "car", t: "foodtruck" };
+function mirror(c) {
+  const rev = (s) => [...s].reverse().join("");
+  return { ...c, id: `${c.id}-mirrored`, rows: c.rows.map(([ds, r]) => [ds, rev(r)]), ...c.oncoming ? { oncoming: rev(c.oncoming) } : {} };
+}
 var SMALL_KINDS = ["sawhorse", "cart", "scooter", "fence"];
+function chunkLength(c) {
+  return c.rows[c.rows.length - 1][0];
+}
 function pathFrom(lanes, lane, rows, opts = SOLVE) {
   const shift = (ds) => Math.max(0, Math.floor(((ds - opts.clear) / opts.speed - opts.react) / opts.change));
   let at = /* @__PURE__ */ new Set([lane]);
@@ -1463,8 +1480,32 @@ var Track = class {
     while (this.end < s) this.addSegment();
   }
   /** Forget segments and props well behind `s`. */
+  /** Prototype moving traffic (oncoming cars, slow trucks): kept apart from `props`, whose order along the road propsBetween relies on. */
+  movers = [];
+  /** Two-way stretches (presentation paints a double yellow line at `split`, the lane edge between the directions). */
+  twoWay = [];
+  /**
+   * Drive the moving traffic. Each waits until he's `moverWake` m short of it, then sets off from wherever puts it
+   * level with him at its `meet` spot (at his speed then), and never leaves its own chunk: an oncoming car that
+   * reaches the chunk's start, or a truck its end, stops there (a stalled car in its own lane, never another's).
+   */
+  stepMovers(dt, gs, gv) {
+    const P = TUNING.proto;
+    for (const m of this.movers) {
+      const mv = m.mover;
+      if (!m.alive) continue;
+      if (!mv.active) {
+        if (gs < mv.min - P.moverWake) continue;
+        mv.active = true;
+        const t = Math.max(0, (mv.meet - gs) / Math.max(gv, 1));
+        m.s = clamp(mv.meet - mv.v * t, mv.min + m.hl, mv.max - m.hl);
+      }
+      m.s = clamp(m.s + mv.v * dt, mv.min + m.hl, mv.max - m.hl);
+    }
+  }
   prune(s) {
     const keep = s - TUNING.track.keepBehind;
+    for (let i2 = this.movers.length - 1; i2 >= 0; i2--) if (this.movers[i2].s + this.movers[i2].hl < keep) this.movers.splice(i2, 1);
     while (this.segments.length > 2 && this.segments[0].s0 + this.segments[0].length < keep) this.segments.shift();
     let i = 0;
     while (i < this.props.length && this.props[i].s + this.props[i].hl < keep) i++;
@@ -1803,6 +1844,11 @@ var Track = class {
         }
         this.chunk = { c, s0, row: 0, last: s0 };
         this.lastChunkId = c.id;
+        if (c.oncoming) {
+          const left = c.oncoming[0] === "o";
+          const n = [...c.oncoming].filter((x) => x === "o").length;
+          this.twoWay.push({ s0: s0 - 12, s1: s0 + chunkLength(c) + 12, split: left ? n : c.lanes - n });
+        }
       }
       const ch = this.chunk;
       const [ds, pattern] = ch.c.rows[ch.row];
@@ -1817,7 +1863,16 @@ var Track = class {
       for (let l = 0; l < pattern.length; l++) {
         const k = CHUNK_KINDS[pattern[l]];
         if (!k) continue;
-        this.place(k === "small" ? this.rng.pick(SMALL_KINDS) : k, s + this.rng.range(-0.6, 0.6), l, seg);
+        const at = s + this.rng.range(-0.6, 0.6);
+        const ch2 = pattern[l];
+        if (ch2 === "o" || ch2 === "t") {
+          this.place(k, at, l, seg);
+          const m = this.props.pop();
+          const P = TUNING.proto;
+          m.mover = { v: ch2 === "o" ? -P.oncomingSpeed : P.truckSpeed, meet: at, min: ch.s0 - 2, max: ch.s0 + chunkLength(ch.c) + 6, active: false };
+          if (ch2 === "o") m.oncoming = true;
+          this.movers.push(m);
+        } else this.place(k === "small" ? this.rng.pick(SMALL_KINDS) : k, at, l, seg);
       }
       ch.last = s;
       this.lastRowAt = s;
@@ -1828,7 +1883,8 @@ var Track = class {
     }
   }
   pickChunk(lanes, level, zone) {
-    const fits = CHUNKS.filter((c) => c.lanes === lanes && c.level <= level && (!c.zones || c.zones.includes(zone)) && c.id !== this.lastChunkId);
+    const pool = this.district < 0 ? [...CHUNKS, ...CHUNKS.filter((c) => c.oncoming).map(mirror)] : CHUNKS;
+    const fits = pool.filter((c) => c.lanes === lanes && c.level <= level && (!c.zones || c.zones.includes(zone)) && c.id !== this.lastChunkId);
     if (!fits.length) return null;
     const top = fits.filter((c) => c.level >= level - 1);
     return this.rng.pick(top.length && this.rng.chance(0.75) ? top : fits);
@@ -1925,6 +1981,7 @@ var Track = class {
       if (p.s - p.hl > s1 + 4) break;
       if (p.alive && p.s + p.hl >= s0 && p.s - p.hl <= s1) out.push(p);
     }
+    for (const p of this.movers) if (p.alive && p.s + p.hl >= s0 && p.s - p.hl <= s1) out.push(p);
     return out;
   }
 };
@@ -3526,6 +3583,7 @@ var Sim = class {
     this.show.banked += dp;
     this.stats.distancePoints += dp;
     this.stepLateral(dt);
+    if (this.track.movers.length) this.track.stepMovers(dt, this.giant.s, this.giant.speed);
     this.collide();
     this.judgePasses();
     const seg = this.track.segmentAt(this.giant.s);
@@ -4307,6 +4365,7 @@ var Sim = class {
         if (unit) g.speed = Math.max(TUNING.giant.speedFloor, Math.min(g.speed, p.speed));
       }
       if (unit) p.hit = true;
+      if (p.mover) p.mover.v = 0;
       p.judged = true;
       if (g.stumble > 0 || g.move === "knock") continue;
       g.speed = Math.max(TUNING.giant.speedFloor, g.speed * TUNING.collision.bounceSpeedKeep);

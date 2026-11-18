@@ -2,7 +2,7 @@ import { TUNING, type MassClass } from '../tuning';
 import { Rng } from './rng';
 import { DEG, clamp } from './math';
 import type { LandmarkKind, Material, Prop, PropKind } from './types';
-import { CHUNKS, CHUNK_KINDS, SMALL_KINDS, type Chunk } from './chunks';
+import { CHUNKS, CHUNK_KINDS, SMALL_KINDS, chunkLength, mirror, type Chunk } from './chunks';
 
 /**
  * v0.3 procedural highway, built from 40m segments on gentle splines.
@@ -173,8 +173,34 @@ export class Track {
   }
 
   /** Forget segments and props well behind `s`. */
+  /** Prototype moving traffic (oncoming cars, slow trucks): kept apart from `props`, whose order along the road propsBetween relies on. */
+  readonly movers: Prop[] = [];
+  /** Two-way stretches (presentation paints a double yellow line at `split`, the lane edge between the directions). */
+  readonly twoWay: { s0: number; s1: number; split: number; built?: boolean }[] = [];
+
+  /**
+   * Drive the moving traffic. Each waits until he's `moverWake` m short of it, then sets off from wherever puts it
+   * level with him at its `meet` spot (at his speed then), and never leaves its own chunk: an oncoming car that
+   * reaches the chunk's start, or a truck its end, stops there (a stalled car in its own lane, never another's).
+   */
+  stepMovers(dt: number, gs: number, gv: number) {
+    const P = TUNING.proto;
+    for (const m of this.movers) {
+      const mv = m.mover!;
+      if (!m.alive) continue;
+      if (!mv.active) {
+        if (gs < mv.min - P.moverWake) continue;
+        mv.active = true;
+        const t = Math.max(0, (mv.meet - gs) / Math.max(gv, 1));
+        m.s = clamp(mv.meet - mv.v * t, mv.min + m.hl, mv.max - m.hl);
+      }
+      m.s = clamp(m.s + mv.v * dt, mv.min + m.hl, mv.max - m.hl);
+    }
+  }
+
   prune(s: number) {
     const keep = s - TUNING.track.keepBehind;
+    for (let i = this.movers.length - 1; i >= 0; i--) if (this.movers[i].s + this.movers[i].hl < keep) this.movers.splice(i, 1);
     while (this.segments.length > 2 && this.segments[0].s0 + this.segments[0].length < keep) this.segments.shift();
     let i = 0;
     while (i < this.props.length && this.props[i].s + this.props[i].hl < keep) i++;
@@ -560,6 +586,11 @@ export class Track {
         }
         this.chunk = { c, s0, row: 0, last: s0 };
         this.lastChunkId = c.id;
+        if (c.oncoming) {
+          const left = c.oncoming[0] === 'o';
+          const n = [...c.oncoming].filter((x) => x === 'o').length;
+          this.twoWay.push({ s0: s0 - 12, s1: s0 + chunkLength(c) + 12, split: left ? n : c.lanes - n });
+        }
       }
       const ch = this.chunk;
       const [ds, pattern] = ch.c.rows[ch.row];
@@ -575,7 +606,17 @@ export class Track {
       for (let l = 0; l < pattern.length; l++) {
         const k = CHUNK_KINDS[pattern[l]];
         if (!k) continue;
-        this.place(k === 'small' ? this.rng.pick(SMALL_KINDS) : k, s + this.rng.range(-0.6, 0.6), l, seg);
+        const at = s + this.rng.range(-0.6, 0.6);
+        const ch2 = pattern[l];
+        if (ch2 === 'o' || ch2 === 't') {
+          // Moving traffic: placed now, held until he's near, confined to this chunk.
+          this.place(k as PropKind, at, l, seg);
+          const m = this.props.pop()!;
+          const P = TUNING.proto;
+          m.mover = { v: ch2 === 'o' ? -P.oncomingSpeed : P.truckSpeed, meet: at, min: ch.s0 - 2, max: ch.s0 + chunkLength(ch.c) + 6, active: false };
+          if (ch2 === 'o') m.oncoming = true;
+          this.movers.push(m);
+        } else this.place(k === 'small' ? this.rng.pick(SMALL_KINDS) : k, at, l, seg);
       }
       ch.last = s;
       this.lastRowAt = s;
@@ -587,7 +628,9 @@ export class Track {
   }
 
   private pickChunk(lanes: number, level: number, zone: string): Chunk | null {
-    const fits = CHUNKS.filter((c) => c.lanes === lanes && c.level <= level && (!c.zones || c.zones.includes(zone)) && c.id !== this.lastChunkId);
+    // Endless: two-way stretches can run either side (mirrored); the story keeps them on the left.
+    const pool = this.district < 0 ? [...CHUNKS, ...CHUNKS.filter((c) => c.oncoming).map(mirror)] : CHUNKS;
+    const fits = pool.filter((c) => c.lanes === lanes && c.level <= level && (!c.zones || c.zones.includes(zone)) && c.id !== this.lastChunkId);
     if (!fits.length) return null;
     // Mostly at the current level, sometimes a breather from below.
     const top = fits.filter((c) => c.level >= level - 1);
@@ -690,6 +733,7 @@ export class Track {
       if (p.s - p.hl > s1 + 4) break; // rows are generated in order; ±1.5m jitter within a row
       if (p.alive && p.s + p.hl >= s0 && p.s - p.hl <= s1) out.push(p);
     }
+    for (const p of this.movers) if (p.alive && p.s + p.hl >= s0 && p.s - p.hl <= s1) out.push(p);
     return out;
   }
 }

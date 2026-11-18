@@ -8,6 +8,9 @@ import type { PropKind } from './types';
  *   .  empty     s  small thing (sawhorse / cart / scooter / fence: crumbles underfoot)
  *   c  car       v  van        n  rival news van (the one vehicle worth hitting)
  *   d  bulldozer b  concrete   f  food truck
+ *   o  oncoming car (only in `oncoming` lanes; drives at him)   t  slow box truck (his way, slower than him)
+ * Oncoming lanes and a slow truck's lane are closed to the solver (he may take them, never has to): the chunk
+ * must be passable on the rest alone, without crossing them. So moving traffic is a risk he chooses, never a wall.
  * Every chunk must pass `solve` from every entry lane (chunks.test.ts): there is always a line through at full
  * sprint, with only lane changes he has time to make. Pure data + maths: no DOM, no three.
  */
@@ -19,6 +22,8 @@ export interface Chunk {
   rows: [number, string][];
   /** Only on these zones (absent: any). */
   zones?: string[];
+  /** Two-way stretch: 'o' marks the lanes that drive toward him (e.g. 'oo..'). Absent: every lane goes his way. */
+  oncoming?: string;
 }
 
 export const CHUNKS: Chunk[] = [
@@ -49,11 +54,30 @@ export const CHUNKS: Chunk[] = [
   { id: 'four-rival', lanes: 4, level: 2, rows: [[0, 'cv.c'], [32, '.cnv'], [64, 'c.vc'], [92, 's.s.']] },
   { id: 'four-wall', lanes: 4, level: 3, rows: [[0, 'cvc.'], [36, '.cvc'], [72, 'cv.c']] },
   { id: 'four-zig', lanes: 4, level: 4, rows: [[0, 'ccc.'], [38, '.ccc'], [76, 'ccc.'], [114, 'c.cc']] },
+  // Two-way expressway (Mike, 2026-11-18): the left lanes come at him. Optional lanes, so never a forced hit.
+  { id: 'four-oncoming', lanes: 4, level: 4, zones: ['highway'], oncoming: 'oo..', rows: [[0, 'o.c.'], [20, '.o..'], [30, 'o..c'], [48, '.o..'], [60, 'n.c.'], [76, 'o...'], [92, '.o.c']] },
+  { id: 'four-oncoming-rush', lanes: 4, level: 5, zones: ['highway'], oncoming: 'oo..', rows: [[0, 'o.v.'], [14, '.o..'], [30, 'o..c'], [44, '.o.s'], [62, 'oo.v'], [94, 'o.c.'], [108, '.o..']] },
+  // Long and slow (box trucks): its lane is closed for the chunk; he overtakes on the open side.
+  { id: 'four-convoy', lanes: 4, level: 3, rows: [[0, '.t.c'], [30, 'c.c.'], [60, '..c.'], [88, 's..c']] },
+  { id: 'three-truck', lanes: 3, level: 3, rows: [[0, 't.c'], [30, '.c.'], [60, '..c'], [86, 's.s']] },
   { id: 'four-blockade', lanes: 4, level: 5, rows: [[0, 'bdc.'], [34, 'c.vd'], [64, '.cbd'], [94, 'cv.d'], [124, 'd.cv']] },
 ];
 
 /** The letters a chunk row may use, and what each places (`s` picks a small thing). */
-export const CHUNK_KINDS: Record<string, PropKind | 'small'> = { c: 'car', v: 'van', n: 'newsvan', d: 'dozer', b: 'barricade', f: 'foodtruck', s: 'small' };
+export const CHUNK_KINDS: Record<string, PropKind | 'small'> = { c: 'car', v: 'van', n: 'newsvan', d: 'dozer', b: 'barricade', f: 'foodtruck', s: 'small', o: 'car', t: 'foodtruck' };
+
+/** Lanes the solver can't use in a chunk: its oncoming lanes and any slow truck's lane. */
+export function closedLanes(c: Chunk): Set<number> {
+  const out = new Set<number>();
+  for (let l = 0; l < c.lanes; l++) if (c.oncoming?.[l] === 'o' || c.rows.some(([, r]) => r[l] === 't')) out.add(l);
+  return out;
+}
+
+/** The same chunk with left and right swapped (endless mode: two-way stretches can run either side). */
+export function mirror(c: Chunk): Chunk {
+  const rev = (s: string) => [...s].reverse().join('');
+  return { ...c, id: `${c.id}-mirrored`, rows: c.rows.map(([ds, r]) => [ds, rev(r)] as [number, string]), ...(c.oncoming ? { oncoming: rev(c.oncoming) } : {}) };
+}
 export const SMALL_KINDS: PropKind[] = ['sawhorse', 'cart', 'scooter', 'fence'];
 
 export function chunkLength(c: Chunk): number {
@@ -67,16 +91,25 @@ export function chunkLength(c: Chunk): number {
  * Returns the entry lanes that have no way through (empty: fair).
  */
 export function solve(c: Chunk, opts = SOLVE): number[] {
-  const free = (row: string, l: number) => row[l] === '.' || row[l] === 's' || row[l] === 'n';
+  const closed = closedLanes(c);
+  const free = (row: string, l: number) => !closed.has(l) && (row[l] === '.' || row[l] === 's' || row[l] === 'n');
   const shift = (ds: number) => Math.max(0, Math.floor(((ds - opts.clear) / opts.speed - opts.react) / opts.change));
   const stuck: number[] = [];
   for (let start = 0; start < c.lanes; start++) {
     let at = new Set([start]);
     let prev = -opts.lead;
     for (const [ds, row] of c.rows) {
+      // A row with nothing on the open side (only oncoming cars) asks nothing of him: it doesn't split the gap.
+      if (Array.from({ length: c.lanes }, (_, l) => l).every((l) => closed.has(l) || free(row, l))) continue;
       const k = shift(ds - prev);
       const next = new Set<number>();
-      for (const l of at) for (let m = Math.max(0, l - k); m <= Math.min(c.lanes - 1, l + k); m++) if (free(row, m)) next.add(m);
+      // Never across a closed lane: a lane change through a truck or the oncoming side isn't a line he can count on.
+      // (The run-up before the first row is clear: there he can cross anything.)
+      const first = prev === -opts.lead;
+      for (const l of at) {
+        for (let m = l; m >= Math.max(0, l - k) && (first || !closed.has(m)); m--) if (free(row, m)) next.add(m);
+        for (let m = l; m <= Math.min(c.lanes - 1, l + k) && (first || !closed.has(m)); m++) if (free(row, m)) next.add(m);
+      }
       at = next;
       prev = ds;
       if (!at.size) break;

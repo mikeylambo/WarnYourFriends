@@ -78,6 +78,9 @@ function signTexture(fork?: string): THREE.Texture {
   return tex;
 }
 
+/** Prototype: the double yellow line on a two-way stretch. */
+const TWO_WAY_LINE = new THREE.MeshBasicMaterial({ color: 0xf2b705 });
+
 /** Prototype: the ring under small smashables (one geometry and material for all of them). */
 const SMASH_RING_GEO = new THREE.RingGeometry(0.78, 1, 28);
 const SMASH_RING_MAT = new THREE.MeshBasicMaterial({ color: 0xffd23c, transparent: true, opacity: 0.85, depthWrite: false });
@@ -286,6 +289,7 @@ export class HighwayView {
   readonly group = new THREE.Group();
   private segViews = new Map<number, THREE.Group>();
   private propViews = new Map<number, THREE.Group>();
+  private twoWayLines: THREE.Mesh[] = [];
   private ground: THREE.Mesh;
   private debris: Debris[] = [];
   private debrisMesh: THREE.InstancedMesh;
@@ -396,6 +400,45 @@ export class HighwayView {
         this.propViews.set(p.id, g);
         this.group.add(g);
       }
+    }
+    // Prototype two-way stretches: a double yellow line between the directions (built once, ahead of him).
+    for (const tw of track.twoWay) {
+      if (tw.built || track.end < tw.s1) continue;
+      tw.built = true;
+      const W = TUNING.lanes.width;
+      for (let s = tw.s0; s < tw.s1; s += 3) {
+        for (const off of [-0.18, 0.18]) {
+          const m = new THREE.Mesh(this.box, TWO_WAY_LINE);
+          track.posAt(s, tw.split * W + off, this.pos);
+          m.position.set(this.pos.x, 0.03, this.pos.z);
+          m.rotation.y = -track.headingAt(s);
+          m.scale.set(3.1, 0.02, 0.12); // solid: pieces overlap
+          m.userData.twoWay = tw.s1;
+          this.group.add(m);
+          this.twoWayLines.push(m);
+        }
+      }
+    }
+    for (let i = this.twoWayLines.length - 1; i >= 0; i--) {
+      if (this.twoWayLines[i].userData.twoWay < this.sim.giant.s - TUNING.track.keepBehind) {
+        this.group.remove(this.twoWayLines[i]);
+        this.twoWayLines.splice(i, 1);
+      }
+    }
+    // Prototype moving traffic: built like the rest, then moved with the sim every frame (oncoming cars face him).
+    for (const p of track.movers) {
+      if (p.segment > lastReady) continue;
+      liveProps.add(p.id);
+      if (!p.alive) continue;
+      let g = this.propViews.get(p.id);
+      if (!g) {
+        g = this.buildProp(p);
+        this.propViews.set(p.id, g);
+        this.group.add(g);
+      }
+      track.posAt(p.s, p.d, this.pos);
+      g.position.set(this.pos.x, 0, this.pos.z);
+      g.rotation.y = -track.headingAt(p.s) + (p.oncoming ? Math.PI : 0);
     }
     for (const [id, g] of this.propViews) {
       if (!liveProps.has(id)) {

@@ -150,7 +150,11 @@ export class Bot {
         if (last && p.s - g.s - last.ds < 3) last.blocked.add(lane);
         else rows.push({ ds: p.s - g.s, blocked: new Set([lane]) });
       }
-      for (let l = 0; l < lanes; l++) planned.set(l, pathFrom(lanes, l, rows));
+      // Moving traffic (oncoming cars, slow trucks): it won't be where it is now, so treat its lane as closed throughout.
+      const movingLanes = new Set(track.movers.filter((m) => m.alive && m.mover?.active && m.s > g.s - 4 && m.s < g.s + g.speed * 4).map((m) => Math.max(0, Math.min(lanes - 1, Math.floor(m.d / W)))));
+      for (const r of rows) for (const l of movingLanes) r.blocked.add(l);
+      if (movingLanes.size) rows.push({ ds: g.speed * 4, blocked: new Set(movingLanes) });
+      for (let l = 0; l < lanes; l++) planned.set(l, pathFrom(lanes, l, rows) && !movingLanes.has(l));
     }
     const plan = (lane: number) => (planned.size && !planned.get(lane) ? -40 : 0);
     const here = score(g.lane) + plan(g.lane);

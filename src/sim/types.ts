@@ -28,6 +28,13 @@ export interface Prop {
   segment: number;
   /** Rampage timing (2026-11-17): breaks only in Rampage (concrete, police roadblocks); unbreakable until then. */
   rampOnly?: boolean;
+  /**
+   * Prototype moving traffic: its speed along the road (m/s; negative drives at him), the spot it's meant to pass
+   * him (`meet`), and the chunk it stays inside [`min`, `max`]. It waits until he's `wake` metres out, then drives.
+   */
+  /** Drives toward him (presentation turns it round). */
+  oncoming?: boolean;
+  mover?: { v: number; meet: number; min: number; max: number; active: boolean };
 }
 
 export type LaneMove = 'change' | 'knock' | 'wallBump' | null;

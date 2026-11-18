@@ -112,6 +112,10 @@ export const TUNING = {
     chunkReact: 0.45,
     /** Chunk level climbs one step every this many metres (and one per run segment). */
     levelEvery: 700,
+    /** Moving traffic: oncoming cars (m/s toward him), slow box trucks (m/s his way), and how far ahead of him they wake (m, off camera). */
+    oncomingSpeed: 12,
+    truckSpeed: 7,
+    moverWake: 150,
     /** Endless: the audience drain grows by its base rate every this many seconds (×2 at 2 min, ×3 at 4). */
     endlessRamp: 120,
     /**

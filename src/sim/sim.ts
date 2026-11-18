@@ -268,6 +268,7 @@ export class Sim {
     this.show.banked += dp;
     this.stats.distancePoints += dp;
     this.stepLateral(dt);
+    if (this.track.movers.length) this.track.stepMovers(dt, this.giant.s, this.giant.speed);
     this.collide();
     this.judgePasses();
     const seg = this.track.segmentAt(this.giant.s);
@@ -1138,6 +1139,7 @@ export class Sim {
         if (unit) g.speed = Math.max(TUNING.giant.speedFloor, Math.min(g.speed, (p as Unit).speed));
       }
       if (unit) (p as Unit).hit = true;
+      if (p.mover) p.mover.v = 0; // moving traffic he runs into stops dead (no pushing into him every frame)
       p.judged = true; // touched it: never a dodge
       if (g.stumble > 0 || g.move === 'knock') continue; // already reeling: no double penalty
 
