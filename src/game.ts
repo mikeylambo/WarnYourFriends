@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { RIM } from './render/toon';
-import { TUNING, type AbilityId, type UpgradeId } from './tuning';
+import { TUNING, type AbilityId, type UpgradeId, enableProto } from './tuning';
 import { RunState, ABILITIES } from './sim/run';
 import { Sim } from './sim/sim';
 import { Bot } from './sim/bot';
@@ -39,6 +39,12 @@ import { applyStoredTuning, mountTuningPanel, tuningChanged } from './tuningPane
 import { createGameApp, type InputDeviceFamily, type CoreSettings, type FrameAssembly, type GenreFrame, type RendererAdapter, type SLUWebShell } from '@slu/web-shell';
 
 applyStoredTuning();
+/** The prototype core loop (DECISIONS 2026-11-18): ?proto=1 turns it on for this page load. */
+const PROTO = new URLSearchParams(location.search).has('proto');
+if (PROTO) {
+  enableProto();
+  document.documentElement.classList.add('proto');
+}
 
 const flags = readFlags(location.search);
 const settings = loadSettings();
@@ -326,12 +332,12 @@ const onboarding = new Onboarding($('prompt'), (id: PromptId) => {
   const ab2 = sim.ability2 ? TUNING.upgrades[sim.ability2] : null;
   const fire = settings.autoRampage ? 'it fires by itself' : `press ${k('shoulder')}`;
   const lines: Record<PromptId, string> = {
-    lanes: `Change lanes ${k('lanes')} and smash the traffic`,
-    blocked: `Bulldozers and armored trucks don't break. Change lanes ${k('lanes')}`,
+    lanes: PROTO ? `Change lanes ${k('lanes')}: weave through the traffic` : `Change lanes ${k('lanes')} and smash the traffic`,
+    blocked: PROTO ? `Cars and trucks don't break until Rampage. Dodge them ${k('lanes')}` : `Bulldozers and armored trucks don't break. Change lanes ${k('lanes')}`,
     concrete: `Concrete and yellow-roof police lines only break in <b>RAMPAGE</b>. Save it, or go round`,
-    meter: `Smash and dodge to fill the <b>RAMPAGE</b> meter`,
+    meter: PROTO ? `Close dodges win the <b>AUDIENCE</b>. Full audience: <b>RAMPAGE</b>` : `Smash and dodge to fill the <b>RAMPAGE</b> meter`,
     ready: `<b>RAMPAGE READY</b> ${settings.autoRampage ? 'Here it goes' : `Press ${k('shoulder')}`}`,
-    hit: `Hits cost Rampage meter`,
+    hit: PROTO ? `Hits lose the audience, and the police close in` : `Hits cost Rampage meter`,
     ram: `Police swerving in: dodge ${k('lanes')}`,
     rampage: `<b>RAMPAGE</b> Run through anything. Keep smashing to make it last`,
     audience: `Audience dropping: smash something`,
@@ -372,7 +378,9 @@ const inputLog: SimInput[] = [];
 let lb: { mode: 'run' | 'broadcast'; seed: number; segments: string[]; buys: UpgradeId[][]; pool: UpgradeId[]; guided?: boolean; edition?: number } = { mode: 'broadcast', seed: 0, segments: [], buys: [], pool: [] };
 /** Why this browser's scores can't go on the board (a setting that changes the sim), or null. */
 const lbBlocked = () =>
-  flags.bot || flags.seg !== null || flags.ability || flags.heat !== null || flags.nodecay || flags.god || (flags.size !== null && flags.size !== 'growth') || tuningChanged()
+  PROTO
+    ? 'Prototype rules: this score stays off the board.'
+    : flags.bot || flags.seg !== null || flags.ability || flags.heat !== null || flags.nodecay || flags.god || (flags.size !== null && flags.size !== 'growth') || tuningChanged()
     ? 'Debug or tuning settings are on, so this score stays off the board.'
     : settings.gameSpeed < 1
       ? 'Game Speed is below 100%, so this score stays off the board.'
@@ -655,8 +663,9 @@ function openBriefing(goLive: boolean): Promise<void> {
     <div class="kicker">YOU'RE GOING LIVE</div>
     <ol class="steps">
       <li><b>Run.</b> He never stops. ${k('lanes')} change lanes.</li>
-      <li><b>Smash.</b> Run through the traffic. Go round bulldozers.</li>
-      <li><b>Rampage.</b> Smashing fills the meter. Full? ${settings.autoRampage ? 'It fires by itself' : `Press ${k('shoulder')}`} and he runs through everything.</li>
+      ${PROTO ? `<li><b>Dodge.</b> Weave through the traffic. Close calls win the audience; hits lose it, and the police close in.</li>
+      <li><b>Rampage.</b> Full audience? ${settings.autoRampage ? 'It fires by itself' : `Press ${k('shoulder')}`} and he smashes everything.</li>` : `<li><b>Smash.</b> Run through the traffic. Go round bulldozers.</li>
+      <li><b>Rampage.</b> Smashing fills the meter. Full? ${settings.autoRampage ? 'It fires by itself' : `Press ${k('shoulder')}`} and he runs through everything.</li>`}
     </ol>
     <p class="how">The producer will tell you the rest as it happens. Full rules: How to Play, on the menu.</p>
     <div class="row"><button class="go" id="brief-go">Go live</button></div>
@@ -2581,6 +2590,8 @@ function updateHud(dt: number) {
   const nm = ramp ? `${g.rampT.toFixed(1)}s` : ready ? (settings.autoRampage ? 'READY!' : `<kbd>${esc(glyph('shoulder'))}</kbd> GO!`) : `${Math.floor(g.meter)}%`;
   if (gearName.innerHTML !== nm) gearName.innerHTML = nm;
   gearsEl.classList.toggle('ramp', ramp);
+  // Prototype: a clean run builds the sprint (it shows on the meter's label).
+  if (PROTO) gearsEl.classList.toggle('sprint', !ramp && g.sprint >= 1);
   // Rampage's last moments (review pick 2): red edges, the chip blinks, a tick each half second.
   const ending = ramp && sim.live && g.rampT <= TUNING.hud.rampWarn;
   document.documentElement.classList.toggle('rampend', ending);

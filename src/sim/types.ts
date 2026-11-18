@@ -61,6 +61,8 @@ export interface GiantState {
   tier: number;
   tierTimer: number;
   stumble: number;
+  /** Prototype sprint, 0..1: built by clean running, reset by a hit or the brake. */
+  sprint: number;
   brakeHeld: number;
   braking: boolean;
   shoulderT: number;

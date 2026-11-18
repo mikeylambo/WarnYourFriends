@@ -88,6 +88,32 @@ export interface CameraAngle {
 }
 
 export const TUNING = {
+  /**
+   * PROTOTYPE core loop (Mike, 2026-11-18: "the core loop of running down the street is weak"), behind ?proto=1.
+   * Dodge until you can smash: in Stride only light things break (cones, carts, signs) and rival vans; every other
+   * vehicle is a hit (stumble, audience lost). Clean running builds a sprint over `sprintBuild` s (+`sprintBonus`
+   * m/s, ×`sprintPoints` distance score). Police catch him whenever he's under `caughtBelow` m/s (a stumble), not
+   * only when braking. One bar: the audience IS the Rampage meter; at `max` it's ready, after Rampage it drops to
+   * `afterRampage`. Dodges (near misses) feed it at `gain`. Off by default; `enableProto()` turns it on.
+   */
+  proto: {
+    on: false as boolean,
+    sprintBuild: 4,
+    sprintBonus: 4,
+    sprintPoints: 1,
+    hitAudience: 12,
+    caughtBelow: 9,
+    /** A hit with police within `tail` m behind him adds `hitPin` to the CAUGHT meter (100 = busted): three sloppy hits with the police on you and it's over. */
+    tail: 22,
+    hitPin: 28,
+    afterRampage: 55,
+    /** Dodges are the Stride verb, so they skip the variety rule; the near-miss window is wider (m); the drain is gentler. */
+    dodgeGap: 2.2,
+    decayMult: 0.6,
+    startRatings: 40,
+    gain: { nearMiss: 5, rival: 10, policeCrash: 12, lostTrack: 8, collateral: 1 } as Record<string, number>,
+  },
+
   sim: {
     /** §29 fixed step. */
     hz: 60,
@@ -1144,3 +1170,12 @@ export const TUNING = {
 } as const;
 
 export type Tuning = typeof TUNING;
+
+/** Turn the prototype core loop on (before any Sim is built): its rules plus the shorter, simpler run around it. */
+export function enableProto() {
+  const t = TUNING as unknown as { proto: { on: boolean }; run: { segments: number; abilitySlots: number }; show: { gain: Record<string, number> } };
+  t.proto.on = true;
+  t.run.segments = 3; // ~6 minutes a run
+  t.run.abilitySlots = 1;
+  for (const [k, v] of Object.entries(TUNING.proto.gain)) t.show.gain[k] = v;
+}

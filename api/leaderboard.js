@@ -5,6 +5,31 @@ import { createHash, randomInt } from "node:crypto";
 
 // src/tuning.ts
 var TUNING = {
+  /**
+   * PROTOTYPE core loop (Mike, 2026-11-18: "the core loop of running down the street is weak"), behind ?proto=1.
+   * Dodge until you can smash: in Stride only light things break (cones, carts, signs) and rival vans; every other
+   * vehicle is a hit (stumble, audience lost). Clean running builds a sprint over `sprintBuild` s (+`sprintBonus`
+   * m/s, ×`sprintPoints` distance score). Police catch him whenever he's under `caughtBelow` m/s (a stumble), not
+   * only when braking. One bar: the audience IS the Rampage meter; at `max` it's ready, after Rampage it drops to
+   * `afterRampage`. Dodges (near misses) feed it at `gain`. Off by default; `enableProto()` turns it on.
+   */
+  proto: {
+    on: false,
+    sprintBuild: 4,
+    sprintBonus: 4,
+    sprintPoints: 1,
+    hitAudience: 12,
+    caughtBelow: 9,
+    /** A hit with police within `tail` m behind him adds `hitPin` to the CAUGHT meter (100 = busted): three sloppy hits with the police on you and it's over. */
+    tail: 22,
+    hitPin: 28,
+    afterRampage: 55,
+    /** Dodges are the Stride verb, so they skip the variety rule; the near-miss window is wider (m); the drain is gentler. */
+    dodgeGap: 2.2,
+    decayMult: 0.6,
+    startRatings: 40,
+    gain: { nearMiss: 5, rival: 10, policeCrash: 12, lostTrack: 8, collateral: 1 }
+  },
   sim: {
     /** §29 fixed step. */
     hz: 60
@@ -1780,7 +1805,7 @@ var Escort = class {
   }
   step(dt, time, g) {
     const C = TUNING.pursuit.caught;
-    const crawl = g.speed < C.below && g.air <= 0;
+    const crawl = g.speed < (TUNING.proto.on ? TUNING.proto.caughtBelow : C.below) && g.air <= 0;
     const E = TUNING.escort;
     const joined = [];
     const S = this.pathS;
@@ -1895,7 +1920,7 @@ var Show = class _Show {
     let amount = base ?? S.gain[type];
     amount *= this.gainMult[type] ?? 1;
     if (this.prime && (type === "medium" || type === "heavy")) amount *= TUNING.abilities.primeTime.mult;
-    if (type !== "rampage") {
+    if (type !== "rampage" && !(TUNING.proto.on && type === "nearMiss")) {
       this.recent = this.recent.filter((r) => time - r.t <= S.repeatWindow);
       const repeats = this.recent.filter((r) => r.type === type).length;
       const mult = this.seen.has(type) ? S.repeatMult[Math.min(repeats, S.repeatMult.length - 1)] : this.freshMult;
@@ -3177,7 +3202,8 @@ var Sim = class {
     this.abilityLevel = this.ability ? this.levelOf(this.ability) : 0;
     this.show.startSegment(opts.segment ?? 0);
     if (this.guided) this.show.decayGrace = TUNING.guided.calmFor;
-    this.show.decayMult = this.edition.decay;
+    this.show.decayMult = this.edition.decay * (TUNING.proto.on ? TUNING.proto.decayMult : 1);
+    if (TUNING.proto.on) this.show.ratings = this.show.peak = TUNING.proto.startRatings;
     if (this.edition.heat) this.show.heat = Math.min(5, this.show.heat + this.edition.heat);
     this.asks = new Asks(opts.seed, opts.segment ?? 0, this.track);
     const PV = TUNING.passives;
@@ -3209,6 +3235,7 @@ var Sim = class {
       // Rampage loop: Stride is the base gear (Jog is gone; the run-up from startSpeed is the ease-in)
       tierTimer: 0,
       stumble: 0,
+      sprint: 0,
       brakeHeld: 0,
       braking: false,
       shoulderT: 0,
@@ -3283,7 +3310,7 @@ var Sim = class {
     const segBefore = this.track.segmentAt(this.giant.s).index;
     const s0 = this.giant.s;
     this.advance(dt);
-    const dp = (this.giant.s - s0) * TUNING.rampage.distancePoints * TUNING.show.bankMult[this.giant.tier];
+    const dp = (this.giant.s - s0) * TUNING.rampage.distancePoints * TUNING.show.bankMult[this.giant.tier] * (TUNING.proto.on ? 1 + this.giant.sprint * TUNING.proto.sprintPoints : 1);
     this.show.banked += dp;
     this.stats.distancePoints += dp;
     this.stepLateral(dt);
@@ -3308,6 +3335,11 @@ var Sim = class {
       else this.pursuit.shakeOff();
     }
     this.show.step(dt, this.time + dt, this.giant.tier, outnumbered, this.events);
+    if (TUNING.proto.on && !this.inRampage) {
+      const was = this.giant.meter;
+      this.giant.meter = this.show.ratings;
+      if (was < 100 && this.giant.meter >= 100) this.emit({ type: "meterFull" });
+    }
     for (const id of this.escort.step(dt, this.time, this.giant)) {
       const c = this.escort.cruisers[id];
       this.emit({ type: "escortJoin", id, behind: this.giant.s - c.s });
@@ -3379,7 +3411,7 @@ var Sim = class {
       p.judged = true;
       if (this.rankOf(p) <= rank || g.air > 0) continue;
       const gap = Math.abs(p.d - g.d) - p.hw - r;
-      if (gap < 0 || gap > TUNING.collision.dodgeGap) continue;
+      if (gap < 0 || gap > (TUNING.proto.on ? TUNING.proto.dodgeGap : TUNING.collision.dodgeGap)) continue;
       this.emit({ type: "dodge", propId: p.id, s: p.s, d: p.d, gap });
       this.award("nearMiss");
     }
@@ -3402,7 +3434,7 @@ var Sim = class {
   caught() {
     const g = this.giant;
     const C = TUNING.pursuit.caught;
-    if (g.speed >= C.below || g.air > 0) return false;
+    if (g.speed >= (TUNING.proto.on ? TUNING.proto.caughtBelow : C.below) || g.air > 0) return false;
     return this.pursuit.onHisTail().length > 0 || this.escort.tailing(g);
   }
   /** v0.3 box-in: both neighbouring lanes blocked and a unit within 8m ahead in yours. */
@@ -3598,6 +3630,7 @@ var Sim = class {
   }
   /** A prop's rank against his: rampOnly things (concrete, police roadblocks) count as unbreakable outside Rampage. */
   rankOf(p) {
+    if (TUNING.proto.on && p.kind === "newsvan") return CLASS_RANK.light;
     return p.rampOnly && !this.inRampage && this.giant.shoulderT <= 0 ? CLASS_RANK.immovable : CLASS_RANK[p.cls];
   }
   /** In Rampage (the burst), not just at top speed. */
@@ -3626,6 +3659,7 @@ var Sim = class {
   startRampage() {
     const g = this.giant;
     g.meter = 0;
+    g.sprint = 1;
     g.rampT = TUNING.rampage.duration + (this.upgrades.has("overdrive") ? TUNING.passives.overdriveTime : 0);
     g.rampElapsed = 0;
     this.setTier(TUNING.tiers.length - 1);
@@ -3639,6 +3673,10 @@ var Sim = class {
     const g = this.giant;
     g.rampT = 0;
     g.meter = this.upgrades.has("secondWind") ? TUNING.rampage.secondWindKeep : 0;
+    if (TUNING.proto.on) {
+      this.show.ratings = Math.min(this.show.ratings, TUNING.proto.afterRampage + (this.upgrades.has("secondWind") ? 15 : 0));
+      g.meter = this.show.ratings;
+    }
     this.setTier(1, "rampageEnd");
     this.emit({ type: "rampageEnd" });
   }
@@ -3651,7 +3689,7 @@ var Sim = class {
       if (cause === "medium" || cause === "heavy" || cause === "unit") g.rampT = Math.min(g.rampT + R.perSmash, Math.max(0, cap - g.rampElapsed));
       return;
     }
-    if (g.meter >= 100) return;
+    if (g.meter >= 100 || TUNING.proto.on) return;
     const D = TUNING.difficulty;
     const teach = this.guided && this.time < TUNING.guided.calmFor ? TUNING.guided.meterGain : 1;
     let add = teach * (R.gain[cause] ?? 0) * this.edition.meter * D.meterGain[Math.min(this.show.segment, D.meterGain.length - 1)] * (this.upgrades.has("shortFuse") ? TUNING.passives.shortFuseMult : 1);
@@ -3672,6 +3710,20 @@ var Sim = class {
     if (reason === "impact" && g.skin > 0) {
       g.skin--;
       this.emit({ type: "thickSkin", left: g.skin });
+      return;
+    }
+    g.sprint = 0;
+    if (TUNING.proto.on) {
+      const P = TUNING.proto;
+      const tail = this.pursuit.units.some((u) => u.alive && u.unit === "cruiser" && !u.lost && u.phase !== "leave" && g.s - u.s >= 0 && g.s - u.s <= P.tail) || this.escort.cruisers.some((c) => c.active && g.s - c.s >= 0 && g.s - c.s <= P.tail);
+      if (tail && reason === "impact") {
+        this.show.pin = Math.min(99.9, this.show.pin + P.hitPin);
+        this.show.pinCause = "caught";
+      }
+      const before2 = this.show.ratings;
+      this.show.ratings = Math.max(0, this.show.ratings - TUNING.proto.hitAudience);
+      g.meter = this.show.ratings;
+      if (before2 > g.meter) this.emit({ type: "meterLoss", amount: before2 - g.meter, reason });
       return;
     }
     const before = g.meter;
@@ -3923,7 +3975,11 @@ var Sim = class {
   stepSpeed(input, dt) {
     const g = this.giant;
     const tier = this.tierTuning;
-    const top = tier.topSpeed + (g.shoulderT > 0 ? TUNING.abilities.shoulder.burst : 0);
+    if (TUNING.proto.on) {
+      if (input.brake || g.stumble > 0) g.sprint = 0;
+      else g.sprint = Math.min(1, g.sprint + dt / TUNING.proto.sprintBuild);
+    }
+    const top = tier.topSpeed + (g.shoulderT > 0 ? TUNING.abilities.shoulder.burst : 0) + (TUNING.proto.on ? g.sprint * TUNING.proto.sprintBonus : 0);
     const brake = input.brake && g.air <= 0;
     g.braking = brake;
     if (brake) {
@@ -3981,6 +4037,7 @@ var Sim = class {
   smashRank() {
     const g = this.giant;
     if (this.inRampage) return CLASS_RANK.immovable;
+    if (TUNING.proto.on) return Math.min(CLASS_RANK.light + (g.shoulderT > 0 ? 1 : 0), CLASS_RANK.heavy);
     const base = this.tierTuning.smashes ? CLASS_RANK[this.tierTuning.smashes] : -1;
     return Math.min(base + (g.shoulderT > 0 ? 1 : 0), CLASS_RANK.heavy);
   }

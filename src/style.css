@@ -1057,3 +1057,11 @@ html.reduceflashes #live #fuel.crit { animation: none; }
 #forkwipe.in { animation: forkwipe 1.4s cubic-bezier(.6, 0, .3, 1) both; }
 @keyframes forkwipe { 0% { clip-path: inset(0 100% 0 0); } 20%, 72% { clip-path: inset(0 0 0 0); } 100% { clip-path: inset(0 0 0 100%); } }
 @media (prefers-reduced-motion: reduce) { #forkwipe.in { animation: forkfade 1.4s both; } @keyframes forkfade { 0%, 100% { opacity: 0; clip-path: none; } 25%, 70% { opacity: 1; clip-path: none; } } }
+
+/* Prototype core loop (?proto=1): one bar (the audience is the Rampage meter), no asks panel in play, the sprint. */
+#gears .lbl.proto { display: none; }
+html.proto #gears .lbl:not(.proto) { display: none; }
+html.proto #gears .lbl.proto { display: inline; }
+html.proto #gears.ramp .lbl.proto::after { content: ' · RAMPAGE'; }
+html.proto #gears.sprint .lbl.proto::after { content: ' · SPRINT ×2'; color: #f2a516; }
+html.proto #ratingsbar, html.proto #ratings .bar, html.proto #ratings .aud, html.proto #asks { display: none !important; }

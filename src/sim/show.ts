@@ -63,7 +63,7 @@ export class Show {
     let amount: number = base ?? S.gain[type];
     amount *= this.gainMult[type] ?? 1;
     if (this.prime && (type === 'medium' || type === 'heavy')) amount *= TUNING.abilities.primeTime.mult;
-    if (type !== 'rampage') {
+    if (type !== 'rampage' && !(TUNING.proto.on && type === 'nearMiss')) {
       this.recent = this.recent.filter((r) => time - r.t <= S.repeatWindow);
       const repeats = this.recent.filter((r) => r.type === type).length;
       const mult = this.seen.has(type) ? S.repeatMult[Math.min(repeats, S.repeatMult.length - 1)] : this.freshMult;

@@ -89,7 +89,7 @@ export class Escort {
 
   step(dt: number, time: number, g: GiantState): number[] {
     const C = TUNING.pursuit.caught;
-    const crawl = g.speed < C.below && g.air <= 0;
+    const crawl = g.speed < (TUNING.proto.on ? TUNING.proto.caughtBelow : C.below) && g.air <= 0;
     const E = TUNING.escort;
     const joined: number[] = [];
     const S = this.pathS;
