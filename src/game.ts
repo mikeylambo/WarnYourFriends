@@ -56,6 +56,8 @@ const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as 
 const canvas = $<HTMLCanvasElement>('view');
 const flashEl = $('flash');
 const rampSlam = $('rampslam');
+// The slam plays once: drop its class when it ends, so a re-shown HUD never replays it over the recap.
+rampSlam.addEventListener('animationend', () => rampSlam.classList.remove('in'));
 /** Rampage tells (TUNING.rampageFx): the rim light heats, the screen edges glow. `rampK` eases 0..1. */
 let rampK = 0;
 let auraAcc = 0;
@@ -827,7 +829,7 @@ function showMeeting(focusId?: string) {
         const can = !bought && r.canAfford(id);
         return `<button class="pitch ${u.kind}${next > 1 ? ' levelup' : ''}${bought ? ' bought' : ''}" data-id="${id}" ${can ? '' : 'disabled'}>
           <span class="art"><img src="${UPGRADE_ART[id]}" alt="" /><span class="tag">${bought ? 'BOUGHT' : next > 1 ? `LEVEL ${ROMAN[next]}` : u.kind === 'ability' ? 'ABILITY' : 'PASSIVE'}</span></span>
-          <b>${esc(title)}</b><q class="said">${esc(u.pitch)}</q><span class="blurb">${esc(blurb)}</span>${slot}${bought ? '<span class="price">Bought ✓</span>' : `<span class="price">${price.toLocaleString()}</span>${can ? '' : `<small class="need">Need ${(price - r.purse).toLocaleString()} more</small>`}`}</button>`;
+          <b>${esc(title)}</b><span class="blurb">${esc(blurb)}</span>${slot}${bought ? '<span class="price">Bought ✓</span>' : `<span class="price">${price.toLocaleString()}</span>${can ? '' : `<small class="need">Need ${(price - r.purse).toLocaleString()} more</small>`}`}</button>`;
       })
       .join('')}</div>
     <div class="row"><button class="go" id="skip">Go live</button></div>
@@ -912,6 +914,8 @@ function showRecap() {
     : run
       ? `<button class="go" id="again">Run Again</button><button class="go alt" id="tomenu">Menu</button>`
       : `<button class="go" id="again">Run Again</button><button class="go alt" id="tomenu">Menu</button>`; // same road: Pause → Restart
+  rampSlam.classList.remove('in');
+  document.documentElement.classList.remove('rampage');
   recapEl.innerHTML = `<div class="rc ${cleared || won ? 'cleared' : 'busted'}">
     ${run ? `<header class="rc-top"><div class="kicker">SEGMENT ${run.segment + 1} OF ${N}</div></header>` : ''}
     <section class="rc-lead">

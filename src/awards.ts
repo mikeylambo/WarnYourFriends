@@ -118,9 +118,9 @@ export function outfitUnlocked(p: Profile, id: OutfitId): boolean {
   return id === 'classic' || AWARDS.some((a) => a.outfit === id && p.won.includes(a.id));
 }
 
-/** What an award gives, in a line ("Breakaway joins the Producer's Meeting"). */
+/** What an award gives, in a line ("Unlocks Breakaway"). */
 export function rewardLine(a: Award): string {
-  if (a.upgrade) return `${TUNING.upgrades[a.upgrade].label} joins the Producer's Meeting`;
+  if (a.upgrade) return `Unlocks ${TUNING.upgrades[a.upgrade].label}`;
   if (a.outfit) return `New outfit: ${TUNING.outfits[a.outfit].label}`;
   return '';
 }

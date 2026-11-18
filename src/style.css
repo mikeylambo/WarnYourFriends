@@ -469,7 +469,6 @@ html.cover #titlebug { display: none; }
 #recap .pitch .art .tag { position: absolute; left: 8px; top: 8px; font-style: italic; font-weight: 900; clip-path: polygon(5px 0, 100% 0, calc(100% - 5px) 100%, 0 100%); padding: 3px 9px; background: var(--wyf-ink); color: var(--wyf-cream); }
 #recap .pitch.ability .art .tag { background: var(--wyf-red); }
 #recap .pitch.passive .art .tag { background: var(--wyf-purple); }
-#recap .pitch .said { font-size: 13px; font-style: italic; color: var(--wyf-cream); line-height: 1.35; quotes: '“' '”'; }
 #recap .pitch .blurb { font-size: 12px; opacity: 0.7; }
 #recap .pitch:disabled .art img { filter: grayscale(0.7); }
 /* Ability chip and touch button carry the art. */
@@ -493,7 +492,6 @@ html.cover #titlebug { display: none; }
   #recap .pitch > :not(.art) { grid-column: 2; margin: 0 8px 0 0; }
   #recap .pitch .art { grid-column: 1; grid-row: 1 / span 6; width: var(--art, 92px); }
   #recap .pitch b { font-size: 14px; margin-top: 6px; }
-  #recap .pitch .said { font-size: 12px; }
   #recap .pitch .blurb { font-size: 11px; }
   #recap .pitch .price { font-size: 14px; margin-bottom: 6px; }
   #recap .pitch .art .tag { font-size: 8px; left: 4px; top: 4px; padding: 2px 6px; }
@@ -722,7 +720,6 @@ html.touch #ticker { right: 128px; }
 #recap .purse b { color: var(--c-red); font-family: var(--f-num); font-weight: 900; font-size: 28px; }
 #recap .pitch { background: var(--c-alt); color: var(--c-text); border-color: rgba(255, 255, 255, 0.14); }
 #recap .pitch b { color: var(--c-text); font-style: italic; font-weight: 900; }
-#recap .pitch .said { color: var(--c-text); }
 #recap .pitch .blurb { color: var(--c-mute); opacity: 1; }
 #recap .pitch .price { color: var(--c-text); font-family: var(--f-num); font-weight: 900; font-size: 20px; }
 #recap .pitch .art .tag { background: var(--c-ink); color: var(--c-text); }
