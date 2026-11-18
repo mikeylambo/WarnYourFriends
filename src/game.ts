@@ -157,7 +157,10 @@ const controlsEl = $('controls');
 
 // --- Renderer ---------------------------------------------------------------
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+const RES = TUNING.look.resolution;
+/** Adaptive resolution (phones): the pixel ratio steps down while frames drop and back up once they hold. */
+const res = { max: Math.min(window.devicePixelRatio, RES.maxRatio), ratio: Math.min(window.devicePixelRatio, RES.maxRatio), slow: 0, fast: 0 };
+renderer.setPixelRatio(res.ratio);
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 // Optional bloom (review #66; Settings → Bloom): lights, sparks and embers glow. Built on first use.
 let composer: { c: EffectComposer; pass: RenderPass } | null = null;
@@ -1852,6 +1855,20 @@ const rendererAdapter: RendererAdapter = {
 };
 let app: Awaited<ReturnType<typeof createGameApp>> | null = null;
 // --- Resize -------------------------------------------------------------------
+function adaptResolution(fps: number) {
+  res.slow = fps < RES.lowFps ? res.slow + 1 : 0;
+  res.fast = fps > RES.highFps ? res.fast + 1 : 0;
+  let next = res.ratio;
+  if (res.slow >= RES.downAfter) next = Math.max(RES.minRatio, res.ratio - RES.step);
+  else if (res.fast >= RES.upAfter) next = Math.min(res.max, res.ratio + RES.step);
+  if (next === res.ratio) return;
+  res.ratio = next;
+  res.slow = res.fast = 0;
+  renderer.setPixelRatio(next);
+  composer?.c.setPixelRatio(next);
+  resize();
+}
+
 function resize() {
   pausedDrawn = false;
   // HUD scale (Direction B): the top-of-screen pieces are drawn for 1280×720 and zoomed by this.
@@ -2554,6 +2571,7 @@ function updateHud(dt: number) {
     perf.fps = perf.frames / perf.t;
     perf.frames = 0;
     perf.t = 0;
+    if (started && !paused && !attract && !replay) adaptResolution(perf.fps);
   }
   if (settings.debug) {
     const info = rig.info;

@@ -416,7 +416,8 @@ export const TUNING = {
    * concrete) for the first `clearFor` m, while the onboarding prompts walk him through lanes, smashing and Rampage.
    * Landmarks keep their own patterns. The flag rides the leaderboard submission so the server replays it the same.
    */
-  guided: { calmFor: 25, clearFor: 400 },
+  /** meterGain: Rampage meter gains × this during the calm, so a first-timer's first Rampage lands inside it (bot: 21s → ~12s). */
+  guided: { calmFor: 25, clearFor: 400, meterGain: 1.8 },
 
   /**
    * Things worth aiming for (Mike, 2026-11-17: "not enough to do during the runs, especially during Rampage").
@@ -960,7 +961,7 @@ export const TUNING = {
    * road ahead of a police car alongside him.
    */
   /** lanesAfter: the first lesson waits for the opening's head-on shot and swing home (mirrored steering) to end. */
-  onboarding: { lanesAfter: 5.2, quietStart: 4, blockedLead: 2.2, audienceBelow: 12, kiteAhead: 30, gap: 7, hold: 4.5 },
+  onboarding: { lanesAfter: 5.2, quietStart: 4, blockedLead: 2.2, audienceBelow: 12, kiteAhead: 30, gap: 7, hold: 4.5, /** The RAMPAGE READY prompt holds until he fires, up to this many s. */ readyHold: 15 },
 
   /**
    * Outfits (Awards, Mike 2026-11-17: "recolors for now"): the Meshy texture's plum cloth takes `hue` (deg) with
@@ -1082,6 +1083,12 @@ export const TUNING = {
   look: {
     /** Bloom (Settings; review #66): only the brightest things glow (lights, sparks, embers, lit windows at night). */
     bloom: { strength: 0.55, radius: 0.35, threshold: 0.82 },
+    /**
+     * Adaptive resolution (phones): every 0.5s window under `lowFps` counts; `downAfter` in a row drops the pixel
+     * ratio by `step` (not below `minRatio`); `upAfter` windows over `highFps` raise it again (not past the device's,
+     * capped at `maxRatio`). Slow to rise so it doesn't hunt; fast enough to drop that a stutter lasts ~1s.
+     */
+    resolution: { maxRatio: 2, minRatio: 1, step: 0.25, lowFps: 50, highFps: 57, downAfter: 2, upAfter: 12 },
     /** Local hours (24h): day from dayStart, dusk from duskStart, night from nightStart; dawn counts as dusk. */
     dawnStart: 5,
     dayStart: 7,

@@ -644,7 +644,9 @@ export class Sim {
     }
     if (g.meter >= 100) return;
     const D = TUNING.difficulty;
-    let add = (R.gain[cause] ?? 0) * this.edition.meter * D.meterGain[Math.min(this.show.segment, D.meterGain.length - 1)] * (this.upgrades.has('shortFuse') ? TUNING.passives.shortFuseMult : 1);
+    // Guided first broadcast: the meter fills faster in the calm opening, so the first Rampage lands while it's calm.
+    const teach = this.guided && this.time < TUNING.guided.calmFor ? TUNING.guided.meterGain : 1;
+    let add = teach * (R.gain[cause] ?? 0) * this.edition.meter * D.meterGain[Math.min(this.show.segment, D.meterGain.length - 1)] * (this.upgrades.has('shortFuse') ? TUNING.passives.shortFuseMult : 1);
     // Shoulder Check III: smashes in the charge fill the meter too.
     if (g.shoulderT > 0 && this.levelOf('shoulder') >= 3 && (cause === 'medium' || cause === 'heavy' || cause === 'unit')) add += TUNING.abilities.shoulder.meterPerSmash;
     g.meter = Math.min(100, g.meter + add);

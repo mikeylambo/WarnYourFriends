@@ -17,7 +17,7 @@ const STORE = 'wyf.prompts.v2';
 export type PromptText = (id: PromptId) => string;
 
 /** Prompts about a threat or a deadline happening now. */
-const URGENT = new Set<PromptId>(['boxed', 'caught', 'exit', 'ram']);
+const URGENT = new Set<PromptId>(['boxed', 'caught', 'exit', 'ram', 'ready']);
 
 export class Onboarding {
   private seen: Set<PromptId>;
@@ -81,6 +81,11 @@ export class Onboarding {
         this.seen.add('ready');
         this.save();
       }
+      // Fired: the ready prompt (held until now) has done its job.
+      if (this.showing?.id === 'ready') {
+        this.hide();
+        this.lastAt = -Infinity;
+      }
       this.want('rampage');
     } else if (e.type === 'meterLoss') this.want('hit');
     else if (e.type === 'exitOpen') this.want('exit');
@@ -132,7 +137,8 @@ export class Onboarding {
       if (this.seen.has(id)) return;
       this.seen.add(id);
       this.save();
-      this.showing = { id, until: now + O.hold };
+      // The Rampage-ready prompt stays up until he fires it (the lesson the whole loop hangs on), up to `readyHold`.
+      this.showing = { id, until: now + (id === 'ready' ? O.readyHold : O.hold) };
       this.lastAt = now;
       this.el.innerHTML = this.text(id);
       this.el.hidden = false;
