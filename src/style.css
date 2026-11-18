@@ -752,6 +752,8 @@ html.touch #ticker { right: 128px; }
 #recap .rc-stamp { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
 #recap .rc .outcome { display: inline-block; background: var(--c-red); color: var(--c-text); font: italic 900 26px/1 var(--f-head); letter-spacing: 0.06em; padding: 9px 30px 8px 16px; clip-path: polygon(0 0, 100% 0, calc(100% - 14px) 100%, 0 100%); }
 #recap .rc .outcome.cleared { background: var(--c-paper); color: var(--c-on-paper); }
+#recap .rc .outcome.commercial { background: var(--wyf-blue, #465a7a); }
+#recap .rc .outcome.signal { background: #2a2a2e; color: #ddd; text-shadow: 2px 0 rgba(255, 0, 60, 0.6), -2px 0 rgba(0, 200, 255, 0.6); }
 #recap .rc .why { font: italic 700 16px/1.2 var(--f-head); color: var(--c-mute); }
 #recap .rc h2 { margin: 16px 0 22px; font: italic 900 clamp(28px, 3.7vw, 48px)/1.02 var(--f-head); letter-spacing: -0.01em; text-transform: uppercase; color: var(--c-text); text-wrap: balance; }
 #recap .rc-hero { display: flex; gap: 10px; flex-wrap: wrap; }
@@ -949,12 +951,22 @@ html:not(:has(#ui [data-screen-id="title"])) #cover::after { opacity: 1; }
 html.briefing.cover #recap { background: rgba(7, 5, 13, 0.62); z-index: 45; }
 
 /* Rampage tell (2026-11-17): hot edges while he's in Rampage, a slow throb (0.8 Hz, well under 3/s); held still under Reduce Flashes / Reduced Motion. */
+#clocklbl { font: 900 11px/1 var(--f-head); letter-spacing: 0.12em; opacity: 0.85; margin-left: 8px; align-self: center; }
+#brakeon { position: absolute; left: 50%; bottom: 30%; transform: translateX(-50%); text-align: center; pointer-events: none; }
+#brakeon b { display: inline-block; background: #d98f16; color: #111; font: italic 900 18px/1 var(--f-head); letter-spacing: 0.08em; padding: 7px 18px; clip-path: polygon(8px 0, 100% 0, calc(100% - 8px) 100%, 0 100%); }
+#brakeon span { display: block; margin-top: 4px; font: 700 12px/1 var(--f-head); color: var(--c-text, #fff); text-shadow: 0 1px 3px #000; }
 #rampfx { position: absolute; inset: 0; pointer-events: none; z-index: 3; opacity: 0; transition: opacity 0.3s; box-shadow: inset 0 0 120px 30px rgba(255, 80, 20, 0.55), inset 0 0 26px 4px rgba(255, 150, 60, 0.5); }
 html.rampage #rampfx { opacity: 1; animation: rampthrob 1.25s ease-in-out infinite; }
 html.rampage.title #rampfx, html.replay #rampfx { opacity: 0; animation: none; }
 @keyframes rampthrob { 50% { opacity: 0.6; } }
 @media (prefers-reduced-motion: reduce) { html.rampage #rampfx { animation: none; } }
 html.reduceflashes.rampage #rampfx { animation: none; }
+/* Rampage ending: the edges go red and pulse at 2 Hz (under 3/s); the meter chip blinks. Still under Reduce Flashes / Reduced Motion. */
+html.rampend #rampfx { box-shadow: inset 0 0 140px 40px rgba(215, 30, 40, 0.7), inset 0 0 30px 6px rgba(255, 60, 60, 0.6); animation: rampend 0.5s ease-in-out infinite; }
+html.rampend #gears { animation: rampend 0.5s steps(2) infinite; }
+@keyframes rampend { 50% { opacity: 0.35; } }
+@media (prefers-reduced-motion: reduce) { html.rampend #rampfx, html.rampend #gears { animation: none; } }
+html.reduceflashes.rampend #rampfx, html.reduceflashes.rampend #gears { animation: none; }
 
 /* --- Rampage meter, readability pass (2026-11-17): bigger bar, quarter ticks, a number --- */
 #gears { padding: 8px 22px 8px 16px; }

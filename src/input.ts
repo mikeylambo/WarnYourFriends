@@ -49,6 +49,10 @@ export class Input {
   /** Accessibility: Brake toggles on a press instead of holding (keyboard, pad, swipe). */
   brakeToggle = false;
   private brakeLatch = false;
+  /** Toggle mode with the brake latched on (the HUD shows BRAKE ON). */
+  get brakeLatched(): boolean {
+    return this.brakeToggle && this.brakeLatch;
+  }
   /** While rebinding a key, gameplay input is ignored. */
   capturing = false;
   private laneEdge = 0;

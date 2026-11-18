@@ -92,7 +92,7 @@ describe('headlines (§21)', () => {
       if (ups.length && used && out.length > 10) expect(out.some(({ h }) => /\bLands\b/.test(h.text) || h.sources.some((e) => ['leapLand', 'stare', 'breakawayLand', 'primeTime'].includes(e.type)))).toBe(true);
       // The broadcast ends with a sign-off or busted line, from the event that ended it.
       const final = out[out.length - 1].h;
-      expect(["SIGN-OFF", "BUSTED"]).toContain(final.kicker);
+      expect(["SIGN-OFF", "BUSTED", "CUT TO COMMERCIAL", "SIGNAL LOST"]).toContain(final.kicker);
       // "Giant At Large. Warn Your Friends." fires once, on the first Stride.
       expect(out.filter(({ h }) => h.text === 'Giant At Large. Warn Your Friends.').length).toBe(tiers.some((x) => x.tier >= 1) ? 1 : 0);
     });
@@ -106,7 +106,7 @@ describe('headlines (§21)', () => {
       for (const { h } of out) {
         // Zone names ("On Ninth Expressway") are facts about the zone itself; strip the place they came from.
         const text = h.place && /^(On|In) /.test(h.place) && !['On Highway', 'On The Interstate'].includes(h.place) ? h.text.replace(h.place, '') : h.text;
-        if (!road.test(text) || h.kicker === 'BUSTED' || h.kicker === 'SIGN-OFF') continue;
+        if (!road.test(text) || ['BUSTED', 'CUT TO COMMERCIAL', 'SIGNAL LOST', 'SIGN-OFF'].includes(h.kicker)) continue;
         checked++;
         // The event is at most `staleAfter` old: he must have been on a highway then.
         const window = zones.filter((z) => z.t <= h.t && z.t >= h.t - TUNING.broadcast.staleAfter - 0.1);

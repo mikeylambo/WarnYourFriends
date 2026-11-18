@@ -119,6 +119,8 @@ const tierMeter = tierbar.querySelector('.meter i') as HTMLElement;
 const touchUi = $('touch-ui');
 const camTag = $('camtag');
 const clockEl = $('clock');
+const clockLbl = $('clocklbl');
+const brakeOnEl = $('brakeon');
 const chyKicker = document.querySelector('#chyron .kicker') as HTMLElement;
 const chyText = document.querySelector('#chyron .text') as HTMLElement;
 const scoreEl = $('score');
@@ -287,7 +289,7 @@ const onboarding = new Onboarding($('prompt'), (id: PromptId) => {
     audience: `Audience dropping: smash something`,
     kite: `Steer the police car beside you into what's ahead of it`,
     boxed: `Boxed in: ${k('brake')} and drop out the back, or Rampage through (${fire})`,
-    caught: `Police on your tail: let go of ${k('brake')} and run`,
+    caught: settings.brakeToggle ? `Police on your tail: press ${k('brake')} again and run` : `Police on your tail: let go of ${k('brake')} and run`,
     exit: `Exit open: get to the far-right lane`,
     ability: ab ? `<b>${esc(ab.label.toUpperCase())}</b> ${k('ability')} ${esc(ab.blurb)}` : '',
     ability2: ab2 ? `<b>${esc(ab2.label.toUpperCase())}</b> ${k('ability2')} ${esc(ab2.blurb)}` : '',
@@ -304,6 +306,8 @@ let started = false;
 let paused = false;
 /** A frame has been drawn since pausing (or resizing): skip rendering until unpaused. */
 let pausedDrawn = false;
+/** Half-seconds left in Rampage's warning, for its tick (-1 when not ending). */
+let rampTick = -1;
 let hitstop = 0;
 let flashFrames = 0;
 let menuGuard = 0;
@@ -843,7 +847,9 @@ function showRecap() {
   const n = (x: number) => Math.round(x).toLocaleString();
   // The outcome stamp, and the plain-language why under it.
   const won = run?.phase === 'won';
-  const stamp = won ? 'FULL BROADCAST' : cleared ? 'SIGNED OFF' : 'BUSTED';
+  // Three ways to lose, each its own package (review pick 1): the police, the audience, the exit.
+  const lost = reason === 'pin' ? 'busted' : reason === 'ratings' ? 'commercial' : 'signal';
+  const stamp = won ? 'FULL BROADCAST' : cleared ? 'SIGNED OFF' : lost === 'busted' ? 'BUSTED' : lost === 'commercial' ? 'CUT TO COMMERCIAL' : 'SIGNAL LOST';
   const why = won ? 'Every segment, start to finish.' : cleared ? 'He took the exit. Coverage complete.' : reason === 'pin' ? (sim.show.pinCause === 'caught' ? 'The police caught up.' : 'Boxed in by the police.') : reason === 'ratings' ? 'The viewers changed the channel.' : 'He missed the exit.';
   // Hero numbers: what this screen is about. A run segment reports the budget; a finished run, the run.
   const hero = run && run.phase === 'meeting'
@@ -878,7 +884,7 @@ function showRecap() {
   recapEl.innerHTML = `<div class="rc ${cleared || won ? 'cleared' : 'busted'}">
     ${run ? `<header class="rc-top"><div class="kicker">SEGMENT ${run.segment + 1} OF ${N}</div></header>` : ''}
     <section class="rc-lead">
-      <div class="rc-stamp"><span class="outcome ${cleared || won ? 'cleared' : ''}">${stamp}</span><span class="why">${why}</span></div>
+      <div class="rc-stamp"><span class="outcome ${cleared || won ? 'cleared' : lost}">${stamp}</span><span class="why">${why}</span></div>
       <div class="rc-hero">${hero.map(([k, v, c]) => `<div class="${c}"><small>${k}</small><b>${v}</b></div>`).join('')}</div>
       <div class="rc-tiles">${tiles.map(([k, v]) => `<div><b>${v}</b><small>${k}</small></div>`).join('')}</div>
       ${newAwards.map((a) => `<div class="rc-award"><small>AWARD</small><b>${esc(a.title)}</b>${rewardLine(a) ? `<span>${esc(rewardLine(a))}</span>` : ''}</div>`).join('')}
@@ -953,7 +959,7 @@ function recapToMenu() {
 function showHeadline(h: Headline) {
   chyKicker.textContent = h.kicker;
   chyKicker.classList.toggle('breaking', h.breaking);
-  chyKicker.classList.toggle('busted', h.kicker === 'BUSTED');
+  chyKicker.classList.toggle('busted', ['BUSTED', 'CUT TO COMMERCIAL', 'SIGNAL LOST'].includes(h.kicker));
   chyKicker.classList.toggle('signoff', h.kicker === 'SIGN-OFF');
   const span = document.createElement('span');
   span.textContent = h.text;
@@ -1396,7 +1402,7 @@ function stepSim(inp: SimInput) {
     if (moment && !moment.headline && h.sources.includes(moment.event)) moment.headline = h;
     showHeadline(h);
     // Tonight's top story: the biggest headline that wasn't the ending itself.
-    if (!['BUSTED', 'SIGN-OFF'].includes(h.kicker) && sim.show.ratings >= runStats.bestRatings) {
+    if (!['BUSTED', 'CUT TO COMMERCIAL', 'SIGNAL LOST', 'SIGN-OFF'].includes(h.kicker) && sim.show.ratings >= runStats.bestRatings) {
       runStats.best = h;
       runStats.bestRatings = sim.show.ratings;
     }
@@ -1790,7 +1796,7 @@ app = await createGameApp({
         { id: 'wyf-tips', label: 'Replay Tips', description: 'Show the in-game control tips again' },
         // Playtest (Mike, 2026-11-17: "missed copying the run data"): every broadcast's numbers, any time. Hide before release.
         { id: 'wyf-playdata', label: 'Copy Play Data', description: 'Copies every broadcast you have played (or saves a file)' },
-        { id: 'wyf-brake', label: `Brake: ${settings.brakeToggle ? 'Toggle' : 'Hold'}`, description: 'Toggle: press once to brake, again to let go' },
+        { id: 'wyf-brake', label: `Brake: ${settings.brakeToggle ? 'Toggle' : 'Hold'}`, description: 'Toggle: press once to brake, again to run' },
         { id: 'wyf-hudsize', label: `HUD Size: ${Math.round(settings.hudSize * 100)}%` },
         { id: 'wyf-auto', label: `Auto Rampage: ${onOff(settings.autoRampage)}`, description: 'Rampage fires by itself the moment the meter is full' },
         { id: 'wyf-speed', label: `Game Speed: ${Math.round(settings.gameSpeed * 100)}%`, description: 'Slower gives more time to react. Below 100% scores stay off the leaderboard' },
@@ -2325,7 +2331,7 @@ function updateBoxed() {
   boxedEl.querySelector('b')!.textContent = (kind === 'caught' ? 'CAUGHT' : 'BOXED IN') + (sim.show.netSlips > 0 ? ' · LAST CHANCE' : '');
   if (boxedFam !== `${glyphFamily}:${kind}`) {
     boxedFam = `${glyphFamily}:${kind}`;
-    if (kind === 'caught') boxedHow.innerHTML = glyphFamily === 'touch' ? 'Let go of ▼ · Run' : `Let go of <kbd>${esc(glyph('brake'))}</kbd> · Run`;
+    if (kind === 'caught') boxedHow.innerHTML = settings.brakeToggle ? (glyphFamily === 'touch' ? 'Swipe ▼ again · Run' : `<kbd>${esc(glyph('brake'))}</kbd> again · Run`) : glyphFamily === 'touch' ? 'Let go of ▼ · Run' : `Let go of <kbd>${esc(glyph('brake'))}</kbd> · Run`;
     else boxedHow.innerHTML = glyphFamily === 'touch' ? 'Tap ● Rampage · hold ▼ Brake' : `<kbd>${esc(glyph('shoulder'))}</kbd>Rampage · <kbd>${esc(glyph('brake'))}</kbd>Brake`;
   }
 }
@@ -2339,6 +2345,9 @@ function updateHud(dt: number) {
   const secs = counting ? Math.max(0, Math.ceil(X.length + X.grace - sim.time)) : Math.floor(sim.time);
   clockEl.textContent = `${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')}`;
   clockEl.classList.toggle('count', counting);
+  if (clockLbl.hidden === counting) clockLbl.hidden = !counting;
+  const brakeShown = input.brakeLatched && sim.live;
+  if (brakeOnEl.hidden === brakeShown) brakeOnEl.hidden = !brakeShown;
   // One primary number: the score (the whole run's in Full Broadcast; spending never lowers it). Ratings is the
   // audience bar under it, with its tier colour and danger pulse; the viewer count lives on the recap.
   const sh = sim.show;
@@ -2366,6 +2375,14 @@ function updateHud(dt: number) {
   const nm = ramp ? `${g.rampT.toFixed(1)}s` : ready ? (settings.autoRampage ? 'READY!' : `<kbd>${esc(glyph('shoulder'))}</kbd> GO!`) : `${Math.floor(g.meter)}%`;
   if (gearName.innerHTML !== nm) gearName.innerHTML = nm;
   gearsEl.classList.toggle('ramp', ramp);
+  // Rampage's last moments (review pick 2): red edges, the chip blinks, a tick each half second.
+  const ending = ramp && sim.live && g.rampT <= TUNING.hud.rampWarn;
+  document.documentElement.classList.toggle('rampend', ending);
+  const tick = ending ? Math.ceil(g.rampT * 2) : -1;
+  if (tick !== rampTick) {
+    if (tick >= 0 && !replay) audio.gearTick(1 - g.rampT / TUNING.hud.rampWarn);
+    rampTick = tick;
+  }
   gearMultEl.textContent = `×${TUNING.show.bankMult[g.tier]}`;
   heatStars.forEach((el, i) => el.classList.toggle('on', i < sh.heat));
   // The asks: at the top of a segment and when one lands, then out of the way (HUD triage, 2026-11-17).

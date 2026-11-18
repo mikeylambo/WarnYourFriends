@@ -576,7 +576,8 @@ export const TUNING = {
    * HUD triage (Mike, 2026-11-17): the producer's asks show for `asksIntro` s at the top of a segment and
    * `asksFlash` s when one lands, then get out of the way (the recap lists them). Heat stars are off the HUD.
    */
-  hud: { minScale: 0.5, maxScale: 1.3, asksIntro: 8, asksFlash: 3 },
+  /** `rampWarn`: Rampage's last this-many seconds pulse red and tick (review pick 2: see it ending). */
+  hud: { minScale: 0.5, maxScale: 1.3, asksIntro: 8, asksFlash: 3, rampWarn: 1.5 },
 
   /** Footfall presentation (v0.3). */
   footfall: {
