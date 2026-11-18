@@ -922,6 +922,7 @@ export class HighwayView {
       const g = this.segViews.get(i);
       if (!g) continue;
       this.group.remove(g);
+      g.traverse((o) => (o as THREE.Mesh).geometry !== this.box && (o as THREE.Mesh).geometry?.dispose());
       this.segViews.delete(i);
     }
     this.lampsDirty = true;

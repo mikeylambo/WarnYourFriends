@@ -302,6 +302,8 @@ let bulbFrames = 0;
 const prev = { s: 0, d: 0, stepPos: 0 };
 let started = false;
 let paused = false;
+/** A frame has been drawn since pausing (or resizing): skip rendering until unpaused. */
+let pausedDrawn = false;
 let hitstop = 0;
 let flashFrames = 0;
 let menuGuard = 0;
@@ -363,13 +365,22 @@ function newRun(seed: number, segment = 0, upgrades: UpgradeId[] = [], levels: P
     document.documentElement.classList.remove('replay');
     replayEl.hidden = true;
   }
-  if (highway) scene.remove(highway.group);
+  if (highway) {
+    scene.remove(highway.group);
+    disposeTree(highway.group);
+  }
   if (giant) {
     unplaceGiant();
     for (const o of giant.objects) giantSpace.remove(o);
   }
-  if (cruisers) scene.remove(cruisers.group);
-  if (units) scene.remove(units.group);
+  if (cruisers) {
+    scene.remove(cruisers.group);
+    disposeTree(cruisers.group);
+  }
+  if (units) {
+    scene.remove(units.group);
+    disposeTree(units.group);
+  }
   endedFor = -1;
   recapShown = false;
   outro = null;
@@ -576,11 +587,6 @@ function briefingSeen(): boolean {
   }
 }
 function openBriefing(goLive: boolean): Promise<void> {
-  try {
-    localStorage.setItem(BRIEF_KEY, '1');
-  } catch {
-    /* storage unavailable: it shows again next time */
-  }
   app?.ui.show('gameplay-placeholder');
   const k = (a: GlyphAction) => (glyph(a) ? `<kbd>${esc(glyph(a))}</kbd>` : '');
   const at = TUNING.segment.exitOpensAt;
@@ -617,6 +623,12 @@ function openBriefing(goLive: boolean): Promise<void> {
   return new Promise((resolve) => {
     briefingClose = () => {
       briefingClose = null;
+      // Seen once he goes live from it (a refresh on the briefing shows it again).
+      try {
+        localStorage.setItem(BRIEF_KEY, '1');
+      } catch {
+        /* storage unavailable: it shows again next time */
+      }
       document.documentElement.classList.remove('briefing');
       hideRecap();
       resolve();
@@ -1495,6 +1507,20 @@ function replayInput(): SimInput {
   return replay ? inputLog[replay.sim.tick] ?? NO_INPUT : NO_INPUT;
 }
 
+/**
+ * Free a dropped view's GPU buffers (geometries and materials; textures are shared and stay).
+ * Safe on shared ones: three re-uploads anything disposed that is drawn again.
+ */
+function disposeTree(root: THREE.Object3D) {
+  root.traverse((o) => {
+    const m = o as THREE.Mesh;
+    m.geometry?.dispose();
+    const mat = m.material as THREE.Material | THREE.Material[] | undefined;
+    if (Array.isArray(mat)) for (const x of mat) x.dispose();
+    else mat?.dispose();
+  });
+}
+
 function startReplay(done: () => void) {
   const R = TUNING.replay;
   const m = moment!;
@@ -1550,6 +1576,7 @@ function endReplay() {
   replay = null;
   replayRate = 1;
   scene.remove(highway.group, cruisers.group, units.group);
+  for (const g of [highway.group, cruisers.group, units.group]) disposeTree(g); // the replay's views are done with
   const L = r.live;
   ({ sim, highway, gait, cruisers, units, director, news, bot } = L);
   scene.add(highway.group, cruisers.group, units.group);
@@ -1667,6 +1694,8 @@ window.addEventListener('keydown', (e) => {
     e.preventDefault();
   }
   if (e.code === 'KeyT') tunePanel.toggle();
+  // Typing in a field (the leaderboard name): Enter submits that form, nothing else.
+  if (e.target instanceof HTMLInputElement) return;
   if (!recapEl.hidden && (e.code === 'Enter' || e.code === 'Space')) {
     e.preventDefault();
     // The shell's accept action clicks the focused button; this only covers nothing being focused.
@@ -1711,6 +1740,7 @@ const rendererAdapter: RendererAdapter = {
 let app: Awaited<ReturnType<typeof createGameApp>> | null = null;
 // --- Resize -------------------------------------------------------------------
 function resize() {
+  pausedDrawn = false;
   // HUD scale (Direction B): the top-of-screen pieces are drawn for 1280×720 and zoomed by this.
   // Accessibility: HUD Size scales it up (Settings), within what still fits beside the road.
   const hs = Math.max(TUNING.hud.minScale, Math.min(TUNING.hud.maxScale, Math.min(window.innerWidth / 1280, window.innerHeight / 720))) * settings.hudSize;
@@ -2077,11 +2107,14 @@ function frame(now: number) {
     poseCam.position.set(t.x + rx * 9 + Math.cos(t.travel) * 0.5, 2.0, t.z + rz * 9 + Math.sin(t.travel) * 0.5);
     poseCam.lookAt(t.x + Math.cos(t.travel) * 0.5, 1.5, t.z + Math.sin(t.travel) * 0.5);
     renderer.render(scene, poseCam);
+  } else if (paused && !attract && pausedDrawn) {
+    // Paused: the last frame stays on the canvas; no 3D work until something changes.
   } else if (updateTitleShot(realDt, t)) renderer.render(scene, titleCam);
   else renderer.render(scene, rig.camera);
+  pausedDrawn = paused && !attract;
   // The recap's picture: the replay's own frame just as the moment lands (before the viewer-video window draws).
   if (replay && !recapShot && moment && (replay.grab || replay.sim.time >= moment.t + TUNING.replay.shotAfter)) grabShot();
-  pip.render(renderer, scene);
+  if (!paused || attract) pip.render(renderer, scene);
   updateHud(realDt);
   updateGlyphs();
   onboarding.update(sim, performance.now() / 1000, sim.live && started && !paused && !attract && !replay && !bot);
