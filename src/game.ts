@@ -14,6 +14,10 @@ import { CruiserView } from './render/cruisers';
 import { UnitViews } from './render/units';
 import { ViewerVideo } from './render/pip';
 import { Vfx } from './render/vfx';
+import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
+import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
 import { Coverage } from './broadcast/coverage';
 import { measureSilhouette } from './render/silhouette';
 import { Newsroom, compass, type Headline } from './broadcast/headlines';
@@ -54,6 +58,8 @@ const flashEl = $('flash');
 const rampSlam = $('rampslam');
 /** Rampage tells (TUNING.rampageFx): the rim light heats, the screen edges glow. `rampK` eases 0..1. */
 let rampK = 0;
+let auraAcc = 0;
+let lineAcc = 0;
 let rimBaseStrength = RIM.strength.value;
 const rimBaseColor = RIM.color.value.clone();
 const rimHot = new THREE.Color(TUNING.rampageFx.rimColor);
@@ -151,6 +157,27 @@ const controlsEl = $('controls');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.outputColorSpace = THREE.SRGBColorSpace;
+// Optional bloom (review #66; Settings → Bloom): lights, sparks and embers glow. Built on first use.
+let composer: { c: EffectComposer; pass: RenderPass } | null = null;
+function draw(cam: THREE.Camera) {
+  if (!settings.bloom) {
+    renderer.render(scene, cam);
+    return;
+  }
+  if (!composer) {
+    const c = new EffectComposer(renderer);
+    const pass = new RenderPass(scene, cam);
+    c.addPass(pass);
+    const B = TUNING.look.bloom;
+    c.addPass(new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), B.strength, B.radius, B.threshold));
+    c.addPass(new OutputPass());
+    c.setPixelRatio(renderer.getPixelRatio());
+    c.setSize(window.innerWidth, window.innerHeight);
+    composer = { c, pass };
+  }
+  composer.pass.camera = cam;
+  composer.c.render();
+}
 const scene = new THREE.Scene();
 /**
  * Giant size (TUNING.growth): the giant is posed in his own space (the gait runs there: positions, speed
@@ -1813,6 +1840,7 @@ function resize() {
   const w = window.innerWidth;
   const h = window.innerHeight;
   renderer.setSize(w, h, false);
+  composer?.c.setSize(w, h);
   rig.resize(w, h);
 }
 window.addEventListener('resize', resize);
@@ -1845,6 +1873,7 @@ app = await createGameApp({
         { id: 'wyf-cuts', label: `Camera Cuts: ${onOff(settings.cameraCuts)}`, description: 'Off holds the Chase High shot' },
         { id: 'wyf-livetime', label: `LIVE TIME: ${onOff(settings.liveTime)}`, description: 'Lighting follows your clock; off is always night' },
         { id: 'wyf-flashes', label: `Reduce Flashes: ${onOff(settings.reduceFlashes)}` },
+        { id: 'wyf-bloom', label: `Bloom: ${onOff(settings.bloom)}`, description: 'Glow on lights, sparks and Rampage. Off is lighter on phones.' },
         { id: 'wyf-colors', label: `HUD Colours: ${settings.hudColors === 'network' ? 'Network' : 'WYF 6'}`, description: 'The station\'s purple and cream, or network red, blue and white' },
         // Dev only: the overlay's switch shows with ?debug (or for a player who already turned it on).
         ...(flags.debug !== null || settings.debugChosen ? [{ id: 'wyf-debug', label: `Debug Overlay: ${onOff(settings.debug)}` }] : []),
@@ -1884,7 +1913,8 @@ app = await createGameApp({
           settings.liveTime = !settings.liveTime;
           forcedLook = null;
           applyLook();
-        } else if (id === 'wyf-flashes') settings.reduceFlashes = lighting.reduceFlashes = cruisers.reduceFlashes = units.reduceFlashes = vfx.reduceFlashes = !settings.reduceFlashes;
+        } else if (id === 'wyf-bloom') settings.bloom = !settings.bloom;
+        else if (id === 'wyf-flashes') settings.reduceFlashes = lighting.reduceFlashes = cruisers.reduceFlashes = units.reduceFlashes = vfx.reduceFlashes = !settings.reduceFlashes;
         else if (id === 'wyf-colors') {
           settings.hudColors = settings.hudColors === 'network' ? 'wyf' : 'network';
           applyHudColors();
@@ -2163,6 +2193,23 @@ function frame(now: number) {
   }
 
   updateRampageFx(paused ? 0 : realDt, performance.now() / 1000);
+  // Rampage aura: embers lift off him and speed lines streak past while it lasts (review #65).
+  if (rampK > 0 && !paused && sim.live && !attract) {
+    const V = TUNING.vfx;
+    auraAcc += realDt * V.emberRate * rampK;
+    const n = Math.floor(auraAcc);
+    auraAcc -= n;
+    if (n) vfx.ember(t.x, 4.5 * gScale, t.z, 1.6 * gScale, n);
+    if (!settings.reducedMotion) {
+      lineAcc += realDt * V.speedLineRate * rampK;
+      const fx = Math.cos(t.travel), fz = Math.sin(t.travel);
+      for (; lineAcc >= 1; lineAcc--) {
+        const ahead = 6 + Math.random() * 22;
+        const side = (Math.random() < 0.5 ? -1 : 1) * (2.5 + Math.random() * 7) * gScale;
+        vfx.speedLine(t.x + fx * ahead - fz * side, 0.4 + Math.random() * 3.5 * gScale, t.z + fz * ahead + fx * side, fx, fz, 4 + Math.random() * 5, 0.35 + rampK * 0.3);
+      }
+    }
+  }
   flashEl.style.opacity = flashFrames > 0 ? '0.85' : bulbFrames > 0 ? '0.18' : '0';
   if (bulbFrames > 0) bulbFrames--;
   if (flashFrames > 0) flashFrames--;
@@ -2180,8 +2227,8 @@ function frame(now: number) {
     renderer.render(scene, poseCam);
   } else if (contextLost || (paused && !attract && pausedDrawn)) {
     // Paused: the last frame stays on the canvas; no 3D work until something changes.
-  } else if (updateTitleShot(realDt, t)) renderer.render(scene, titleCam);
-  else renderer.render(scene, rig.camera);
+  } else if (updateTitleShot(realDt, t)) draw(titleCam);
+  else draw(rig.camera);
   pausedDrawn = paused && !attract;
   // The recap's picture: the replay's own frame just as the moment lands (before the viewer-video window draws).
   if (replay && !recapShot && moment && (replay.grab || replay.sim.time >= moment.t + TUNING.replay.shotAfter)) grabShot();

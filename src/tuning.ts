@@ -585,7 +585,9 @@ export const TUNING = {
    * low so they never hide his next move (rule 2: readable from the chopper).
    */
   vfx: {
-    puffMax: 72, sparkMax: 160, skidMax: 12, skidLife: 6, skidAlpha: 0.55,
+    puffMax: 72, sparkMax: 220,
+    /** Rampage aura (review #65): embers a second off him (× how far into Rampage), and speed lines streaking past (off under Reduced Motion). */
+    emberRate: 45, speedLineRate: 22, speedLineMax: 48, skidMax: 12, skidLife: 6, skidAlpha: 0.55,
     /** Heavy smash: puffs, size (m), life (s), alpha. */ heavySmoke: [5, 3.6, 1.4, 0.68] as number[],
     /** Medium smash: a little dust. */ mediumDust: [3, 2.2, 0.9, 0.5] as number[],
     /** Police crash: puffs and sparks. */ crashSmoke: [6, 4, 1.7, 0.72] as number[], crashSparks: 18,
@@ -1076,6 +1078,8 @@ export const TUNING = {
 
   /** Phase 0c look: night by default; LIVE TIME follows the local clock. */
   look: {
+    /** Bloom (Settings; review #66): only the brightest things glow (lights, sparks, embers, lit windows at night). */
+    bloom: { strength: 0.55, radius: 0.35, threshold: 0.82 },
     /** Local hours (24h): day from dayStart, dusk from duskStart, night from nightStart; dawn counts as dusk. */
     dawnStart: 5,
     dayStart: 7,
