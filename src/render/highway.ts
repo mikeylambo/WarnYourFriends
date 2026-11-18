@@ -78,6 +78,10 @@ function signTexture(fork?: string): THREE.Texture {
   return tex;
 }
 
+/** Prototype: the ring under small smashables (one geometry and material for all of them). */
+const SMASH_RING_GEO = new THREE.RingGeometry(0.78, 1, 28);
+const SMASH_RING_MAT = new THREE.MeshBasicMaterial({ color: 0xffd23c, transparent: true, opacity: 0.85, depthWrite: false });
+
 /** Road paint is retroreflective: a little self-light so lanes read at night outside the pools. */
 const PAINT_GLOW = 0x303030;
 
@@ -1123,6 +1127,16 @@ export class HighwayView {
     g.rotation.y = -this.sim.track.headingAt(p.s);
     g.userData.colors = [kc, ...partsFor(p).map((q) => (q[6] === 'kind' ? kc : q[6]))];
     if (p.kind === 'car' || p.kind === 'van' || p.kind === 'newsvan') this.addCarLights(p, g, body);
+    // Prototype (dodge until you can smash): what crumbles underfoot in Stride wears a bright ring on the road, so it
+    // reads from the chopper at a glance: ring = crunch it, no ring = dodge it.
+    if (TUNING.proto.on && (TUNING.proto.small as readonly string[]).includes(p.kind)) {
+      const ring = new THREE.Mesh(SMASH_RING_GEO, SMASH_RING_MAT);
+      ring.rotation.x = -Math.PI / 2;
+      ring.position.y = 0.04;
+      const r = Math.max(p.hw, p.hl) + 0.5;
+      ring.scale.set(r, r, 1);
+      g.add(ring);
+    }
     return g;
   }
 

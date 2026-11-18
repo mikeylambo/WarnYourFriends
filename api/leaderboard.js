@@ -29,6 +29,8 @@ var TUNING = {
     chunkReact: 0.45,
     /** Chunk level climbs one step every this many metres (and one per run segment). */
     levelEvery: 700,
+    /** Endless: the audience drain grows by its base rate every this many seconds (×2 at 2 min, ×3 at 4). */
+    endlessRamp: 120,
     /**
      * The story run (Mike, 2026-11-18: "an authored run through the different districts... with an end"; one unbroken
      * run). Five districts in order, each its own road (lane count by zone), name and chunk level; the sign-off ramp is
@@ -1388,8 +1390,9 @@ var HEAVY = ["car", "car", "van"];
 var MIN_USABLE_LANE_WIDTH = 2.8;
 var smoothstep = (t) => t * t * (3 - 2 * t);
 var Track = class {
-  constructor(seed, segment = 0, guided = false, hardMult = 1) {
+  constructor(seed, segment = 0, guided = false, hardMult = 1, endless = false) {
     this.seed = seed;
+    if (endless) this.district = -1;
     this.hardMult = hardMult;
     this.segmentNo = segment;
     this.hardFrom = guided ? TUNING.guided.clearFor : TUNING.props.immovableFrom;
@@ -3388,13 +3391,17 @@ var Sim = class {
   edition;
   /** First broadcast ever: a calm opening (no drain or police for `guided.calmFor` s, nothing unbreakable for `guided.clearFor` m). */
   guided;
+  /** Endless mode (prototype): no exit, no fuel. */
+  endless;
+  baseDecayMult = 1;
   constructor(opts) {
     this.seed = opts.seed;
     this.growth = opts.growth ?? false;
     this.rng = new Rng(opts.seed ^ 20973);
     this.guided = !!opts.guided;
     this.edition = TUNING.editions[Math.max(0, Math.min(TUNING.editions.length - 1, opts.edition ?? 0))];
-    this.track = new Track(opts.seed, opts.segment ?? 0, this.guided, this.edition.hard);
+    this.endless = !!opts.endless;
+    this.track = new Track(opts.seed, opts.segment ?? 0, this.guided, this.edition.hard, this.endless);
     this.escort = new Escort(opts.seed, this.track);
     this.pursuit = new Pursuit(opts.seed, this);
     const scratch = [];
@@ -3407,7 +3414,7 @@ var Sim = class {
     this.abilityLevel = this.ability ? this.levelOf(this.ability) : 0;
     this.show.startSegment(opts.segment ?? 0);
     if (this.guided) this.show.decayGrace = TUNING.guided.calmFor;
-    this.show.decayMult = this.edition.decay * (TUNING.proto.on ? TUNING.proto.decayMult : 1);
+    this.show.decayMult = this.baseDecayMult = this.edition.decay * (TUNING.proto.on ? TUNING.proto.decayMult : 1);
     if (TUNING.proto.on) this.show.ratings = this.show.peak = TUNING.proto.startRatings;
     if (this.edition.heat) this.show.heat = Math.min(5, this.show.heat + this.edition.heat);
     this.asks = new Asks(opts.seed, opts.segment ?? 0, this.track);
@@ -3539,6 +3546,7 @@ var Sim = class {
       if (this.show.pinCause === "net") this.pursuit.disperseNet();
       else this.pursuit.shakeOff();
     }
+    if (this.endless) this.show.decayMult = this.baseDecayMult * (1 + this.time / TUNING.proto.endlessRamp);
     this.show.step(dt, this.time + dt, this.giant.tier, outnumbered, this.events);
     if (TUNING.proto.on && !this.inRampage) {
       const was = this.giant.meter;
@@ -3713,6 +3721,7 @@ var Sim = class {
   /** v0.3 §4: the exit ramp opens at 130s; be in the rightmost lane at the gore to sign off. */
   exitPlanned = false;
   stepExit() {
+    if (this.endless) return;
     const X = TUNING.segment;
     const g = this.giant;
     const now = this.time + this.dt;

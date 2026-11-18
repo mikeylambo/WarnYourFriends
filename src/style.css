@@ -1073,3 +1073,6 @@ html.proto #ratingsbar, html.proto #ratings .bar, html.proto #ratings .aud, html
 #district.in { animation: district 3.2s ease-out both; }
 @keyframes district { 0% { opacity: 0; transform: translate(-50%, -10px); } 12%, 78% { opacity: 1; transform: translate(-50%, 0); } 100% { opacity: 0; transform: translate(-50%, 0); } }
 @media (prefers-reduced-motion: reduce) { #district.in { animation-name: districtfade; } @keyframes districtfade { 0%, 100% { opacity: 0; } 12%, 78% { opacity: 1; } } }
+
+/* Endless (prototype): no fuel, no sign-off. */
+html.endless #live #fuel, html.endless #clocklbl { display: none !important; }

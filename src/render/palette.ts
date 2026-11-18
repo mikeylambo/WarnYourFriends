@@ -56,7 +56,7 @@ export const PALETTE = {
 export const KIND_COLORS: Record<PropKind, number[]> = {
   sawhorse: [0xf08a24, 0xe8e2d4],
   cart: [0xf28c28, 0xe4412b, 0x7cbf3a],
-  fence: [0x8a9099],
+  fence: [0xf2b705], // safety yellow: it crumbles underfoot (2026-11-18), so it reads like the other small things
   scooter: [0xd64545, 0x3d8fd1, 0xe8b931],
   car: [0xcf4b3e, 0x3b8ea5, 0xd9a43b, 0x6b8f5a, 0x4a5d8c],
   van: [0xf2efe8, 0xd3dbe0, 0xe9d7a8],

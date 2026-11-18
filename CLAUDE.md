@@ -23,7 +23,7 @@ This file is the law for anyone (human or agent) building this repo. The design 
 
 ```
 src/tuning.ts        every number, with reasons
-src/sim/             pure TS simulation (no three/DOM): sim.ts, track.ts (road zones + props, landmarks, fork branch), pursuit.ts (police units, chopper spotlight, police crashes, Police Net, Rolling Blockade, Car Carrier), show.ts (Ratings/Heat/Pin, spectacle chain + score), asks.ts (the producer's asks), run.ts (five-segment run, meeting offers, budget), escort.ts, bot.ts, rng.ts
+src/sim/             pure TS simulation (no three/DOM): chunks.ts (authored traffic chunks + the solver that proves each passable; prototype), sim.ts, track.ts (road zones + props, landmarks, fork branch), pursuit.ts (police units, chopper spotlight, police crashes, Police Net, Rolling Blockade, Car Carrier), show.ts (Ratings/Heat/Pin, spectacle chain + score), asks.ts (the producer's asks), run.ts (five-segment run, meeting offers, budget), escort.ts, bot.ts, rng.ts
 src/anim/gait.ts     run cycle: pinned feet, two-bone IK, phase locked to distance (pure math, tested)
 src/render/          three.js views: highway (zones, ramp), units (police), giant (greybox pose rig) + giantModel (Meshy skin, assets/giant/giant.glb), cruisers, pip (viewer video), camera rig + director, lighting (night/dusk/day), glow, silhouette test, palette, toon
 src/broadcast/       headline generator (§21) + headlines.json word bank (pure TS, tested); coverage.ts (escalation ladder), viewers.json

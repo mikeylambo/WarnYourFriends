@@ -162,6 +162,8 @@ const segEl = $('segno');
 const districtEl = $('district');
 districtEl.addEventListener('animationend', () => districtEl.classList.remove('in'));
 let firstCardShown = false;
+/** Prototype endless mode for the broadcast being played. */
+let endlessMode = false;
 function showDistrict(d: number) {
   const D = TUNING.proto.story.districts;
   districtEl.innerHTML = `<small>${d === D.length - 1 ? 'FINAL DISTRICT' : `DISTRICT ${d + 1} OF ${D.length}`}</small><b>${esc(D[d].name)}</b>`;
@@ -468,7 +470,8 @@ function newRun(seed: number, segment = 0, upgrades: UpgradeId[] = [], levels: P
   runSize = sizeMode();
   const growth = runSize === 'growth';
   const edition = run?.edition ?? 0;
-  sim = new Sim({ seed, segment, upgrades, levels, growth, guided, edition });
+  sim = new Sim({ seed, segment, upgrades, levels, growth, guided, edition, ...(endlessMode ? { endless: true } : {}) });
+  document.documentElement.classList.toggle('endless', endlessMode);
   simOpts = { seed, segment, upgrades: [...upgrades], levels: { ...levels }, growth, guided, edition };
   // A fresh giant space for the new road: no anchor carried over, his starting size outright.
   gScale = sizeFor(0);
@@ -944,6 +947,8 @@ function showRecap() {
       ? [['Run score', n(run.earned), 'score'], ['Segments cleared', `${run.results.filter((x) => x.cleared).length}<small>/${N}</small>`, '']]
       : [['Score', n(sh.banked), 'score'], ['Peak audience', viewers(sh.peak), '']];
   const tiles: [string, string][] = [
+    // Endless: how far he got is the headline stat.
+    ...(sim.endless ? [['Distance', `${(sim.giant.s / 1000).toFixed(2)} km`] as [string, string]] : []),
     ['Longest combo', String(runStats.bestChain)],
     // Everything he smashed (police cars he flattened included) plus the police he led into a wreck (Mike, 2026-11-17).
     ['Objects flattened', String(sim.stats.smashes + runStats.crashes)],
@@ -1781,6 +1786,8 @@ function start() {
 function beginBroadcast(mode = 'broadcast') {
   attract = false;
   document.documentElement.classList.remove('attract');
+  endlessMode = PROTO && mode === 'endless';
+  if (endlessMode) mode = 'broadcast'; // one long broadcast, no run around it
   const seed = nextSeed ?? takeSeed() ?? (Math.random() * 1e9) | 0;
   nextSeed = null;
   // The very first broadcast a player goes live in is the guided one (TUNING.guided): its first segment opens calm.
@@ -1875,7 +1882,7 @@ window.addEventListener('keydown', (e) => {
   if (e.code === 'KeyC' && playing) setAngle(director.current + 1, director.side); // dev: next angle (held until C comes back to Chase High)
   if (e.code === 'KeyR' && playing) {
     nextSeed = flags.seedFixed ? flags.seed : null;
-    beginBroadcast(run ? 'run' : 'broadcast');
+    beginBroadcast(run ? 'run' : endlessMode ? 'endless' : 'broadcast');
   }
 });
 
@@ -1887,6 +1894,7 @@ const wyfAssembly = (shell: SLUWebShell<CoreSettings>): FrameAssembly => {
     menuFlow: [],
     modes: [
       { id: 'run', label: 'Full Broadcast', description: 'Five segments. Spend your ratings between them.', leaderboardKey: 'runScore' },
+      { id: 'endless', label: 'Endless', description: 'One road that never ends. How far can he get?', leaderboardKey: 'banked' },
       { id: 'broadcast', label: 'Single Segment', description: 'Keep the ratings up. Take the exit before the chopper runs out of fuel.', leaderboardKey: 'banked' },
     ],
     statKeys: ['broadcasts', 'signOffs', 'bestBanked', 'bestPeak'],
@@ -2067,7 +2075,8 @@ function refreshMainMenu() {
       // One mode on the menu (Mike, 2026-11-17: Single Segment adds no challenge; 2026-11-18: no daily mode).
       // 'broadcast' (one segment) stays reachable by ?mode=broadcast for tests and evidence tools.
       // No subcopy (Mike, 2026-11-18): the labels say it.
-      { id: 'run', label: profile.chosenEdition ? `Go Live · ${E.name}` : 'Go Live' },
+      { id: 'run', label: PROTO ? 'Story' : profile.chosenEdition ? `Go Live · ${E.name}` : 'Go Live' },
+      ...(PROTO ? [{ id: 'endless', label: 'Endless' }] : []),
       // Editions (2026-11-17): shown once a full run has unlocked the next one.
       ...(profile.edition > 0 ? [{ id: 'edition', label: `Edition: ${E.name}` }] : []),
       { id: 'awards', label: 'Awards' },
@@ -2089,7 +2098,7 @@ refreshMainMenu();
       refreshMainMenu();
       app!.ui.show('main-menu');
     }
-    else if (screen === 'main-menu' && (choice === 'run' || choice === 'broadcast')) flowActivate('mode-select', choice);
+    else if (screen === 'main-menu' && (choice === 'run' || choice === 'endless' || choice === 'broadcast')) flowActivate('mode-select', choice);
     else flowActivate(screen, choice);
   };
 }
@@ -2567,7 +2576,7 @@ function updateHud(dt: number) {
   const g = sim.giant;
   // LIVE clock; once the exit is open it counts down to the end of the grace period.
   const X = TUNING.segment;
-  const counting = sim.time >= X.exitOpensAt && sim.live;
+  const counting = sim.time >= X.exitOpensAt && sim.live && !sim.endless;
   const secs = counting ? Math.max(0, Math.ceil(X.length + X.grace - sim.time)) : Math.floor(sim.time);
   clockEl.textContent = `${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')}`;
   clockEl.classList.toggle('count', counting);

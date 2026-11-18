@@ -139,7 +139,8 @@ export class Track {
   /** Edition: × bulldozer and concrete chances. */
   private readonly hardMult: number;
 
-  constructor(readonly seed: number, segment = 0, guided = false, hardMult = 1) {
+  constructor(readonly seed: number, segment = 0, guided = false, hardMult = 1, endless = false) {
+    if (endless) this.district = -1;
     this.hardMult = hardMult;
     this.segmentNo = segment;
     this.hardFrom = guided ? TUNING.guided.clearFor : TUNING.props.immovableFrom;

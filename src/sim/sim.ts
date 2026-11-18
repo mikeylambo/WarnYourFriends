@@ -64,6 +64,8 @@ export interface SimOptions {
   guided?: boolean;
   /** Edition of the news (TUNING.editions, 0 = Evening News). Part of the leaderboard submission. */
   edition?: number;
+  /** Prototype endless mode: no districts, no exit and no fuel; chunk levels climb with distance until he's caught or cut. */
+  endless?: boolean;
 }
 
 const smoothstep = (t: number) => t * t * (3 - 2 * t);
@@ -119,13 +121,18 @@ export class Sim {
   /** First broadcast ever: a calm opening (no drain or police for `guided.calmFor` s, nothing unbreakable for `guided.clearFor` m). */
   readonly guided: boolean;
 
+  /** Endless mode (prototype): no exit, no fuel. */
+  readonly endless: boolean;
+  private baseDecayMult = 1;
+
   constructor(opts: SimOptions) {
     this.seed = opts.seed;
     this.growth = opts.growth ?? false;
     this.rng = new Rng(opts.seed ^ 0x51ed);
     this.guided = !!opts.guided;
     this.edition = TUNING.editions[Math.max(0, Math.min(TUNING.editions.length - 1, opts.edition ?? 0))];
-    this.track = new Track(opts.seed, opts.segment ?? 0, this.guided, this.edition.hard);
+    this.endless = !!opts.endless;
+    this.track = new Track(opts.seed, opts.segment ?? 0, this.guided, this.edition.hard, this.endless);
     this.escort = new Escort(opts.seed, this.track);
     this.pursuit = new Pursuit(opts.seed, this);
     const scratch: Unit[] = [];
@@ -139,7 +146,7 @@ export class Sim {
     this.abilityLevel = this.ability ? this.levelOf(this.ability) : 0;
     this.show.startSegment(opts.segment ?? 0);
     if (this.guided) this.show.decayGrace = TUNING.guided.calmFor;
-    this.show.decayMult = this.edition.decay * (TUNING.proto.on ? TUNING.proto.decayMult : 1);
+    this.show.decayMult = this.baseDecayMult = this.edition.decay * (TUNING.proto.on ? TUNING.proto.decayMult : 1);
     if (TUNING.proto.on) this.show.ratings = this.show.peak = TUNING.proto.startRatings;
     if (this.edition.heat) this.show.heat = Math.min(5, this.show.heat + this.edition.heat);
     this.asks = new Asks(opts.seed, opts.segment ?? 0, this.track);
@@ -282,6 +289,8 @@ export class Sim {
       if (this.show.pinCause === 'net') this.pursuit.disperseNet();
       else this.pursuit.shakeOff();
     }
+    // Endless: the audience gets harder to hold the longer it runs (drain × 1 + t / endlessRamp).
+    if (this.endless) this.show.decayMult = this.baseDecayMult * (1 + this.time / TUNING.proto.endlessRamp);
     this.show.step(dt, this.time + dt, this.giant.tier, outnumbered, this.events);
     if (TUNING.proto.on && !this.inRampage) {
       // Prototype: one bar. The audience is the meter; full audience is Rampage ready.
@@ -477,6 +486,7 @@ export class Sim {
   /** v0.3 §4: the exit ramp opens at 130s; be in the rightmost lane at the gore to sign off. */
   private exitPlanned = false;
   private stepExit() {
+    if (this.endless) return; // endless: no sign-off, no fuel; it ends when he's caught or cut
     const X = TUNING.segment;
     const g = this.giant;
     const now = this.time + this.dt;

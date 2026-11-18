@@ -112,6 +112,8 @@ export const TUNING = {
     chunkReact: 0.45,
     /** Chunk level climbs one step every this many metres (and one per run segment). */
     levelEvery: 700,
+    /** Endless: the audience drain grows by its base rate every this many seconds (×2 at 2 min, ×3 at 4). */
+    endlessRamp: 120,
     /**
      * The story run (Mike, 2026-11-18: "an authored run through the different districts... with an end"; one unbroken
      * run). Five districts in order, each its own road (lane count by zone), name and chunk level; the sign-off ramp is
