@@ -2,7 +2,7 @@ import type { AbilityId, MassClass } from '../tuning';
 
 export type Material = 'wood' | 'glass' | 'metal' | 'fruit' | 'concrete' | 'paper';
 
-export type PropKind = 'sawhorse' | 'cart' | 'fence' | 'scooter' | 'car' | 'van' | 'barricade' | 'dozer' | 'cruiser' | 'compact' | 'tollgate' | 'foodtruck' | 'armored' | 'carrier' | 'newsvan';
+export type PropKind = 'sawhorse' | 'cart' | 'fence' | 'scooter' | 'car' | 'van' | 'barricade' | 'dozer' | 'cruiser' | 'compact' | 'tollgate' | 'foodtruck' | 'armored' | 'carrier' | 'newsvan' | 'scoop';
 
 /** Content pass (Mike, 2026-11-15): landmark set pieces, one per segment (v0.3 §16: landmarks become segments). */
 export type LandmarkKind = 'toll' | 'foodtrucks' | 'works' | 'jam';
@@ -138,6 +138,8 @@ export type SimEvent =
   | { type: 'rampageEnd' }
   /** A rival station's news van flattened (2026-11-17: something worth aiming for, Rampage most of all). */
   | { type: 'rival'; s: number; d: number }
+  /** Prototype: he ran through a Scoop (a collectible), worth audience and points. */
+  | { type: 'scoop'; s: number; d: number }
   /** Ground Zero (passive): the blast when Rampage fires, and how much it flattened. */
   | { type: 'groundZero'; s: number; d: number; smashed: number }
   | { type: 'meterLoss'; amount: number; reason: TierDropReason }
@@ -201,9 +203,9 @@ export type SimEvent =
 
 export type UnitKind = 'cruiser' | 'rolling' | 'roadblock' | 'spike' | 'chopper' | 'net' | 'carrier';
 /** §12 gain sources. */
-export type GainType = 'medium' | 'heavy' | 'nearMiss' | 'lostTrack' | 'rampage' | 'policeCrash' | 'collateral' | 'rival';
+export type GainType = 'medium' | 'heavy' | 'nearMiss' | 'lostTrack' | 'rampage' | 'policeCrash' | 'collateral' | 'rival' | 'scoop';
 /** Spectacle stunts (score, not Ratings). */
-export type StuntType = 'medium' | 'heavy' | 'unit' | 'policeCrash' | 'collateral' | 'nearMiss' | 'ramDodge' | 'lostTrack' | 'chopperShaken' | 'leapLand' | 'breakawayLand' | 'rival';
+export type StuntType = 'medium' | 'heavy' | 'unit' | 'policeCrash' | 'collateral' | 'nearMiss' | 'ramDodge' | 'lostTrack' | 'chopperShaken' | 'leapLand' | 'breakawayLand' | 'rival' | 'scoop';
 export type BustReason = 'ratings' | 'pin' | 'missed';
 /** What filled the meter: boxed in by a Police Net, or caught crawling with police on his tail. */
 export type PinCause = 'net' | 'caught';

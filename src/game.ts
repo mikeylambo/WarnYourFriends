@@ -348,7 +348,7 @@ const onboarding = new Onboarding($('prompt'), (id: PromptId) => {
     lanes: PROTO ? `Change lanes ${k('lanes')}: weave through the traffic` : `Change lanes ${k('lanes')} and smash the traffic`,
     blocked: PROTO ? `Cars and trucks don't break until Rampage. Dodge them ${k('lanes')}` : `Bulldozers and armored trucks don't break. Change lanes ${k('lanes')}`,
     concrete: `Concrete and yellow-roof police lines only break in <b>RAMPAGE</b>. Save it, or go round`,
-    meter: PROTO ? `Close dodges win the <b>AUDIENCE</b>. Full audience: <b>RAMPAGE</b>` : `Smash and dodge to fill the <b>RAMPAGE</b> meter`,
+    meter: PROTO ? `Close dodges and yellow <b>SCOOPS</b> win the <b>AUDIENCE</b>. Full audience: <b>RAMPAGE</b>` : `Smash and dodge to fill the <b>RAMPAGE</b> meter`,
     ready: `<b>RAMPAGE READY</b> ${settings.autoRampage ? 'Here it goes' : `Press ${k('shoulder')}`}`,
     hit: PROTO ? `Hits lose the audience, and the police close in` : `Hits cost Rampage meter`,
     ram: `Police swerving in: dodge ${k('lanes')}`,
@@ -1221,6 +1221,10 @@ function present(e: SimEvent) {
       giant.onBounce();
       rig.jolt(3, 0.15);
       haptic(110, 0.6);
+      break;
+    case 'scoop':
+      // Prototype collectible: a bright ding (the chain tick, a step up), the smash event already threw its confetti.
+      audio.chainTick(3);
       break;
     case 'zone': {
       // Story run: a title card as he enters each district (never covers the road; fades on its own).

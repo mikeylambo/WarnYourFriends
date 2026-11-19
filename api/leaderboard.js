@@ -46,6 +46,8 @@ var TUNING = {
     oncomingSpeed: 12,
     truckSpeed: 7,
     moverWake: 150,
+    /** Moving traffic stops this far short of whatever's in front of it in its lane (m). */
+    moverGap: 1.5,
     /** Endless: the audience drain grows by its base rate every this many seconds (×2 at 2 min, ×3 at 4). */
     endlessRamp: 120,
     /**
@@ -61,7 +63,8 @@ var TUNING = {
         { zone: "bridge", name: "Saltmarsh Bridge", segments: 16, level: 2 },
         { zone: "avenue", name: "Downtown", segments: 32, level: 3 },
         { zone: "tunnel", name: "Old Harbor Tunnel", segments: 16, level: 4 },
-        { zone: "highway", name: "Uptown Expressway", segments: 34, level: 5 }
+        // The finale opens out to six lanes (Mike, 2026-11-18: the cover art's six-lane highway).
+        { zone: "highway", name: "Uptown Expressway", segments: 34, level: 5, lanes: 6 }
       ]
     },
     reachGap: 36,
@@ -73,7 +76,7 @@ var TUNING = {
     dodgeGap: 2.2,
     decayMult: 0.6,
     startRatings: 40,
-    gain: { nearMiss: 6.5, rival: 10, policeCrash: 12, lostTrack: 8, collateral: 1 }
+    gain: { scoop: 7, nearMiss: 6.5, rival: 10, policeCrash: 12, lostTrack: 8, collateral: 1 }
   },
   sim: {
     /** §29 fixed step. */
@@ -192,7 +195,7 @@ var TUNING = {
    */
   rampage: {
     /** At 15 m/s (2026-11-17) Stride meets more per second: gains ×0.8 keep Rampage about a quarter of the run. */
-    gain: { rival: 25, medium: 7, heavy: 10, unit: 13, policeCrash: 16, collateral: 5, nearMiss: 8, ramDodge: 10, lostTrack: 10, chopperShaken: 12, leapLand: 8, breakawayLand: 10 },
+    gain: { scoop: 6, rival: 25, medium: 7, heavy: 10, unit: 13, policeCrash: 16, collateral: 5, nearMiss: 8, ramDodge: 10, lostTrack: 10, chopperShaken: 12, leapLand: 8, breakawayLand: 10 },
     duration: 8,
     perSmash: 0.3,
     maxDuration: 12,
@@ -521,7 +524,7 @@ var TUNING = {
    * → it drops: the points bank at ×1, the multiplier is lost. Smash-across pays `acrossBonus`×.
    */
   spectacle: {
-    points: { rival: 800, medium: 100, heavy: 250, unit: 500, policeCrash: 750, collateral: 100, nearMiss: 200, ramDodge: 200, lostTrack: 250, chopperShaken: 300, leapLand: 150, breakawayLand: 250 },
+    points: { scoop: 300, rival: 800, medium: 100, heavy: 250, unit: 500, policeCrash: 750, collateral: 100, nearMiss: 200, ramDodge: 200, lostTrack: 250, chopperShaken: 300, leapLand: 150, breakawayLand: 250 },
     acrossBonus: 1.5,
     audienceMult: [1, 1.25, 1.5, 2],
     window: 2.5,
@@ -765,7 +768,7 @@ var TUNING = {
     /** Police crash (a cruiser he led into something Heavy): the best TV of the chase, above lost track. Collateral: police plough through something Medium. */
     /** Rampage 0 (Mike, 2026-11-16, deviation from §12's +1/s): the trickle was invisible and half of all gains; the audience now moves only for what he does. */
     /** Difficulty pass (2026-11-17): Medium 1.5, Heavy 3.5 (were 2 / 5): at 15 m/s smashing alone held the audience at 100. */
-    gain: { rival: 4, medium: 1.5, heavy: 3.5, nearMiss: 3, lostTrack: 6, rampage: 0, policeCrash: 8, collateral: 2 },
+    gain: { rival: 4, medium: 1.5, heavy: 3.5, nearMiss: 3, lostTrack: 6, rampage: 0, policeCrash: 8, collateral: 2, scoop: 4 },
     /** HUD: viewers shown per Ratings point ("370K WATCHING" at the starting 20). */
     viewersPerPoint: 18500,
     /** §12 decay: after 3s with no gain; segment 1 rate (2.0/2.75/3.5/4.25/5.0 by segment). */
@@ -1375,9 +1378,14 @@ var CHUNKS = [
   // Long and slow (box trucks): its lane is closed for the chunk; he overtakes on the open side.
   { id: "four-convoy", lanes: 4, level: 3, rows: [[0, ".t.c"], [30, "c.c."], [60, "..c."], [88, "s..c"]] },
   { id: "three-truck", lanes: 3, level: 3, rows: [[0, "t.c"], [30, ".c."], [60, "..c"], [86, "s.s"]] },
+  // --- Six lanes (the finale's grand expressway, Mike 2026-11-18: "cover art has a 6-lane highway") -------------
+  { id: "six-flow", lanes: 6, level: 4, rows: [[0, "c..v.c"], [30, ".c..c."], [60, "c.v..c"], [90, "..c.v."]] },
+  { id: "six-convoy", lanes: 6, level: 4, rows: [[0, "c.t.c."], [32, ".c..cv"], [64, "c...c."], [94, ".c.s.c"]] },
+  { id: "six-rival", lanes: 6, level: 5, rows: [[0, "cvn.vc"], [30, ".c.c.v"], [60, "v.c.c."], [90, ".vncv."]] },
+  { id: "six-two-way", lanes: 6, level: 5, oncoming: "ooo...", rows: [[0, "o.o..v"], [22, ".o...."], [34, "o.o.c."], [50, ".o.s.."], [66, "oo.v.c"], [96, "o.o.c."], [110, ".o...."]] },
   { id: "four-blockade", lanes: 4, level: 5, rows: [[0, "bdc."], [34, "c.vd"], [64, ".cbd"], [94, "cv.d"], [124, "d.cv"]] }
 ];
-var CHUNK_KINDS = { c: "car", v: "van", n: "newsvan", d: "dozer", b: "barricade", f: "foodtruck", s: "small", o: "car", t: "foodtruck" };
+var CHUNK_KINDS = { c: "car", v: "van", n: "newsvan", d: "dozer", b: "barricade", f: "foodtruck", s: "scoop", o: "car", t: "foodtruck" };
 function mirror(c) {
   const rev = (s) => [...s].reverse().join("");
   return { ...c, id: `${c.id}-mirrored`, rows: c.rows.map(([ds, r]) => [ds, rev(r)]), ...c.oncoming ? { oncoming: rev(c.oncoming) } : {} };
@@ -1425,6 +1433,8 @@ var PROP_DEFS = {
   tollgate: { cls: "medium", mat: "wood", hl: 0.15, hw: 1.7, h: 1.2, variants: 1 },
   foodtruck: { cls: "heavy", mat: "fruit", hl: 3, hw: 1.2, h: 2.9, variants: 4 },
   // A rival station's news van (dish and mast on the roof): a target worth aiming for (TUNING.targets).
+  /** Prototype collectible (Mike, 2026-11-18): a news Scoop he runs through for audience and points. */
+  scoop: { cls: "light", mat: "paper", hl: 0.65, hw: 0.65, h: 1.5, variants: 1 },
   newsvan: { cls: "heavy", mat: "metal", hl: 2.6, hw: 1.1, h: 2.6, variants: 2 },
   // Police Net (2026-11-16): the armoured truck nothing smashes (Leap clears it), and the car carrier (Heavy).
   armored: { cls: "immovable", mat: "metal", hl: 2.9, hw: 1.25, h: 2.9, variants: 1 },
@@ -1522,6 +1532,8 @@ var Track = class {
    */
   stepMovers(dt, gs, gv) {
     const P = TUNING.proto;
+    const sameLane = (a, b) => Math.abs(a.d - b.d) < a.hw + b.hw;
+    const blocked = (m, s0, s1, gap) => this.propsBetween(s0 - gap - 8, s1 + gap + 8).some((q) => q !== m && q.alive && sameLane(m, q) && q.s + q.hl > s0 - gap && q.s - q.hl < s1 + gap);
     for (const m of this.movers) {
       const mv = m.mover;
       if (!m.alive) continue;
@@ -1529,9 +1541,24 @@ var Track = class {
         if (gs < mv.min - P.moverWake) continue;
         mv.active = true;
         const t = Math.max(0, (mv.meet - gs) / Math.max(gv, 1));
-        m.s = clamp(mv.meet - mv.v * t, mv.min + m.hl, mv.max - m.hl);
+        let start = clamp(mv.meet - mv.v * t, mv.min + m.hl, mv.max - m.hl);
+        const lane = Math.floor(m.d / TUNING.lanes.width);
+        if (!this.laneUsable(lane, start) || lane >= this.lanesAt(start)) {
+          m.alive = false;
+          continue;
+        }
+        const back = mv.v < 0 ? 1 : -1;
+        while (blocked(m, start - m.hl, start + m.hl, 1.5) && start > mv.min + m.hl && start < mv.max - m.hl) start += back;
+        if (blocked(m, start - m.hl, start + m.hl, 1.5)) {
+          m.alive = false;
+          continue;
+        }
+        m.s = start;
       }
-      m.s = clamp(m.s + mv.v * dt, mv.min + m.hl, mv.max - m.hl);
+      const next = clamp(m.s + mv.v * dt, mv.min + m.hl, mv.max - m.hl);
+      const ahead = mv.v < 0 ? [next - m.hl, m.s - m.hl] : [m.s + m.hl, next + m.hl];
+      const laneHere = Math.floor(m.d / TUNING.lanes.width);
+      if (mv.v !== 0 && !blocked(m, ahead[0], ahead[1], P.moverGap) && laneHere < this.lanesAt(next)) m.s = next;
       const w = this.widthAt(m.s);
       m.d = clamp(m.d, Math.min(m.hw + 0.2, w / 2), Math.max(w / 2, w - m.hw - 0.2));
     }
@@ -1567,7 +1594,7 @@ var Track = class {
       if (this.district + 1 < D.length) {
         this.district++;
         this.nextZone = D[this.district].zone;
-        this.zoneTarget = Z.lanes[this.nextZone];
+        this.zoneTarget = D[this.district].lanes ?? Z.lanes[this.nextZone];
       } else this.zoneLeft = 1e9;
     } else if (index >= T.runwaySegments && this.zoneLeft <= 0 && !this.nextZone) {
       const options = Object.keys(Z.lanes).filter((z) => z !== this.zone && !(nearReserve && (z === "tunnel" || z === "bridge")));
@@ -1595,7 +1622,7 @@ var Track = class {
       if (this.nextZone && lanes0 !== this.zoneTarget) {
         kind = "merge";
         lanes1 = lanes0 + Math.sign(this.zoneTarget - lanes0);
-      } else if (this.zone === "highway" && index >= this.nextMerge && this.zoneLeft > 1) {
+      } else if (this.zone === "highway" && index >= this.nextMerge && this.zoneLeft > 1 && !(this.district >= 0 && TUNING.proto.story.districts[this.zoneDistrict]?.lanes)) {
         kind = "merge";
         lanes1 = lanes0 >= 4 ? 3 : 4;
         this.nextMerge = index + rng.int(T.mergeEvery[0], T.mergeEvery[1]);
@@ -2821,6 +2848,7 @@ var Pursuit = class {
       const blocked = /* @__PURE__ */ new Set([lane]);
       for (const p2 of track.propsBetween(at - 5, at + 5)) if (p2.alive) blocked.add(Math.floor(p2.d / W));
       const police = this.solidBetween(at - 5, at + 5).filter((x) => x !== u);
+      if (this.units.some((x) => x.alive && x.unit === "rolling" && Math.abs(x.s - at) < 30 && Math.abs(x.d - track.laneCenter(lane)) < x.hw + 1)) continue;
       if (police.some((x) => Math.abs(x.d - track.laneCenter(lane)) < x.hw + 1)) continue;
       for (const x of police) blocked.add(Math.floor(x.d / W));
       if (blocked.size >= L) continue;
@@ -3915,6 +3943,13 @@ var Sim = class {
         st.smashes++;
         if (e.across) st.smashesAcross++;
         const rival = e.propId < 1e6 && this.track.props.find((x) => x.id === e.propId)?.kind === "newsvan";
+        const scoop = e.propId < 1e6 && this.track.props.find((x) => x.id === e.propId)?.kind === "scoop";
+        if (scoop) {
+          this.award("scoop");
+          this.emit({ type: "scoop", s: e.s, d: e.d });
+          this.stunt("scoop");
+          break;
+        }
         if (rival) {
           this.award("rival");
           this.emit({ type: "rival", s: e.s, d: e.d });
@@ -4013,7 +4048,7 @@ var Sim = class {
     this.track.ensure(g.s + T.ahead + T.length + 10);
     this.track.surge(g.s + T.ahead, g.s + T.ahead + T.length);
     for (const u of this.pursuit.units) {
-      if (!u.alive || u.unit !== "carrier") continue;
+      if (!u.alive || u.unit !== "carrier" && u.unit !== "rolling") continue;
       const c = this.track.laneCenter(u.lane);
       for (const p of this.track.propsBetween(g.s + T.ahead - 2, g.s + T.ahead + T.length + 2)) if (Math.abs(p.d - c) < p.hw + 1.4) p.alive = false;
     }

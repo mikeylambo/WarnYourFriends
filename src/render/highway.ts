@@ -146,6 +146,9 @@ export function partsFor(p: Prop): Part[] {
   const L = p.hl * 2;
   const W = p.hw * 2;
   switch (p.kind as PropKind) {
+    case 'scoop':
+      // A floating tile: the station's yellow with a red "6" panel, read from the chopper.
+      return [[0, 1.25, 0, 1.3, 0.22, 1.3, 'kind'], [0, 1.38, 0, 0.78, 0.06, 0.78, 0xb3122a], [0, 0.6, 0, 0.12, 1.1, 0.12, 0x8c939b]];
     case 'sawhorse':
       return [[0, 0.75, 0, L, 0.28, W, 'kind'], [0, 0.4, W * 0.4, L * 0.8, 0.8, 0.12, 0x8a6240], [0, 0.4, -W * 0.4, L * 0.8, 0.8, 0.12, 0x8a6240]];
     case 'cart':
@@ -1172,7 +1175,7 @@ export class HighwayView {
     if (p.kind === 'car' || p.kind === 'van' || p.kind === 'newsvan') this.addCarLights(p, g, body);
     // Prototype (dodge until you can smash): what crumbles underfoot in Stride wears a bright ring on the road, so it
     // reads from the chopper at a glance: ring = crunch it, no ring = dodge it.
-    if (TUNING.proto.on && (TUNING.proto.small as readonly string[]).includes(p.kind)) {
+    if (p.kind === 'scoop') {
       const ring = new THREE.Mesh(SMASH_RING_GEO, SMASH_RING_MAT);
       ring.rotation.x = -Math.PI / 2;
       ring.position.y = 0.04;

@@ -568,6 +568,13 @@ export class Sim {
         if (e.across) st.smashesAcross++;
         // A rival station's van: the big one (its own stunt, Ratings and meter, and an event for the asks and the HUD).
         const rival = e.propId < 1_000_000 && this.track.props.find((x) => x.id === e.propId)?.kind === 'newsvan';
+        const scoop = e.propId < 1_000_000 && this.track.props.find((x) => x.id === e.propId)?.kind === 'scoop';
+        if (scoop) {
+          this.award('scoop');
+          this.emit({ type: 'scoop', s: e.s, d: e.d });
+          this.stunt('scoop');
+          break;
+        }
         if (rival) {
           this.award('rival');
           this.emit({ type: 'rival', s: e.s, d: e.d });
@@ -648,9 +655,9 @@ export class Sim {
     const T = TUNING.targets;
     this.track.ensure(g.s + T.ahead + T.length + 10);
     this.track.surge(g.s + T.ahead, g.s + T.ahead + T.length);
-    // ...but never into a Car Carrier's lane (it would drive through the new traffic).
+    // ...but never into a Car Carrier's or Rolling Blockade's lane (they'd drive through the new traffic).
     for (const u of this.pursuit.units) {
-      if (!u.alive || u.unit !== 'carrier') continue;
+      if (!u.alive || (u.unit !== 'carrier' && u.unit !== 'rolling')) continue;
       const c = this.track.laneCenter(u.lane);
       for (const p of this.track.propsBetween(g.s + T.ahead - 2, g.s + T.ahead + T.length + 2)) if (Math.abs(p.d - c) < p.hw + 1.4) p.alive = false;
     }

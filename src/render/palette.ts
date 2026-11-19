@@ -54,6 +54,7 @@ export const PALETTE = {
 };
 
 export const KIND_COLORS: Record<PropKind, number[]> = {
+  scoop: [0xffd23c],
   sawhorse: [0xf08a24, 0xe8e2d4],
   cart: [0xf28c28, 0xe4412b, 0x7cbf3a],
   fence: [0xf2b705], // safety yellow: it crumbles underfoot (2026-11-18), so it reads like the other small things

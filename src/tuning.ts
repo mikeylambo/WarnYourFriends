@@ -129,6 +129,8 @@ export const TUNING = {
     oncomingSpeed: 12,
     truckSpeed: 7,
     moverWake: 150,
+    /** Moving traffic stops this far short of whatever's in front of it in its lane (m). */
+    moverGap: 1.5,
     /** Endless: the audience drain grows by its base rate every this many seconds (×2 at 2 min, ×3 at 4). */
     endlessRamp: 120,
     /**
@@ -144,8 +146,9 @@ export const TUNING = {
         { zone: 'bridge', name: 'Saltmarsh Bridge', segments: 16, level: 2 },
         { zone: 'avenue', name: 'Downtown', segments: 32, level: 3 },
         { zone: 'tunnel', name: 'Old Harbor Tunnel', segments: 16, level: 4 },
-        { zone: 'highway', name: 'Uptown Expressway', segments: 34, level: 5 },
-      ] as { zone: 'highway' | 'avenue' | 'bridge' | 'tunnel'; name: string; segments: number; level: number }[],
+        // The finale opens out to six lanes (Mike, 2026-11-18: the cover art's six-lane highway).
+        { zone: 'highway', name: 'Uptown Expressway', segments: 34, level: 5, lanes: 6 },
+      ] as { zone: 'highway' | 'avenue' | 'bridge' | 'tunnel'; name: string; segments: number; level: number; lanes?: number }[],
     },
     reachGap: 36,
     wideMinBlocked: 2,
@@ -156,7 +159,7 @@ export const TUNING = {
     dodgeGap: 2.2,
     decayMult: 0.6,
     startRatings: 40,
-    gain: { nearMiss: 6.5, rival: 10, policeCrash: 12, lostTrack: 8, collateral: 1 } as Record<string, number>,
+    gain: { scoop: 7, nearMiss: 6.5, rival: 10, policeCrash: 12, lostTrack: 8, collateral: 1 } as Record<string, number>,
   },
 
   sim: {
@@ -284,7 +287,7 @@ export const TUNING = {
    */
   rampage: {
     /** At 15 m/s (2026-11-17) Stride meets more per second: gains ×0.8 keep Rampage about a quarter of the run. */
-    gain: { rival: 25, medium: 7, heavy: 10, unit: 13, policeCrash: 16, collateral: 5, nearMiss: 8, ramDodge: 10, lostTrack: 10, chopperShaken: 12, leapLand: 8, breakawayLand: 10 } as Record<string, number>,
+    gain: { scoop: 6, rival: 25, medium: 7, heavy: 10, unit: 13, policeCrash: 16, collateral: 5, nearMiss: 8, ramDodge: 10, lostTrack: 10, chopperShaken: 12, leapLand: 8, breakawayLand: 10 } as Record<string, number>,
     duration: 8,
     perSmash: 0.3,
     maxDuration: 12,
@@ -598,7 +601,7 @@ export const TUNING = {
    * → it drops: the points bank at ×1, the multiplier is lost. Smash-across pays `acrossBonus`×.
    */
   spectacle: {
-    points: { rival: 800, medium: 100, heavy: 250, unit: 500, policeCrash: 750, collateral: 100, nearMiss: 200, ramDodge: 200, lostTrack: 250, chopperShaken: 300, leapLand: 150, breakawayLand: 250 },
+    points: { scoop: 300, rival: 800, medium: 100, heavy: 250, unit: 500, policeCrash: 750, collateral: 100, nearMiss: 200, ramDodge: 200, lostTrack: 250, chopperShaken: 300, leapLand: 150, breakawayLand: 250 },
     acrossBonus: 1.5,
     audienceMult: [1, 1.25, 1.5, 2],
     window: 2.5,
@@ -830,7 +833,7 @@ export const TUNING = {
     /** Police crash (a cruiser he led into something Heavy): the best TV of the chase, above lost track. Collateral: police plough through something Medium. */
     /** Rampage 0 (Mike, 2026-11-16, deviation from §12's +1/s): the trickle was invisible and half of all gains; the audience now moves only for what he does. */
     /** Difficulty pass (2026-11-17): Medium 1.5, Heavy 3.5 (were 2 / 5): at 15 m/s smashing alone held the audience at 100. */
-    gain: { rival: 4, medium: 1.5, heavy: 3.5, nearMiss: 3, lostTrack: 6, rampage: 0, policeCrash: 8, collateral: 2 },
+    gain: { rival: 4, medium: 1.5, heavy: 3.5, nearMiss: 3, lostTrack: 6, rampage: 0, policeCrash: 8, collateral: 2, scoop: 4 },
     /** HUD: viewers shown per Ratings point ("370K WATCHING" at the starting 20). */
     viewersPerPoint: 18_500,
     /** §12 decay: after 3s with no gain; segment 1 rate (2.0/2.75/3.5/4.25/5.0 by segment). */
@@ -1224,6 +1227,7 @@ export function enableProto() {
   // The story run: one unbroken run (no Producer's Meeting), the fuel tank as its clock; the exit opens at the end of
   // the last district (Sim.stepExit), not on the clock.
   t.run.segments = 1;
+  (TUNING as unknown as { lanes: { max: number } }).lanes.max = Math.max(TUNING.lanes.max, ...TUNING.proto.story.districts.map((d) => d.lanes ?? 0));
   t.run.abilitySlots = 1;
   const seg = (TUNING as unknown as { segment: { length: number; exitOpensAt: number } }).segment;
   seg.length = TUNING.proto.story.fuel;

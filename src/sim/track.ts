@@ -75,6 +75,8 @@ export const PROP_DEFS: Record<PropKind, PropDef> = {
   tollgate: { cls: 'medium', mat: 'wood', hl: 0.15, hw: 1.7, h: 1.2, variants: 1 },
   foodtruck: { cls: 'heavy', mat: 'fruit', hl: 3.0, hw: 1.2, h: 2.9, variants: 4 },
   // A rival station's news van (dish and mast on the roof): a target worth aiming for (TUNING.targets).
+  /** Prototype collectible (Mike, 2026-11-18): a news Scoop he runs through for audience and points. */
+  scoop: { cls: 'light', mat: 'paper', hl: 0.65, hw: 0.65, h: 1.5, variants: 1 },
   newsvan: { cls: 'heavy', mat: 'metal', hl: 2.6, hw: 1.1, h: 2.6, variants: 2 },
   // Police Net (2026-11-16): the armoured truck nothing smashes (Leap clears it), and the car carrier (Heavy).
   armored: { cls: 'immovable', mat: 'metal', hl: 2.9, hw: 1.25, h: 2.9, variants: 1 },
@@ -185,6 +187,10 @@ export class Track {
    */
   stepMovers(dt: number, gs: number, gv: number) {
     const P = TUNING.proto;
+    const sameLane = (a: Prop, b: Prop) => Math.abs(a.d - b.d) < a.hw + b.hw;
+    /** Something in its lane within `gap` of the box [s0, s1]? (other movers and standing traffic both count) */
+    const blocked = (m: Prop, s0: number, s1: number, gap: number) =>
+      this.propsBetween(s0 - gap - 8, s1 + gap + 8).some((q) => q !== m && q.alive && sameLane(m, q) && q.s + q.hl > s0 - gap && q.s - q.hl < s1 + gap);
     for (const m of this.movers) {
       const mv = m.mover!;
       if (!m.alive) continue;
@@ -192,9 +198,27 @@ export class Track {
         if (gs < mv.min - P.moverWake) continue;
         mv.active = true;
         const t = Math.max(0, (mv.meet - gs) / Math.max(gv, 1));
-        m.s = clamp(mv.meet - mv.v * t, mv.min + m.hl, mv.max - m.hl);
+        let start = clamp(mv.meet - mv.v * t, mv.min + m.hl, mv.max - m.hl);
+        // Its lane gone there (a merge past its chunk): it never sets off.
+        const lane = Math.floor(m.d / TUNING.lanes.width);
+        if (!this.laneUsable(lane, start) || lane >= this.lanesAt(start)) {
+          m.alive = false;
+          continue;
+        }
+        // Never on top of anything: slide back against its direction of travel (it's all off camera) or stay home.
+        const back = mv.v < 0 ? 1 : -1;
+        while (blocked(m, start - m.hl, start + m.hl, 1.5) && start > mv.min + m.hl && start < mv.max - m.hl) start += back;
+        if (blocked(m, start - m.hl, start + m.hl, 1.5)) {
+          m.alive = false;
+          continue;
+        }
+        m.s = start;
       }
-      m.s = clamp(m.s + mv.v * dt, mv.min + m.hl, mv.max - m.hl);
+      // Traffic sense: brakes to a stop rather than drive into what's in front of it (Mike, 2026-11-18).
+      const next = clamp(m.s + mv.v * dt, mv.min + m.hl, mv.max - m.hl);
+      const ahead = mv.v < 0 ? [next - m.hl, m.s - m.hl] : [m.s + m.hl, next + m.hl];
+      const laneHere = Math.floor(m.d / TUNING.lanes.width);
+      if (mv.v !== 0 && !blocked(m, ahead[0], ahead[1], P.moverGap) && laneHere < this.lanesAt(next)) m.s = next;
       // Never off the road: a merge past its chunk can't take its lane out from under it.
       const w = this.widthAt(m.s);
       m.d = clamp(m.d, Math.min(m.hw + 0.2, w / 2), Math.max(w / 2, w - m.hw - 0.2));
@@ -237,7 +261,7 @@ export class Track {
       if (this.district + 1 < D.length) {
         this.district++;
         this.nextZone = D[this.district].zone;
-        this.zoneTarget = Z.lanes[this.nextZone];
+        this.zoneTarget = D[this.district].lanes ?? Z.lanes[this.nextZone];
       } else this.zoneLeft = 1e9;
     } else if (index >= T.runwaySegments && this.zoneLeft <= 0 && !this.nextZone) {
       const options = (Object.keys(Z.lanes) as ZoneKind[]).filter((z) => z !== this.zone && !(nearReserve && (z === 'tunnel' || z === 'bridge')));
@@ -266,7 +290,8 @@ export class Track {
       if (this.nextZone && lanes0 !== this.zoneTarget) {
         kind = 'merge';
         lanes1 = lanes0 + Math.sign(this.zoneTarget - lanes0);
-      } else if (this.zone === 'highway' && index >= this.nextMerge && this.zoneLeft > 1) {
+      } else if (this.zone === 'highway' && index >= this.nextMerge && this.zoneLeft > 1 && !(this.district >= 0 && TUNING.proto.story.districts[this.zoneDistrict]?.lanes)) {
+        // (a story district with its own lane count keeps it: no odd 4↔3 merge on the six-lane finale)
         // Highway only: the odd 4↔3 merge within the zone.
         kind = 'merge';
         lanes1 = lanes0 >= 4 ? 3 : 4;

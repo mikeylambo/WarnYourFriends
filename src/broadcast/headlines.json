@@ -88,6 +88,10 @@
     "newsvan": [
       "Rival News Van",
       "Rival News Vans"
+    ],
+    "scoop": [
+      "Exclusive",
+      "Exclusives"
     ]
   },
   "verbs": {

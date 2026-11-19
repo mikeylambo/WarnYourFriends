@@ -565,6 +565,8 @@ export class Pursuit {
       for (const p of track.propsBetween(at - 5, at + 5)) if (p.alive) blocked.add(Math.floor(p.d / W));
       // Never onto a police unit, and police count toward closing the road.
       const police = this.solidBetween(at - 5, at + 5).filter((x) => x !== u);
+      // A rolling blockade drives on into whatever lands in its lane: never drop into one within 30m either way.
+      if (this.units.some((x) => x.alive && x.unit === 'rolling' && Math.abs(x.s - at) < 30 && Math.abs(x.d - track.laneCenter(lane)) < x.hw + 1)) continue;
       if (police.some((x) => Math.abs(x.d - track.laneCenter(lane)) < x.hw + 1)) continue;
       for (const x of police) blocked.add(Math.floor(x.d / W));
       if (blocked.size >= L) continue;

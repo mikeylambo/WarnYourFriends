@@ -187,7 +187,8 @@ try {
     await page.goto(`${URL}?seed=3&bot=1&timescale=3&debug=1`);
     await page.waitForFunction(() => window.__GAME && window.__GAME.started, null, { timeout: 15000 });
     // Rampage loop: the meter needs ~25s of smashing to fill, so run 45s.
-    await page.waitForFunction(() => window.__GAME.state().time > 45, null, { timeout: 90000 });
+    // 240s: on a software-rendered machine the page manages ~0.6x real time, not the 3x asked for (2026-11-19).
+    await page.waitForFunction(() => window.__GAME.state().time > 45, null, { timeout: 240000 });
     // Camera and run cycle, measured inside the running build (v0.3).
     const c = await page.evaluate(() => window.__GAME.camera());
     const gt = await page.evaluate(() => window.__GAME.gait());
@@ -435,7 +436,7 @@ try {
     const page = await ctx.newPage();
     await page.goto(`${URL}?seed=3&bot=1&timescale=3&cuts=0`);
     await page.waitForFunction(() => window.__GAME && window.__GAME.started, null, { timeout: 15000 });
-    await page.waitForFunction(() => window.__GAME.state().time > 25, null, { timeout: 60000 });
+    await page.waitForFunction(() => window.__GAME.state().time > 25, null, { timeout: 180000 }); // slow (software-rendered) machines: see above
     const r = await page.evaluate(() => ({ cuts: window.__GAME.cutLog().length, trig: window.__GAME.triggerLog().length, cam: window.__GAME.camera().angle }));
     if (r.cuts !== 0 || r.cam !== 'Chase High') fail(`Camera cuts: Off still cut (${JSON.stringify(r)})`);
     else ok(`Camera cuts: Off holds Chase High (${r.trig} trigger events, 0 cuts)`);

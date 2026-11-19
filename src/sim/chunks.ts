@@ -5,7 +5,7 @@ import type { PropKind } from './types';
  * Authored traffic chunks (Mike, 2026-11-18: "make it an authored run"; random rows kept cheating him on 2- and
  * 3-lane roads). A chunk is a short stretch of hand-placed traffic for one lane count: rows at `ds` metres from
  * its start, one character per lane, left to right:
- *   .  empty     s  small thing (sawhorse / cart / scooter / fence: crumbles underfoot)
+ *   .  empty     s  a Scoop (a collectible: run through it for audience and points)
  *   c  car       v  van        n  rival news van (the one vehicle worth hitting)
  *   d  bulldozer b  concrete   f  food truck
  *   o  oncoming car (only in `oncoming` lanes; drives at him)   t  slow box truck (his way, slower than him)
@@ -60,11 +60,16 @@ export const CHUNKS: Chunk[] = [
   // Long and slow (box trucks): its lane is closed for the chunk; he overtakes on the open side.
   { id: 'four-convoy', lanes: 4, level: 3, rows: [[0, '.t.c'], [30, 'c.c.'], [60, '..c.'], [88, 's..c']] },
   { id: 'three-truck', lanes: 3, level: 3, rows: [[0, 't.c'], [30, '.c.'], [60, '..c'], [86, 's.s']] },
+  // --- Six lanes (the finale's grand expressway, Mike 2026-11-18: "cover art has a 6-lane highway") -------------
+  { id: 'six-flow', lanes: 6, level: 4, rows: [[0, 'c..v.c'], [30, '.c..c.'], [60, 'c.v..c'], [90, '..c.v.']] },
+  { id: 'six-convoy', lanes: 6, level: 4, rows: [[0, 'c.t.c.'], [32, '.c..cv'], [64, 'c...c.'], [94, '.c.s.c']] },
+  { id: 'six-rival', lanes: 6, level: 5, rows: [[0, 'cvn.vc'], [30, '.c.c.v'], [60, 'v.c.c.'], [90, '.vncv.']] },
+  { id: 'six-two-way', lanes: 6, level: 5, oncoming: 'ooo...', rows: [[0, 'o.o..v'], [22, '.o....'], [34, 'o.o.c.'], [50, '.o.s..'], [66, 'oo.v.c'], [96, 'o.o.c.'], [110, '.o....']] },
   { id: 'four-blockade', lanes: 4, level: 5, rows: [[0, 'bdc.'], [34, 'c.vd'], [64, '.cbd'], [94, 'cv.d'], [124, 'd.cv']] },
 ];
 
 /** The letters a chunk row may use, and what each places (`s` picks a small thing). */
-export const CHUNK_KINDS: Record<string, PropKind | 'small'> = { c: 'car', v: 'van', n: 'newsvan', d: 'dozer', b: 'barricade', f: 'foodtruck', s: 'small', o: 'car', t: 'foodtruck' };
+export const CHUNK_KINDS: Record<string, PropKind | 'small'> = { c: 'car', v: 'van', n: 'newsvan', d: 'dozer', b: 'barricade', f: 'foodtruck', s: 'scoop', o: 'car', t: 'foodtruck' };
 
 /** Lanes the solver can't use in a chunk: its oncoming lanes and any slow truck's lane. */
 export function closedLanes(c: Chunk): Set<number> {
