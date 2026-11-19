@@ -69,6 +69,35 @@ var TUNING = {
         { zone: "highway", name: "Uptown Expressway", segments: 34, level: 5, lanes: 6, oncoming: 3 }
       ]
     },
+    /**
+     * Story asks (Mike, 2026-11-19): the producer's asks span the whole run. Before going live he picks up to
+     * `storyPick` from what's offered (`storyOffer` per tier). A tier-2/3 ask needs `requires` done first (in any
+     * earlier run); one with `unlock` unlocks that traffic mod the first time it's done. `district` is the
+     * district index it's about. No score: the reward is the unlock (prototype scores are off the board).
+     */
+    storyPick: 3,
+    storyOffer: [2, 2, 2],
+    storyAsks: [
+      { id: "s-scoops", tier: 1, kind: "scoops", n: 8, text: "Grab {n} Scoops" },
+      { id: "s-rampage", tier: 1, kind: "rampage", n: 3, text: "Go Rampage {n} times" },
+      { id: "s-rivals", tier: 1, kind: "rivals", n: 2, text: "Flatten {n} rival news vans" },
+      { id: "s-near", tier: 1, kind: "nearMiss", n: 12, text: "{n} close calls" },
+      { id: "s-bridge", tier: 2, kind: "cleanDistrict", district: 1, n: 1, text: "Cross Saltmarsh Bridge without a hit", requires: "s-scoops", unlock: "heavyLoad" },
+      { id: "s-crash", tier: 2, kind: "crashBefore", district: 3, n: 2, text: "Crash {n} police cars before the tunnel", requires: "s-rampage", unlock: "hotPursuit" },
+      { id: "s-chain", tier: 2, kind: "chain", n: 15, text: "Combo {n} stunts", requires: "s-near" },
+      { id: "s-rampsmash", tier: 2, kind: "rampsmash", n: 12, text: "Smash {n} things in one Rampage", requires: "s-rivals" },
+      { id: "s-finish", tier: 2, kind: "finish", n: 1, text: "Make it to the sign-off" },
+      { id: "s-tunnel", tier: 3, kind: "cleanDistrict", district: 3, n: 1, text: "Through the tunnel without a hit", requires: "s-bridge" },
+      { id: "s-units", tier: 3, kind: "units", n: 4, text: "Flatten {n} police cars", requires: "s-crash" },
+      { id: "s-chopper", tier: 3, kind: "chopper", n: 1, text: "Shake the police chopper", requires: "s-finish" },
+      { id: "s-clean", tier: 3, kind: "cleanRun", n: 1, text: "Sign off without a single hit", requires: "s-tunnel" },
+      { id: "s-modded", tier: 3, kind: "finishModded", n: 1, text: "Sign off with a traffic mod on", requires: "s-finish" }
+    ],
+    /** Traffic mods (unlocked by story asks): harder runs on purpose, for a score multiplier. Both keep every chunk solver-proven. */
+    mods: {
+      heavyLoad: { label: "Heavy Load", how: "Each district picks traffic one level harder", score: 1.3 },
+      hotPursuit: { label: "Hot Pursuit", how: "Police units come half again as often", score: 1.3, pace: 1.5 }
+    },
     reachGap: 36,
     wideMinBlocked: 2,
     tail: 22,
@@ -1039,10 +1068,12 @@ var TUNING = {
    * Every one stays dark against the road (§23: the giant is the darkest thing on screen).
    */
   outfits: {
+    // Colourblind-readable (Mike, 2026-11-19: "his costumes all look similar"): each one differs in lightness, not only
+    // hue. Classic mid plum; Midnight near-black with silver plates; Parade nearly all white; Gold head to toe.
     classic: { label: "Classic", hue: 285, sat: 1, light: 1, plate: null, plateMix: 0, cape: null, band: null },
-    midnight: { label: "Midnight", hue: 218, sat: 0.95, light: 1.05, plate: 13160152, plateMix: 0.7, cape: 989747, band: 13160152 },
-    parade: { label: "Parade", hue: 356, sat: 1.25, light: 1.45, plate: null, plateMix: 0, cape: 5901590, band: null },
-    gold: { label: "Prime Time Gold", hue: 265, sat: 0.18, light: 0.55, plate: 14265404, plateMix: 0.85, cape: 1118229, band: 14265404 }
+    midnight: { label: "Midnight", hue: 218, sat: 0.9, light: 1, cloth: 1382698, plate: 14673132, plateMix: 0.85, cape: 526866, band: 14673132 },
+    parade: { label: "Parade White", hue: 0, sat: 0, light: 1, cloth: 16052714, plate: 2763312, plateMix: 0.6, cape: 16447730, band: 13111342 },
+    gold: { label: "Solid Gold", hue: 45, sat: 1, light: 1, full: 15909952, plate: null, plateMix: 0, cape: 14263584, band: 16773296 }
   },
   /** Smash sample levels by class: the light/medium takes are ~16 dB quieter than heavy, so they play hotter. */
   sfxLevels: { light: 1.1, medium: 1.6, heavy: 1 },
@@ -1901,9 +1932,11 @@ var Track = class {
   zoneDistrict = 0;
   lastChunkId = "";
   /** Chunk level (1–5) at `s`: climbs with distance and the run's segment. */
+  /** Heavy Load (a traffic mod): every pick one level harder, capped at 5. */
+  levelBonus = 0;
   levelAt(s) {
-    if (this.district >= 0) return TUNING.proto.story.districts[Math.min(this.district, TUNING.proto.story.districts.length - 1)].level;
-    return Math.max(1, Math.min(5, 1 + this.segmentNo + Math.floor(s / TUNING.proto.levelEvery)));
+    if (this.district >= 0) return Math.min(5, TUNING.proto.story.districts[Math.min(this.district, TUNING.proto.story.districts.length - 1)].level + this.levelBonus);
+    return Math.max(1, Math.min(5, 1 + this.levelBonus + this.segmentNo + Math.floor(s / TUNING.proto.levelEvery)));
   }
   /**
    * Prototype: authored chunks (src/sim/chunks.ts, each proven passable) in place of random rows. A chunk is picked
@@ -2567,6 +2600,8 @@ var Pursuit = class {
   aheadThreatActive() {
     return this.units.some((u) => u.alive && u.unit !== "cruiser" && u.unit !== "chopper" && !u.lost && u.s > this.sim.giant.s - 10);
   }
+  /** Hot Pursuit (a traffic mod): spawn clock speed. */
+  pace = 1;
   step(dt) {
     const sim = this.sim;
     const P = TUNING.pursuit;
@@ -2574,7 +2609,7 @@ var Pursuit = class {
     this.stepFinale();
     if (sim.time >= (sim.guided ? Math.max(P.firstAt, TUNING.guided.calmFor) : P.firstAt)) {
       const H = P.byHeat[sim.show.heat - 1];
-      this.spawnT += dt * (this.marked ? P.chopper.spawnBoost : 1);
+      this.spawnT += dt * (this.marked ? P.chopper.spawnBoost : 1) * this.pace;
       const active = this.units.filter((u) => u.alive && !u.lost).length;
       if (this.spawnT >= H.cadence && active < H.cap - (TUNING.proto.on ? TUNING.proto.capLess : 0)) {
         const kinds = H.kinds.filter((k) => this.allowed(k));
@@ -3427,8 +3462,18 @@ var Asks = class {
   /** Smashes in the current Rampage (the one-Rampage ask). */
   rampSmashes = 0;
   inRampage = false;
-  constructor(seed, segment, track) {
+  /** Story asks: any hit this run, and police crashes so far. */
+  hitAny = false;
+  district = 0;
+  constructor(seed, segment, track, chosen) {
     const A2 = TUNING.asks;
+    if (chosen) {
+      this.list = chosen.flatMap((id) => {
+        const p = TUNING.proto.storyAsks.find((x) => x.id === id);
+        return p ? [{ id: p.id, kind: p.kind, ...p.district !== void 0 ? { district: p.district } : {}, text: p.text.replace("{n}", String(p.n)), n: p.n, reward: 0, progress: 0, done: false, failed: false }] : [];
+      });
+      return;
+    }
     const rng = new Rng((seed ^ 42437) >>> 0);
     track.ensure(A2.zoneLookahead);
     const zones = new Set(track.segments.filter((s) => s.s0 <= A2.zoneLookahead).map((s) => s.zone));
@@ -3436,25 +3481,44 @@ var Asks = class {
     const out = [];
     while (out.length < A2.perSegment && pool.length) {
       const p = pool.splice(rng.int(0, pool.length - 1), 1)[0];
-      out.push({ id: p.id, text: p.text.replace("{n}", String(p.n)), n: p.n, reward: p.reward, progress: 0, done: false, failed: false });
+      out.push({ id: p.id, kind: p.id, text: p.text.replace("{n}", String(p.n)), n: p.n, reward: p.reward, progress: 0, done: false, failed: false });
     }
     this.list = out;
   }
-  bump(id, by, out, set) {
-    const a = this.list.find((x) => x.id === id);
-    if (!a || a.done || a.failed) return null;
-    const next = Math.min(a.n, set ?? a.progress + by);
-    if (next === a.progress) return null;
-    a.progress = next;
-    if (a.progress >= a.n) a.done = true;
-    out.push({ type: "ask", id: a.id, progress: a.progress, n: a.n, done: a.done, failed: false, reward: a.done ? a.reward : 0 });
-    return a.done ? a : null;
+  bump(kind, by, out, set, only) {
+    let finished = null;
+    for (const a of this.list) {
+      if (a.kind !== kind || a.done || a.failed || only && !only(a)) continue;
+      const next = Math.min(a.n, set ?? a.progress + by);
+      if (next === a.progress) continue;
+      a.progress = next;
+      if (a.progress >= a.n) a.done = true;
+      out.push({ type: "ask", id: a.id, progress: a.progress, n: a.n, done: a.done, failed: false, reward: a.done ? a.reward : 0 });
+      if (a.done) finished = a;
+    }
+    return finished;
   }
-  fail(id, out) {
-    const a = this.list.find((x) => x.id === id);
-    if (!a || a.done || a.failed) return;
-    a.failed = true;
-    out.push({ type: "ask", id: a.id, progress: a.progress, n: a.n, done: false, failed: true, reward: 0 });
+  fail(kind, out, only) {
+    for (const a of this.list) {
+      if (a.kind !== kind || a.done || a.failed || only && !only(a)) continue;
+      a.failed = true;
+      out.push({ type: "ask", id: a.id, progress: a.progress, n: a.n, done: false, failed: true, reward: 0 });
+    }
+  }
+  /** Story asks: he's into district `k` (a clean district is done, a "before" deadline has passed). */
+  enter(k, out) {
+    if (k <= this.district) return;
+    this.district = k;
+    this.bump("cleanDistrict", 1, out, void 0, (a) => (a.district ?? 0) < k);
+    this.fail("crashBefore", out, (a) => (a.district ?? 0) <= k);
+  }
+  /** Story asks: the run ended. `modded`: a traffic mod was on. */
+  finish(cleared, modded, out) {
+    if (!cleared) return;
+    this.bump("finish", 1, out);
+    if (modded) this.bump("finishModded", 1, out);
+    if (!this.hitAny) this.bump("cleanRun", 1, out);
+    this.bump("cleanDistrict", 1, out);
   }
   /**
    * Count an event. `zone` is the road he's on; `unitKind` names the police unit a smash hit.
@@ -3475,7 +3539,7 @@ var Asks = class {
         done.push(this.bump("rivals", 1, out));
         break;
       case "smash":
-        if (this.inRampage && ++this.rampSmashes > (this.list.find((x) => x.id === "rampsmash")?.progress ?? Infinity)) done.push(this.bump("rampsmash", 0, out, this.rampSmashes));
+        if (this.inRampage && ++this.rampSmashes > (this.list.find((x) => x.kind === "rampsmash" && !x.done)?.progress ?? Infinity)) done.push(this.bump("rampsmash", 0, out, this.rampSmashes));
         if (e.propId >= 1e6) done.push(this.bump("units", 1, out));
         if (unitKind === "roadblock" || unitKind === "rolling") done.push(this.bump("roadblock", 1, out));
         if (e.across) done.push(this.bump("across", 1, out));
@@ -3484,7 +3548,17 @@ var Asks = class {
         if (zone === "tunnel") done.push(this.bump("tunnel", 1, out));
         break;
       case "policeCrash":
-        if (e.onAir) done.push(this.bump("crash", 1, out));
+        if (e.onAir) {
+          done.push(this.bump("crash", 1, out));
+          done.push(this.bump("crashBefore", 1, out));
+        }
+        break;
+      case "scoop":
+        done.push(this.bump("scoops", 1, out));
+        break;
+      case "nearMiss":
+      case "dodge":
+        done.push(this.bump("nearMiss", 1, out));
         break;
       case "chain":
         done.push(this.bump("chain", 0, out, e.count));
@@ -3497,6 +3571,9 @@ var Asks = class {
         break;
       case "bounce":
         this.fail("clean", out);
+        this.hitAny = true;
+        this.fail("cleanRun", out);
+        this.fail("cleanDistrict", out, (a) => a.district === this.district);
         break;
       case "signOff":
         done.push(this.bump("clean", 1, out));
@@ -3543,6 +3620,8 @@ var Sim = class {
   pursuit;
   /** The producer's asks for this segment (Mike, 2026-11-15). */
   asks;
+  /** Traffic mods on this run (prototype). */
+  mods;
   /** Phase 3: upgrades owned this run, and the one equipped ability (if any). */
   upgrades;
   ability;
@@ -3619,8 +3698,11 @@ var Sim = class {
     this.edition = TUNING.editions[Math.max(0, Math.min(TUNING.editions.length - 1, opts.edition ?? 0))];
     this.endless = !!opts.endless;
     this.track = new Track(opts.seed, opts.segment ?? 0, this.guided, this.edition.hard, this.endless);
+    this.mods = (opts.mods ?? []).filter((m) => m in TUNING.proto.mods);
+    if (this.mods.includes("heavyLoad")) this.track.levelBonus = 1;
     this.escort = new Escort(opts.seed, this.track);
     this.pursuit = new Pursuit(opts.seed, this);
+    for (const m of this.mods) this.pursuit.pace *= TUNING.proto.mods[m].pace ?? 1;
     const scratch = [];
     this.escort.solid = (a, b) => this.pursuit.solidBetween(a, b, scratch);
     this.track.occupied = (a, b) => this.pursuit.units.filter((u) => u.alive && u.unit !== "chopper" && u.s + u.hl >= a && u.s - u.hl <= b);
@@ -3635,7 +3717,7 @@ var Sim = class {
     this.show.decayMult = this.baseDecayMult = this.edition.decay * (TUNING.proto.on ? TUNING.proto.decayMult : 1);
     if (TUNING.proto.on) this.show.ratings = this.show.peak = TUNING.proto.startRatings;
     if (this.edition.heat) this.show.heat = Math.min(5, this.show.heat + this.edition.heat);
-    this.asks = new Asks(opts.seed, opts.segment ?? 0, this.track);
+    this.asks = new Asks(opts.seed, opts.segment ?? 0, this.track, opts.asks);
     const PV = TUNING.passives;
     if (this.upgrades.has("crowdPleaser")) this.show.rampageDecayMult = PV.crowdPleaserDecay;
     if (this.upgrades.has("slipstream")) {
@@ -3777,6 +3859,8 @@ var Sim = class {
       this.emit({ type: "escortJoin", id, behind: this.giant.s - c.s });
     }
     this.separateConvoy();
+    const dk = this.track.segmentAt(this.giant.s).district;
+    if (dk !== void 0) this.asks.enter(dk, this.events);
     this.track.ensure(this.giant.s + TUNING.track.aheadDistance);
     if ((this.tick & 63) === 0) this.track.prune(this.giant.s);
     const g = this.giant;
@@ -3809,6 +3893,7 @@ var Sim = class {
     if (e.type !== "signOff" && !this.live) return;
     const unit = e.type === "smash" && e.propId >= 1e6 ? this.pursuit.units.find((u) => u.id === e.propId)?.unit ?? null : null;
     for (const a of this.asks.observe(e, this.track.segmentAt(this.giant.s).zone, unit, this.events)) this.show.banked += a.reward;
+    if (e.type === "signOff") this.asks.finish(true, this.mods.length > 0, this.events);
   }
   /** Spectacle: a stunt joins the chain (score; Ratings are separate). */
   stunt(cause, base) {

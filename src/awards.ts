@@ -40,10 +40,13 @@ export interface Profile {
   /** Editions (2026-11-17): the hardest unlocked (0 = Evening News), and the one picked on the menu. */
   edition: number;
   chosenEdition: number;
+  /** Story asks done in any run (2026-11-19), and the traffic mods switched on. */
+  asksDone: string[];
+  mods: string[];
 }
 
 const KEY = 'wyf.awards.v1';
-const fresh = (): Profile => ({ counts: { signOffs: 0, policeWrecked: 0, objects: 0, bestSegment: 0, runsWon: 0 }, won: [], outfit: 'classic', edition: 0, chosenEdition: 0 });
+const fresh = (): Profile => ({ counts: { signOffs: 0, policeWrecked: 0, objects: 0, bestSegment: 0, runsWon: 0 }, won: [], outfit: 'classic', edition: 0, chosenEdition: 0, asksDone: [], mods: [] });
 
 export function loadProfile(): Profile {
   try {
@@ -59,6 +62,9 @@ export function loadProfile(): Profile {
     const ed = (v: unknown) => (typeof v === 'number' && Number.isInteger(v) ? Math.max(0, Math.min(TUNING.editions.length - 1, v)) : 0);
     p.edition = ed(raw.edition);
     p.chosenEdition = Math.min(p.edition, ed(raw.chosenEdition));
+    const ids = (v: unknown, ok: (x: string) => boolean) => (Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string' && ok(x)) : []);
+    p.asksDone = ids(raw.asksDone, (x) => TUNING.proto.storyAsks.some((a) => a.id === x));
+    p.mods = ids(raw.mods, (x) => modUnlocked(p, x));
     return p;
   } catch {
     return fresh();
@@ -123,4 +129,31 @@ export function rewardLine(a: Award): string {
   if (a.upgrade) return `Unlocks ${TUNING.upgrades[a.upgrade].label}`;
   if (a.outfit) return `New outfit: ${TUNING.outfits[a.outfit].label}`;
   return '';
+}
+
+/** A traffic mod is unlocked once the story ask that unlocks it is done. */
+export function modUnlocked(p: Profile, id: string): boolean {
+  return TUNING.proto.storyAsks.some((a) => a.unlock === id && p.asksDone.includes(a.id));
+}
+
+/** Story asks a player can pick now (their prerequisite done), and the ones still locked. */
+export function storyAskOffer(p: Profile, pickRandom: (n: number) => number): { open: typeof TUNING.proto.storyAsks; locked: typeof TUNING.proto.storyAsks } {
+  const P = TUNING.proto;
+  const open: typeof P.storyAsks = [];
+  const locked: typeof P.storyAsks = [];
+  for (const tier of [1, 2, 3] as const) {
+    const all = P.storyAsks.filter((a) => a.tier === tier);
+    const can = all.filter((a) => !a.requires || p.asksDone.includes(a.requires));
+    // Fresh ones first, then ones he's done before; shuffled within each.
+    const fresh = can.filter((a) => !p.asksDone.includes(a.id));
+    const again = can.filter((a) => p.asksDone.includes(a.id));
+    for (const list of [fresh, again])
+      for (let i = list.length - 1; i > 0; i--) {
+        const j = pickRandom(i + 1);
+        [list[i], list[j]] = [list[j], list[i]];
+      }
+    open.push(...[...fresh, ...again].slice(0, P.storyOffer[tier - 1]));
+    locked.push(...all.filter((a) => !can.includes(a)).slice(0, 1));
+  }
+  return { open, locked };
 }

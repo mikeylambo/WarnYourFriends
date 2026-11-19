@@ -33,7 +33,7 @@ import { readFlags } from './debug';
 import { encodeInputs, type Submission } from './leaderboard/verify';
 import { mountBoard, prefetchSeed, takeSeed } from './leaderboardClient';
 import { Onboarding, type PromptId } from './onboarding';
-import { AWARDS, loadProfile, outfitUnlocked, record, rewardLine, saveProfile, upgradePool, type Award } from './awards';
+import { AWARDS, loadProfile, modUnlocked, storyAskOffer, outfitUnlocked, record, rewardLine, saveProfile, upgradePool, type Award } from './awards';
 import { GAME_SPEEDS, HUD_SIZES, loadSettings, saveSettings } from './settings';
 import { applyStoredTuning, mountTuningPanel, tuningChanged } from './tuningPanel';
 import { createGameApp, type InputDeviceFamily, type CoreSettings, type FrameAssembly, type GenreFrame, type RendererAdapter, type SLUWebShell } from '@slu/web-shell';
@@ -298,6 +298,10 @@ let endedFor = -1;
 let recapShown = false;
 /** Editions: the edition a won run just unlocked (-1: none). */
 let editionUnlocked = -1;
+/** Story (prototype): the asks picked on the pre-show card for this run, and what finishing them unlocked. */
+let storyPick: string[] = [];
+let newUnlocks: string[] = [];
+let modMult = 1;
 /**
  * Sign-off outro (Mike, 2026-11-16: he ran "through the grass, not on the road"): after the exit the sim runs him
  * straight on, so he's drawn along the ramp's centreline instead (presentation only), while the chopper swivels into
@@ -385,7 +389,7 @@ const recentEvents: SimEvent[] = [];
 const playLog = new PlayLog();
 let lastEntry: PlayEntry | null = null;
 // Recap REPLAY state (declared up here: newRun runs at boot). See startReplay below.
-let simOpts: { seed: number; segment: number; upgrades: UpgradeId[]; levels: Partial<Record<AbilityId, number>>; growth: boolean; guided?: boolean; edition?: number } = { seed: 0, segment: 0, upgrades: [], levels: {}, growth: false };
+let simOpts: { seed: number; segment: number; upgrades: UpgradeId[]; levels: Partial<Record<AbilityId, number>>; growth: boolean; guided?: boolean; edition?: number; asks?: string[]; mods?: string[] } = { seed: 0, segment: 0, upgrades: [], levels: {}, growth: false };
 const inputLog: SimInput[] = [];
 /** Leaderboard: this broadcast's (or run's) seed, each segment's inputs and the meeting buys, for the server to re-play. */
 let lb: { mode: 'run' | 'broadcast'; seed: number; segments: string[]; buys: UpgradeId[][]; pool: UpgradeId[]; guided?: boolean; edition?: number } = { mode: 'broadcast', seed: 0, segments: [], buys: [], pool: [] };
@@ -470,9 +474,12 @@ function newRun(seed: number, segment = 0, upgrades: UpgradeId[] = [], levels: P
   runSize = sizeMode();
   const growth = runSize === 'growth';
   const edition = run?.edition ?? 0;
-  sim = new Sim({ seed, segment, upgrades, levels, growth, guided, edition, ...(endlessMode ? { endless: true } : {}) });
+  const story = PROTO && !!run && !endlessMode && !attract && !flags.bot;
+  const askOpts = story && storyPick.length ? { asks: [...storyPick] } : {};
+  const modOpts = story && profile.mods.length ? { mods: [...profile.mods] } : {};
+  sim = new Sim({ seed, segment, upgrades, levels, growth, guided, edition, ...(endlessMode ? { endless: true } : {}), ...askOpts, ...modOpts });
   document.documentElement.classList.toggle('endless', endlessMode);
-  simOpts = { seed, segment, upgrades: [...upgrades], levels: { ...levels }, growth, guided, edition };
+  simOpts = { seed, segment, upgrades: [...upgrades], levels: { ...levels }, growth, guided, edition, ...askOpts, ...modOpts };
   // A fresh giant space for the new road: no anchor carried over, his starting size outright.
   gScale = sizeFor(0);
   gAnchor.x = gAnchor.z = 0;
@@ -720,6 +727,78 @@ function openBriefing(goLive: boolean): Promise<void> {
 }
 
 /** The Local News Awards (main menu): every award, its progress and what it gives, and the outfit picker. */
+/**
+ * Story pre-show (Mike, 2026-11-19): the producer's asks for the whole run, picked before going live (up to
+ * `storyPick`), and the traffic mods he's unlocked. Resolves true to go live, false for Back.
+ */
+function openPreShow(): Promise<boolean> {
+  const P = TUNING.proto;
+  const offer = storyAskOffer(profile, (n) => Math.floor(Math.random() * n)); // cosmetic order
+  const picked = new Set(offer.open.filter((a) => !profile.asksDone.includes(a.id)).slice(0, P.storyPick).map((a) => a.id));
+  for (const a of offer.open) if (picked.size < P.storyPick) picked.add(a.id);
+  const tierName = ['', 'EASY', 'MEDIUM', 'HARD'];
+  const draw = () => {
+    const ask = (a: (typeof P.storyAsks)[number], locked: boolean) => {
+      const on = picked.has(a.id);
+      const done = profile.asksDone.includes(a.id);
+      const req = a.requires ? P.storyAsks.find((x) => x.id === a.requires) : null;
+      const reward = a.unlock ? `Unlocks ${P.mods[a.unlock].label}` : '';
+      const sub = locked ? `First: ${req?.text.replace('{n}', String(req.n)) ?? ''}` : [done ? 'Done before' : '', reward].filter(Boolean).join(' · ');
+      return `<button class="go alt ask t${a.tier}${on ? ' on' : ''}${locked ? ' locked' : ''}" data-a="${a.id}" ${locked ? 'disabled' : ''}><em>${tierName[a.tier]}</em><b>${esc(a.text.replace('{n}', String(a.n)))}</b>${sub ? `<small>${esc(sub)}</small>` : ''}<i>${locked ? '🔒' : on ? '✓' : ''}</i></button>`;
+    };
+    const mods = Object.entries(P.mods).map(([id, m]) => {
+      const open = modUnlocked(profile, id);
+      const on = profile.mods.includes(id);
+      const by = P.storyAsks.find((a) => a.unlock === id);
+      return `<button class="go alt mod${on ? ' on' : ''}" data-m="${id}" ${open ? '' : 'disabled'}><b>${esc(m.label)}</b><small>${open ? `${esc(m.how)} · ×${m.score}` : `🔒 ${esc(by?.text.replace('{n}', String(by.n)) ?? '')}`}</small></button>`;
+    }).join('');
+    const mult = profile.mods.reduce((k, m) => k * P.mods[m].score, 1);
+    recapEl.innerHTML = `<div class="card briefing preshow">
+      <div class="kicker">TONIGHT'S RUNDOWN · PICK ${P.storyPick}</div>
+      <p class="how">The producer wants these on air before the sign-off. They last the whole run.</p>
+      <div class="asks-pick">${offer.open.map((a) => ask(a, false)).join('')}${offer.locked.map((a) => ask(a, true)).join('')}</div>
+      <div class="kicker sub">TRAFFIC MODS${mult !== 1 ? ` · SCORE ×${mult.toFixed(2).replace(/\.?0+$/, '')}` : ''}</div>
+      <div class="mods">${mods}</div>
+      <div class="row"><button class="go" id="ps-go">Go Live</button><button class="go alt" id="ps-back">Back</button></div>
+    </div>`;
+    for (const b of recapEl.querySelectorAll<HTMLButtonElement>('.ask'))
+      b.onclick = () => {
+        const id = b.dataset.a!;
+        if (picked.has(id)) picked.delete(id);
+        else if (picked.size < P.storyPick) picked.add(id);
+        draw();
+        recapEl.querySelector<HTMLButtonElement>(`.ask[data-a="${id}"]`)?.focus();
+      };
+    for (const b of recapEl.querySelectorAll<HTMLButtonElement>('.mod'))
+      b.onclick = () => {
+        const id = b.dataset.m!;
+        profile.mods = profile.mods.includes(id) ? profile.mods.filter((x) => x !== id) : [...profile.mods, id];
+        saveProfile(profile);
+        draw();
+        recapEl.querySelector<HTMLButtonElement>(`.mod[data-m="${id}"]`)?.focus();
+      };
+    $<HTMLButtonElement>('ps-go').onclick = () => finish(true);
+    $<HTMLButtonElement>('ps-back').onclick = () => finish(false);
+  };
+  let finish: (go: boolean) => void = () => {};
+  app?.ui.show('gameplay-placeholder');
+  recapEl.hidden = false;
+  recapArmedAt = performance.now() + 250;
+  document.documentElement.classList.add('briefing');
+  draw();
+  $<HTMLButtonElement>('ps-go').focus();
+  return new Promise((resolve) => {
+    finish = (go: boolean) => {
+      briefingClose = null;
+      storyPick = P.storyAsks.filter((a) => picked.has(a.id)).map((a) => a.id);
+      document.documentElement.classList.remove('briefing');
+      hideRecap();
+      resolve(go);
+    };
+    briefingClose = () => finish(false);
+  });
+}
+
 function openAwards(): Promise<void> {
   const fmt = (n: number) => Math.round(n).toLocaleString();
   const portraits = outfitPortraits();
@@ -989,12 +1068,14 @@ function showRecap() {
       <div class="rc-hero">${hero.map(([k, v, c]) => `<div class="${c}"><small>${k}</small><b>${v}</b></div>`).join('')}</div>
       <div class="rc-tiles">${tiles.map(([k, v]) => `<div><b>${v}</b><small>${k}</small></div>`).join('')}</div>
       ${newAwards.map((a) => `<div class="rc-award"><small>AWARD</small><b>${esc(a.title)}</b>${rewardLine(a) ? `<span>${esc(rewardLine(a))}</span>` : ''}</div>`).join('')}
+      ${newUnlocks.map((m) => `<div class="rc-award"><small>TRAFFIC MOD UNLOCKED</small><b>${esc(TUNING.proto.mods[m].label)}</b><span>${esc(TUNING.proto.mods[m].how)}. Score ×${TUNING.proto.mods[m].score}. Switch it on before you go live.</span></div>`).join('')}
+      ${modMult !== 1 ? `<div class="rc-award"><small>TRAFFIC MODS</small><b>Score ×${modMult.toFixed(2).replace(/\.?0+$/, '')}</b><span>${esc(sim.mods.map((m) => TUNING.proto.mods[m].label).join(' · '))}</span></div>` : ''}
       ${editionUnlocked > 0 ? `<div class="rc-award"><small>NEW EDITION</small><b>${esc(TUNING.editions[editionUnlocked].name)}</b><span>Harder, score ×${TUNING.editions[editionUnlocked].score}. Pick it on the main menu.</span></div>` : ''}
       ${nextAwardLine()}
     </section>
     <aside class="rc-side">
       ${shot}
-      ${asks.length ? `<div class="rc-asks"><div class="hd">Producer's asks <span>${asks.filter((a) => a.done).length}/${asks.length}</span></div><ul>${asks.map((a) => `<li class="${a.done ? 'done' : ''}"><i>${a.done ? '✓' : ''}</i><span>${esc(a.text)}</span>${a.done ? `<b>+${n(a.reward)}</b>` : ''}</li>`).join('')}</ul></div>` : ''}
+      ${asks.length ? `<div class="rc-asks"><div class="hd">Producer's asks <span>${asks.filter((a) => a.done).length}/${asks.length}</span></div><ul>${asks.map((a) => `<li class="${a.done ? 'done' : a.failed ? 'failed' : ''}"><i>${a.done ? '✓' : a.failed ? '✕' : ''}</i><span>${esc(a.text)}</span>${a.done ? `<b>+${n(a.reward)}</b>` : ''}</li>`).join('')}</ul></div>` : ''}
       ${over ? '<div class="rc-board" hidden></div>' : ''}
       <blockquote class="anchor">“${esc(viewer.text)}”${viewer.who ? `<cite>${esc(viewer.who)}</cite>` : ''}</blockquote>
     </aside>
@@ -2141,6 +2222,7 @@ refreshMainMenu();
   app.flow.onActivate = (screen: string, choice: string) => {
     if (screen === 'main-menu' && choice === 'howto') void openBriefing(false).then(() => app!.ui.show('main-menu'));
     else if (screen === 'main-menu' && choice === 'awards') void openAwards().then(() => app!.ui.show('main-menu'));
+    else if (screen === 'main-menu' && choice === 'run' && PROTO) void openPreShow().then((go) => (go ? flowActivate('mode-select', 'run') : app!.ui.show('main-menu')));
     else if (screen === 'main-menu' && (choice === 'run' || choice === 'endless' || choice === 'broadcast')) flowActivate('mode-select', choice);
     else flowActivate(screen, choice);
   };
@@ -2319,6 +2401,17 @@ function frame(now: number) {
     if (attract) enterAttract(); // behind the menus: just roll another broadcast
     else {
       lb.segments.push(encodeInputs(inputLog));
+      // Story: traffic mods multiply the score (prototype scores are off the board); finished asks unlock things.
+      newUnlocks = [];
+      modMult = sim.mods.reduce((k, m) => k * TUNING.proto.mods[m].score, 1);
+      if (modMult !== 1) sim.show.banked = Math.round(sim.show.banked * modMult);
+      if (!bot && simOpts.asks) {
+        for (const a of sim.asks.list) if (a.done && !profile.asksDone.includes(a.id)) {
+          profile.asksDone.push(a.id);
+          const u = TUNING.proto.storyAsks.find((x) => x.id === a.id)?.unlock;
+          if (u) newUnlocks.push(u);
+        }
+      }
       if (run) run.finishSegment(sim.show);
       // The Local News Awards: this segment's tally (a player's, not the bot's).
       newAwards = bot

@@ -216,6 +216,9 @@ export class Pursuit {
     return this.units.some((u) => u.alive && u.unit !== 'cruiser' && u.unit !== 'chopper' && !u.lost && u.s > this.sim.giant.s - 10);
   }
 
+  /** Hot Pursuit (a traffic mod): spawn clock speed. */
+  pace = 1;
+
   step(dt: number) {
     const sim = this.sim;
     const P = TUNING.pursuit;
@@ -224,7 +227,7 @@ export class Pursuit {
     // Spawning (§19 by Heat).
     if (sim.time >= (sim.guided ? Math.max(P.firstAt, TUNING.guided.calmFor) : P.firstAt)) {
       const H = P.byHeat[sim.show.heat - 1];
-      this.spawnT += dt * (this.marked ? P.chopper.spawnBoost : 1);
+      this.spawnT += dt * (this.marked ? P.chopper.spawnBoost : 1) * this.pace;
       const active = this.units.filter((u) => u.alive && !u.lost).length;
       if (this.spawnT >= H.cadence && active < H.cap - (TUNING.proto.on ? TUNING.proto.capLess : 0)) {
         const kinds = H.kinds.filter((k) => this.allowed(k));

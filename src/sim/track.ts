@@ -590,9 +590,12 @@ export class Track {
   private lastChunkId = '';
 
   /** Chunk level (1–5) at `s`: climbs with distance and the run's segment. */
+  /** Heavy Load (a traffic mod): every pick one level harder, capped at 5. */
+  levelBonus = 0;
+
   levelAt(s: number): number {
-    if (this.district >= 0) return TUNING.proto.story.districts[Math.min(this.district, TUNING.proto.story.districts.length - 1)].level;
-    return Math.max(1, Math.min(5, 1 + this.segmentNo + Math.floor(s / TUNING.proto.levelEvery)));
+    if (this.district >= 0) return Math.min(5, TUNING.proto.story.districts[Math.min(this.district, TUNING.proto.story.districts.length - 1)].level + this.levelBonus);
+    return Math.max(1, Math.min(5, 1 + this.levelBonus + this.segmentNo + Math.floor(s / TUNING.proto.levelEvery)));
   }
 
   /**

@@ -151,6 +151,35 @@ export const TUNING = {
         { zone: 'highway', name: 'Uptown Expressway', segments: 34, level: 5, lanes: 6, oncoming: 3 },
       ] as { zone: 'highway' | 'avenue' | 'bridge' | 'tunnel'; name: string; segments: number; level: number; lanes?: number; /** Two-way for the whole district (2026-11-19): its left `oncoming` lanes come at him, every chunk. */ oncoming?: number }[],
     },
+    /**
+     * Story asks (Mike, 2026-11-19): the producer's asks span the whole run. Before going live he picks up to
+     * `storyPick` from what's offered (`storyOffer` per tier). A tier-2/3 ask needs `requires` done first (in any
+     * earlier run); one with `unlock` unlocks that traffic mod the first time it's done. `district` is the
+     * district index it's about. No score: the reward is the unlock (prototype scores are off the board).
+     */
+    storyPick: 3,
+    storyOffer: [2, 2, 2],
+    storyAsks: [
+      { id: 's-scoops', tier: 1, kind: 'scoops', n: 8, text: 'Grab {n} Scoops' },
+      { id: 's-rampage', tier: 1, kind: 'rampage', n: 3, text: 'Go Rampage {n} times' },
+      { id: 's-rivals', tier: 1, kind: 'rivals', n: 2, text: 'Flatten {n} rival news vans' },
+      { id: 's-near', tier: 1, kind: 'nearMiss', n: 12, text: '{n} close calls' },
+      { id: 's-bridge', tier: 2, kind: 'cleanDistrict', district: 1, n: 1, text: 'Cross Saltmarsh Bridge without a hit', requires: 's-scoops', unlock: 'heavyLoad' },
+      { id: 's-crash', tier: 2, kind: 'crashBefore', district: 3, n: 2, text: 'Crash {n} police cars before the tunnel', requires: 's-rampage', unlock: 'hotPursuit' },
+      { id: 's-chain', tier: 2, kind: 'chain', n: 15, text: 'Combo {n} stunts', requires: 's-near' },
+      { id: 's-rampsmash', tier: 2, kind: 'rampsmash', n: 12, text: 'Smash {n} things in one Rampage', requires: 's-rivals' },
+      { id: 's-finish', tier: 2, kind: 'finish', n: 1, text: 'Make it to the sign-off' },
+      { id: 's-tunnel', tier: 3, kind: 'cleanDistrict', district: 3, n: 1, text: 'Through the tunnel without a hit', requires: 's-bridge' },
+      { id: 's-units', tier: 3, kind: 'units', n: 4, text: 'Flatten {n} police cars', requires: 's-crash' },
+      { id: 's-chopper', tier: 3, kind: 'chopper', n: 1, text: 'Shake the police chopper', requires: 's-finish' },
+      { id: 's-clean', tier: 3, kind: 'cleanRun', n: 1, text: 'Sign off without a single hit', requires: 's-tunnel' },
+      { id: 's-modded', tier: 3, kind: 'finishModded', n: 1, text: 'Sign off with a traffic mod on', requires: 's-finish' },
+    ] as { id: string; tier: 1 | 2 | 3; kind: string; n: number; text: string; district?: number; requires?: string; unlock?: string }[],
+    /** Traffic mods (unlocked by story asks): harder runs on purpose, for a score multiplier. Both keep every chunk solver-proven. */
+    mods: {
+      heavyLoad: { label: 'Heavy Load', how: 'Each district picks traffic one level harder', score: 1.3 },
+      hotPursuit: { label: 'Hot Pursuit', how: 'Police units come half again as often', score: 1.3, pace: 1.5 },
+    } as Record<string, { label: string; how: string; score: number; pace?: number }>,
     reachGap: 36,
     wideMinBlocked: 2,
     tail: 22,
@@ -1055,11 +1084,13 @@ export const TUNING = {
    * Every one stays dark against the road (§23: the giant is the darkest thing on screen).
    */
   outfits: {
+    // Colourblind-readable (Mike, 2026-11-19: "his costumes all look similar"): each one differs in lightness, not only
+    // hue. Classic mid plum; Midnight near-black with silver plates; Parade nearly all white; Gold head to toe.
     classic: { label: 'Classic', hue: 285, sat: 1, light: 1, plate: null, plateMix: 0, cape: null, band: null },
-    midnight: { label: 'Midnight', hue: 218, sat: 0.95, light: 1.05, plate: 0xc8ced8, plateMix: 0.7, cape: 0x0f1a33, band: 0xc8ced8 },
-    parade: { label: 'Parade', hue: 356, sat: 1.25, light: 1.45, plate: null, plateMix: 0, cape: 0x5a0d16, band: null },
-    gold: { label: 'Prime Time Gold', hue: 265, sat: 0.18, light: 0.55, plate: 0xd9ac3c, plateMix: 0.85, cape: 0x111015, band: 0xd9ac3c },
-  } as Record<OutfitId, { label: string; hue: number; sat: number; light: number; plate: number | null; plateMix: number; /** Cape cloth and hem band (null = the classic plum and cream). */ cape: number | null; band: number | null }>,
+    midnight: { label: 'Midnight', hue: 218, sat: 0.9, light: 1, cloth: 0x15192a, plate: 0xdfe4ec, plateMix: 0.85, cape: 0x080a12, band: 0xdfe4ec },
+    parade: { label: 'Parade White', hue: 0, sat: 0, light: 1, cloth: 0xf4f1ea, plate: 0x2a2a30, plateMix: 0.6, cape: 0xfaf8f2, band: 0xc8102e },
+    gold: { label: 'Solid Gold', hue: 45, sat: 1, light: 1, full: 0xf2c440, plate: null, plateMix: 0, cape: 0xd9a520, band: 0xfff0b0 },
+  } as Record<OutfitId, { label: string; hue: number; sat: number; light: number; /** Cloth colour (replaces the hue shift). */ cloth?: number; /** Tint the whole body (a statue). */ full?: number; plate: number | null; plateMix: number; /** Cape cloth and hem band (null = the classic plum and cream). */ cape: number | null; band: number | null }>,
 
   /** Smash sample levels by class: the light/medium takes are ~16 dB quieter than heavy, so they play hotter. */
   sfxLevels: { light: 1.1, medium: 1.6, heavy: 1 },

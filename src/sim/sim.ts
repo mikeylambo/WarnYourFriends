@@ -66,6 +66,10 @@ export interface SimOptions {
   edition?: number;
   /** Prototype endless mode: no districts, no exit and no fuel; chunk levels climb with distance until he's caught or cut. */
   endless?: boolean;
+  /** Story asks picked before going live (TUNING.proto.storyAsks ids); absent = the seeded segment asks. */
+  asks?: string[];
+  /** Traffic mods on (TUNING.proto.mods ids). */
+  mods?: string[];
 }
 
 const smoothstep = (t: number) => t * t * (3 - 2 * t);
@@ -87,6 +91,8 @@ export class Sim {
   readonly pursuit: Pursuit;
   /** The producer's asks for this segment (Mike, 2026-11-15). */
   readonly asks: Asks;
+  /** Traffic mods on this run (prototype). */
+  readonly mods: string[];
   /** Phase 3: upgrades owned this run, and the one equipped ability (if any). */
   readonly upgrades: Set<UpgradeId>;
   readonly ability: AbilityId | null;
@@ -164,8 +170,11 @@ export class Sim {
     this.edition = TUNING.editions[Math.max(0, Math.min(TUNING.editions.length - 1, opts.edition ?? 0))];
     this.endless = !!opts.endless;
     this.track = new Track(opts.seed, opts.segment ?? 0, this.guided, this.edition.hard, this.endless);
+    this.mods = (opts.mods ?? []).filter((m) => m in TUNING.proto.mods);
+    if (this.mods.includes('heavyLoad')) this.track.levelBonus = 1;
     this.escort = new Escort(opts.seed, this.track);
     this.pursuit = new Pursuit(opts.seed, this);
+    for (const m of this.mods) this.pursuit.pace *= TUNING.proto.mods[m].pace ?? 1;
     const scratch: Unit[] = [];
     this.escort.solid = (a, b) => this.pursuit.solidBetween(a, b, scratch);
     this.track.occupied = (a, b) => this.pursuit.units.filter((u) => u.alive && u.unit !== 'chopper' && u.s + u.hl >= a && u.s - u.hl <= b);
@@ -181,7 +190,7 @@ export class Sim {
     this.show.decayMult = this.baseDecayMult = this.edition.decay * (TUNING.proto.on ? TUNING.proto.decayMult : 1);
     if (TUNING.proto.on) this.show.ratings = this.show.peak = TUNING.proto.startRatings;
     if (this.edition.heat) this.show.heat = Math.min(5, this.show.heat + this.edition.heat);
-    this.asks = new Asks(opts.seed, opts.segment ?? 0, this.track);
+    this.asks = new Asks(opts.seed, opts.segment ?? 0, this.track, opts.asks);
     const PV = TUNING.passives;
     if (this.upgrades.has('crowdPleaser')) this.show.rampageDecayMult = PV.crowdPleaserDecay;
     if (this.upgrades.has('slipstream')) {
@@ -336,6 +345,8 @@ export class Sim {
       this.emit({ type: 'escortJoin', id, behind: this.giant.s - c.s });
     }
     this.separateConvoy();
+    const dk = this.track.segmentAt(this.giant.s).district;
+    if (dk !== undefined) this.asks.enter(dk, this.events);
     this.track.ensure(this.giant.s + TUNING.track.aheadDistance);
     if ((this.tick & 63) === 0) this.track.prune(this.giant.s);
     const g = this.giant;
@@ -371,6 +382,7 @@ export class Sim {
     if (e.type !== 'signOff' && !this.live) return;
     const unit = e.type === 'smash' && e.propId >= 1_000_000 ? this.pursuit.units.find((u) => u.id === e.propId)?.unit ?? null : null;
     for (const a of this.asks.observe(e, this.track.segmentAt(this.giant.s).zone, unit, this.events)) this.show.banked += a.reward;
+    if (e.type === 'signOff') this.asks.finish(true, this.mods.length > 0, this.events);
   }
 
   /** Spectacle: a stunt joins the chain (score; Ratings are separate). */

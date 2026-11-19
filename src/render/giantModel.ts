@@ -371,7 +371,7 @@ const OUTFIT_MAPS = new Map<OutfitId, THREE.Texture>();
  * take the outfit's hue, saturation and lightness; the cream bone plates (pale, low saturation) blend toward `plate`
  * when it's set. Skin, hair and everything else stay as painted.
  */
-function recolor(src: THREE.Texture, o: { hue: number; sat: number; light: number; plate: number | null; plateMix: number }): THREE.Texture {
+function recolor(src: THREE.Texture, o: { hue: number; sat: number; light: number; cloth?: number; full?: number; plate: number | null; plateMix: number }): THREE.Texture {
   const img = src.image as CanvasImageSource & { width: number; height: number };
   const c = document.createElement('canvas');
   c.width = img.width;
@@ -383,6 +383,9 @@ function recolor(src: THREE.Texture, o: { hue: number; sat: number; light: numbe
   const pr = o.plate === null ? 0 : ((o.plate >> 16) & 255) / 255;
   const pg = o.plate === null ? 0 : ((o.plate >> 8) & 255) / 255;
   const pb = o.plate === null ? 0 : (o.plate & 255) / 255;
+  const rgb = (n: number) => [((n >> 16) & 255) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255];
+  const cloth = o.cloth === undefined ? null : rgb(o.cloth);
+  const full = o.full === undefined ? null : rgb(o.full);
   for (let i = 0; i < px.length; i += 4) {
     const r = px[i] / 255;
     const g = px[i + 1] / 255;
@@ -397,7 +400,19 @@ function recolor(src: THREE.Texture, o: { hue: number; sat: number; light: numbe
     let nr = r;
     let ng = g;
     let nb = b;
-    if (s > 0.12 && h >= 250 && h <= 335) {
+    if (full) {
+      // Head to toe in one metal: the texture's lightness drives the shading, with a bright sheen at the top.
+      const k = 0.35 + 0.95 * l;
+      nr = full[0] * k + Math.max(0, l - 0.7) * 0.8;
+      ng = full[1] * k + Math.max(0, l - 0.7) * 0.8;
+      nb = full[2] * k + Math.max(0, l - 0.7) * 0.6;
+    } else if (cloth && s > 0.12 && h >= 250 && h <= 335) {
+      // Purple cloth → a set colour (its lightness, not just its hue, changes).
+      const k = 0.55 + 0.9 * l;
+      nr = cloth[0] * k;
+      ng = cloth[1] * k;
+      nb = cloth[2] * k;
+    } else if (s > 0.12 && h >= 250 && h <= 335) {
       // Purple cloth → the outfit's colour.
       const [hr, hg, hb] = hsl(o.hue, Math.min(1, s * o.sat), Math.min(1, l * o.light));
       nr = hr;
