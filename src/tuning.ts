@@ -146,10 +146,10 @@ export const TUNING = {
         { zone: 'bridge', name: 'Saltmarsh Bridge', segments: 16, level: 3 }, // level 3: the harder two-lane chunks (2026-11-19)
         { zone: 'avenue', name: 'Downtown', segments: 32, level: 3 },
         // Four lanes, two directions (Mike, 2026-11-19): the oncoming side comes at him inside the walls.
-        { zone: 'tunnel', name: 'Old Harbor Tunnel', segments: 16, level: 4, lanes: 4 },
+        { zone: 'tunnel', name: 'Old Harbor Tunnel', segments: 16, level: 4, lanes: 4, oncoming: 2 },
         // The finale opens out to six lanes (Mike, 2026-11-18: the cover art's six-lane highway).
-        { zone: 'highway', name: 'Uptown Expressway', segments: 34, level: 5, lanes: 6 },
-      ] as { zone: 'highway' | 'avenue' | 'bridge' | 'tunnel'; name: string; segments: number; level: number; lanes?: number }[],
+        { zone: 'highway', name: 'Uptown Expressway', segments: 34, level: 5, lanes: 6, oncoming: 3 },
+      ] as { zone: 'highway' | 'avenue' | 'bridge' | 'tunnel'; name: string; segments: number; level: number; lanes?: number; /** Two-way for the whole district (2026-11-19): its left `oncoming` lanes come at him, every chunk. */ oncoming?: number }[],
     },
     reachGap: 36,
     wideMinBlocked: 2,

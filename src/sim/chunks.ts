@@ -60,7 +60,7 @@ export const CHUNKS: Chunk[] = [
   { id: 'four-zig', lanes: 4, level: 4, rows: [[0, 'ccc.'], [38, '.ccc'], [76, 'ccc.'], [114, 'c.cc']] },
   // Two-way expressway (Mike, 2026-11-18): the left lanes come at him. Optional lanes, so never a forced hit.
   { id: 'four-oncoming', lanes: 4, level: 4, zones: ['highway', 'tunnel'], oncoming: 'oo..', rows: [[0, 'o.c.'], [20, '.o..'], [30, 'o..c'], [48, '.o..'], [60, 'n.c.'], [76, 'o...'], [92, '.o.c']] },
-  { id: 'four-oncoming-rush', lanes: 4, level: 5, zones: ['highway'], oncoming: 'oo..', rows: [[0, 'o.v.'], [14, '.o..'], [30, 'o..c'], [44, '.o.s'], [62, 'oo.v'], [94, 'o.c.'], [108, '.o..']] },
+  { id: 'four-oncoming-rush', lanes: 4, level: 5, zones: ['highway', 'tunnel'], oncoming: 'oo..', rows: [[0, 'o.v.'], [14, '.o..'], [30, 'o..c'], [44, '.o.s'], [62, 'oo.v'], [94, 'o.c.'], [108, '.o..']] },
   // Two-way tunnel (Mike, 2026-11-19: "one of them could be a 4 laner, with 2 directions (tunnel maybe)").
   { id: 'tunnel-two-way', lanes: 4, level: 3, zones: ['tunnel'], oncoming: 'oo..', rows: [[0, 'o.c.'], [12, '.o..'], [24, 'o..c'], [48, '.oc.'], [60, 'o...'], [72, '.o.v'], [96, 'o.c.']] },
   { id: 'tunnel-rush', lanes: 4, level: 4, zones: ['tunnel'], oncoming: 'oo..', rows: [[0, 'o.v.'], [10, '.o..'], [24, 'oo.c'], [48, '.ov.'], [58, 'o...'], [72, '.o.v'], [96, 'o.cs'], [106, '.o..'], [120, 'o.c.']] },
@@ -72,6 +72,9 @@ export const CHUNKS: Chunk[] = [
   { id: 'six-convoy', lanes: 6, level: 4, rows: [[0, 'c.t.c.'], [32, '.c..cv'], [64, 'c...c.'], [94, '.c.s.c']] },
   { id: 'six-rival', lanes: 6, level: 5, rows: [[0, 'cvn.vc'], [30, '.c.c.v'], [60, 'v.c.c.'], [90, '.vncv.']] },
   { id: 'six-two-way', lanes: 6, level: 5, oncoming: 'ooo...', rows: [[0, 'o.o..v'], [22, '.o....'], [34, 'o.o.c.'], [50, '.o.s..'], [66, 'oo.v.c'], [96, 'o.o.c.'], [110, '.o....']] },
+  // The finale is two-way the whole way (2026-11-19): more six-lane chunks with the left three oncoming.
+  { id: 'six-two-way-flow', lanes: 6, level: 4, oncoming: 'ooo...', rows: [[0, 'o.o.c.'], [24, '.o...c'], [48, 'o.oc..'], [72, '.o..v.'], [96, 'o.o..c']] },
+  { id: 'six-two-way-dense', lanes: 6, level: 5, oncoming: 'ooo...', rows: [[0, 'oo...v'], [24, '.o.v.c'], [48, 'o.oc.c'], [72, '.o..v.'], [84, 'o.o...'], [96, 'oo.c.v'], [120, '.o.vc.']] },
   { id: 'four-blockade', lanes: 4, level: 5, rows: [[0, 'bdc.'], [34, 'c.vd'], [64, '.cbd'], [94, 'cv.d'], [124, 'd.cv']] },
 ];
 

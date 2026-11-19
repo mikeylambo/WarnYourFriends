@@ -64,9 +64,9 @@ var TUNING = {
         // level 3: the harder two-lane chunks (2026-11-19)
         { zone: "avenue", name: "Downtown", segments: 32, level: 3 },
         // Four lanes, two directions (Mike, 2026-11-19): the oncoming side comes at him inside the walls.
-        { zone: "tunnel", name: "Old Harbor Tunnel", segments: 16, level: 4, lanes: 4 },
+        { zone: "tunnel", name: "Old Harbor Tunnel", segments: 16, level: 4, lanes: 4, oncoming: 2 },
         // The finale opens out to six lanes (Mike, 2026-11-18: the cover art's six-lane highway).
-        { zone: "highway", name: "Uptown Expressway", segments: 34, level: 5, lanes: 6 }
+        { zone: "highway", name: "Uptown Expressway", segments: 34, level: 5, lanes: 6, oncoming: 3 }
       ]
     },
     reachGap: 36,
@@ -1388,7 +1388,7 @@ var CHUNKS = [
   { id: "four-zig", lanes: 4, level: 4, rows: [[0, "ccc."], [38, ".ccc"], [76, "ccc."], [114, "c.cc"]] },
   // Two-way expressway (Mike, 2026-11-18): the left lanes come at him. Optional lanes, so never a forced hit.
   { id: "four-oncoming", lanes: 4, level: 4, zones: ["highway", "tunnel"], oncoming: "oo..", rows: [[0, "o.c."], [20, ".o.."], [30, "o..c"], [48, ".o.."], [60, "n.c."], [76, "o..."], [92, ".o.c"]] },
-  { id: "four-oncoming-rush", lanes: 4, level: 5, zones: ["highway"], oncoming: "oo..", rows: [[0, "o.v."], [14, ".o.."], [30, "o..c"], [44, ".o.s"], [62, "oo.v"], [94, "o.c."], [108, ".o.."]] },
+  { id: "four-oncoming-rush", lanes: 4, level: 5, zones: ["highway", "tunnel"], oncoming: "oo..", rows: [[0, "o.v."], [14, ".o.."], [30, "o..c"], [44, ".o.s"], [62, "oo.v"], [94, "o.c."], [108, ".o.."]] },
   // Two-way tunnel (Mike, 2026-11-19: "one of them could be a 4 laner, with 2 directions (tunnel maybe)").
   { id: "tunnel-two-way", lanes: 4, level: 3, zones: ["tunnel"], oncoming: "oo..", rows: [[0, "o.c."], [12, ".o.."], [24, "o..c"], [48, ".oc."], [60, "o..."], [72, ".o.v"], [96, "o.c."]] },
   { id: "tunnel-rush", lanes: 4, level: 4, zones: ["tunnel"], oncoming: "oo..", rows: [[0, "o.v."], [10, ".o.."], [24, "oo.c"], [48, ".ov."], [58, "o..."], [72, ".o.v"], [96, "o.cs"], [106, ".o.."], [120, "o.c."]] },
@@ -1400,6 +1400,9 @@ var CHUNKS = [
   { id: "six-convoy", lanes: 6, level: 4, rows: [[0, "c.t.c."], [32, ".c..cv"], [64, "c...c."], [94, ".c.s.c"]] },
   { id: "six-rival", lanes: 6, level: 5, rows: [[0, "cvn.vc"], [30, ".c.c.v"], [60, "v.c.c."], [90, ".vncv."]] },
   { id: "six-two-way", lanes: 6, level: 5, oncoming: "ooo...", rows: [[0, "o.o..v"], [22, ".o...."], [34, "o.o.c."], [50, ".o.s.."], [66, "oo.v.c"], [96, "o.o.c."], [110, ".o...."]] },
+  // The finale is two-way the whole way (2026-11-19): more six-lane chunks with the left three oncoming.
+  { id: "six-two-way-flow", lanes: 6, level: 4, oncoming: "ooo...", rows: [[0, "o.o.c."], [24, ".o...c"], [48, "o.oc.."], [72, ".o..v."], [96, "o.o..c"]] },
+  { id: "six-two-way-dense", lanes: 6, level: 5, oncoming: "ooo...", rows: [[0, "oo...v"], [24, ".o.v.c"], [48, "o.oc.c"], [72, ".o..v."], [84, "o.o..."], [96, "oo.c.v"], [120, ".o.vc."]] },
   { id: "four-blockade", lanes: 4, level: 5, rows: [[0, "bdc."], [34, "c.vd"], [64, ".cbd"], [94, "cv.d"], [124, "d.cv"]] }
 ];
 var CHUNK_KINDS = { c: "car", v: "van", n: "newsvan", d: "dozer", b: "barricade", f: "foodtruck", s: "scoop", o: "car", t: "foodtruck" };
@@ -1629,6 +1632,7 @@ var Track = class {
         const d = D[this.district];
         this.zoneName = d.name;
         this.zoneLeft = d.segments;
+        if (d.oncoming) this.twoWay.push({ s0, s1: s0 + d.segments * T.segmentLength, split: d.oncoming, district: true });
         if (this.district === D.length - 1) {
           this.courseEnd = s0 + d.segments * T.segmentLength;
           this.reserveExit(this.courseEnd - 420, this.courseEnd + 60);
@@ -1914,14 +1918,15 @@ var Track = class {
         const s0 = Math.max(this.nextChunkS, seg.s0);
         if (s0 >= end) return;
         const lanes = this.lanesAt(s0);
-        const c = this.pickChunk(lanes, this.levelAt(s0), seg.zone);
+        const span = this.twoWay.find((w) => w.district && s0 >= w.s0 && s0 < w.s1);
+        const c = this.pickChunk(lanes, this.levelAt(s0), seg.zone, span?.split ?? 0);
         if (!c) {
           this.nextChunkS = s0 + 10;
           continue;
         }
         this.chunk = { c, s0, row: 0, last: s0 };
         this.lastChunkId = c.id;
-        if (c.oncoming) {
+        if (c.oncoming && !span) {
           const left = c.oncoming[0] === "o";
           const n = [...c.oncoming].filter((x) => x === "o").length;
           this.twoWay.push({ s0: s0 - 12, s1: s0 + chunkLength(c) + 12, split: left ? n : c.lanes - n });
@@ -1959,9 +1964,10 @@ var Track = class {
       }
     }
   }
-  pickChunk(lanes, level, zone) {
+  pickChunk(lanes, level, zone, oncoming = 0) {
     const pool = this.district < 0 ? [...CHUNKS, ...CHUNKS.filter((c) => c.oncoming).map(mirror)] : CHUNKS;
-    const fits = pool.filter((c) => c.lanes === lanes && c.level <= level && (!c.zones || c.zones.includes(zone)) && c.id !== this.lastChunkId);
+    const left = (c) => !oncoming || (c.oncoming ? c.oncoming.indexOf(".") : 0) === oncoming && (!c.oncoming || !c.oncoming.slice(oncoming).includes("o"));
+    const fits = pool.filter((c) => c.lanes === lanes && c.level <= level && (!c.zones || c.zones.includes(zone)) && c.id !== this.lastChunkId && left(c));
     if (!fits.length) return null;
     const top = fits.filter((c) => c.level >= level - 1);
     return this.rng.pick(top.length && this.rng.chance(0.75) ? top : fits);

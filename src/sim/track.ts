@@ -178,7 +178,7 @@ export class Track {
   /** Prototype moving traffic (oncoming cars, slow trucks): kept apart from `props`, whose order along the road propsBetween relies on. */
   readonly movers: Prop[] = [];
   /** Two-way stretches (presentation paints a double yellow line at `split`, the lane edge between the directions). */
-  readonly twoWay: { s0: number; s1: number; split: number; built?: boolean }[] = [];
+  readonly twoWay: { s0: number; s1: number; split: number; built?: boolean; /** A whole two-way district: every chunk in it has `split` oncoming lanes on the left. */ district?: boolean }[] = [];
 
   /**
    * Drive the moving traffic. Each waits until he's `moverWake` m short of it, then sets off from wherever puts it
@@ -280,6 +280,7 @@ export class Track {
         this.zoneName = d.name;
         this.zoneLeft = d.segments;
         // The last district: the course (and the sign-off) ends where it does; keep that stretch ramp-friendly.
+        if (d.oncoming) this.twoWay.push({ s0, s1: s0 + d.segments * T.segmentLength, split: d.oncoming, district: true });
         if (this.district === D.length - 1) {
           this.courseEnd = s0 + d.segments * T.segmentLength;
           this.reserveExit(this.courseEnd - 420, this.courseEnd + 60);
@@ -607,14 +608,15 @@ export class Track {
         const s0 = Math.max(this.nextChunkS, seg.s0);
         if (s0 >= end) return;
         const lanes = this.lanesAt(s0);
-        const c = this.pickChunk(lanes, this.levelAt(s0), seg.zone);
+        const span = this.twoWay.find((w) => w.district && s0 >= w.s0 && s0 < w.s1);
+        const c = this.pickChunk(lanes, this.levelAt(s0), seg.zone, span?.split ?? 0);
         if (!c) {
           this.nextChunkS = s0 + 10;
           continue;
         }
         this.chunk = { c, s0, row: 0, last: s0 };
         this.lastChunkId = c.id;
-        if (c.oncoming) {
+        if (c.oncoming && !span) {
           const left = c.oncoming[0] === 'o';
           const n = [...c.oncoming].filter((x) => x === 'o').length;
           this.twoWay.push({ s0: s0 - 12, s1: s0 + chunkLength(c) + 12, split: left ? n : c.lanes - n });
@@ -655,10 +657,12 @@ export class Track {
     }
   }
 
-  private pickChunk(lanes: number, level: number, zone: string): Chunk | null {
+  private pickChunk(lanes: number, level: number, zone: string, oncoming = 0): Chunk | null {
     // Endless: two-way stretches can run either side (mirrored); the story keeps them on the left.
     const pool = this.district < 0 ? [...CHUNKS, ...CHUNKS.filter((c) => c.oncoming).map(mirror)] : CHUNKS;
-    const fits = pool.filter((c) => c.lanes === lanes && c.level <= level && (!c.zones || c.zones.includes(zone)) && c.id !== this.lastChunkId);
+    // A two-way district takes only chunks with its oncoming lanes on the left (the road commits to it the whole way).
+    const left = (c: Chunk) => !oncoming || ((c.oncoming ? c.oncoming.indexOf('.') : 0) === oncoming && (!c.oncoming || !c.oncoming.slice(oncoming).includes('o')));
+    const fits = pool.filter((c) => c.lanes === lanes && c.level <= level && (!c.zones || c.zones.includes(zone)) && c.id !== this.lastChunkId && left(c));
     if (!fits.length) return null;
     // Mostly at the current level, sometimes a breather from below.
     const top = fits.filter((c) => c.level >= level - 1);

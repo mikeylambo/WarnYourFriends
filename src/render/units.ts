@@ -5,7 +5,7 @@ import type { Unit } from '../sim/types';
 import { KIND_COLORS, MATERIAL_DEBRIS } from './palette';
 import { GLOW } from './glow';
 import { toon } from './toon';
-import { propBody, type HighwayView } from './highway';
+import { propBody, SMASH_RING_GEO, SMASH_RING_MAT, type HighwayView } from './highway';
 
 /**
  * Phase 2 pursuer views. Reads `sim.pursuit.units` each frame; never writes.
@@ -121,6 +121,15 @@ export class UnitViews {
     const kc = KIND_COLORS[u.kind][0];
     body.add(propBody(u, kc));
     root.add(body);
+    // Prototype: a Rolling Blockade's compacts crunch in Stride, so they wear the smash ring (ring = crunch it).
+    if (TUNING.proto.on && u.unit === 'rolling' && u.kind === 'compact') {
+      const ring = new THREE.Mesh(SMASH_RING_GEO, SMASH_RING_MAT);
+      ring.rotation.x = -Math.PI / 2;
+      ring.position.y = 0.04;
+      const r = Math.max(u.hw, u.hl) + 0.5;
+      ring.scale.set(r, r, 1);
+      root.add(ring);
+    }
     const L = u.hl * 2;
     const W = u.hw * 2;
     // Light bar on the roof (the armoured truck's sits higher); the car carrier is traffic: no lights.
