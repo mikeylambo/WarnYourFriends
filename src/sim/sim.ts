@@ -95,6 +95,37 @@ export class Sim {
   /** Abilities stack (Mike, 2026-11-17): up to `run.abilitySlots`, in the order bought; slot 2 has its own button. */
   readonly abilities: AbilityId[];
   readonly ability2: AbilityId | null;
+  /**
+   * The chase convoy queues instead of stacking (Mike, 2026-11-19): escort and pursuing cruisers drive his path
+   * and never steered round each other. Nearest-to-him keeps its place; anything overlapping it drops back
+   * behind its bumper (only ever back, so the LOCKED spawn rule and the escort's gap floor still hold).
+   */
+  private separateConvoy() {
+    const E = TUNING.escort;
+    const cars: { s: number; d: number; hl: number; hw: number; speed: number; yields: boolean; set: (s: number, v: number) => void }[] = [];
+    for (const c of this.escort.cruisers)
+      if (c.active) cars.push({ s: c.s, d: c.d, hl: E.hl, hw: E.hw, speed: c.speed, yields: false, set: (s, v) => { c.s = s; c.speed = v; } });
+    for (const u of this.pursuit.units)
+      if (u.alive && u.unit === 'cruiser' && u.s < this.giant.s)
+        cars.push({ s: u.s, d: u.d, hl: u.hl, hw: u.hw, speed: u.speed, yields: u.lost || !!u.backOff || u.phase === 'leave', set: (s, v) => { u.s = s; u.speed = v; } });
+    if (cars.length < 2) return;
+    // A cruiser that's out of it (lost, backing off, leaving) gives way, so it never holds the chase off his heels.
+    cars.sort((a, b) => Number(a.yields) - Number(b.yields) || b.s - a.s);
+    for (let i = 1; i < cars.length; i++) {
+      const c = cars[i];
+      for (let j = 0; j < i; j++) {
+        const a = cars[j];
+        if (Math.abs(a.d - c.d) >= a.hw + c.hw) continue;
+        const limit = a.s - a.hl - c.hl - E.convoyGap;
+        if (c.s > limit) {
+          c.s = limit;
+          c.speed = Math.min(c.speed, a.speed);
+          c.set(c.s, c.speed);
+        }
+      }
+    }
+  }
+
   private readonly levels: Partial<Record<AbilityId, number>>;
   /** An ability's level (1–3), 0 if not held. */
   levelOf(id: AbilityId): number {
@@ -137,6 +168,7 @@ export class Sim {
     this.pursuit = new Pursuit(opts.seed, this);
     const scratch: Unit[] = [];
     this.escort.solid = (a, b) => this.pursuit.solidBetween(a, b, scratch);
+    this.track.occupied = (a, b) => this.pursuit.units.filter((u) => u.alive && u.unit !== 'chopper' && u.s + u.hl >= a && u.s - u.hl <= b);
     this.upgrades = new Set(opts.upgrades ?? []);
     // In the order bought (opts.upgrades keeps it), at most `abilitySlots`.
     this.abilities = (opts.upgrades ?? []).filter((u): u is AbilityId => (['leap', 'stare', 'breakaway', 'primeTime', 'shoulder'] as string[]).includes(u)).slice(0, TUNING.run.abilitySlots);
@@ -303,6 +335,7 @@ export class Sim {
       const c = this.escort.cruisers[id];
       this.emit({ type: 'escortJoin', id, behind: this.giant.s - c.s });
     }
+    this.separateConvoy();
     this.track.ensure(this.giant.s + TUNING.track.aheadDistance);
     if ((this.tick & 63) === 0) this.track.prune(this.giant.s);
     const g = this.giant;

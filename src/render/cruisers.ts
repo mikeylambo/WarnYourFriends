@@ -61,7 +61,7 @@ export class CruiserView {
       for (const [arr, mat, z] of [[red, GLOW.sirenRedHalo, -0.42], [blue, GLOW.sirenBlueHalo, 0.42]] as const) {
         const sp = new THREE.Sprite(mat);
         sp.position.set(-0.2, 1.85, z);
-        sp.scale.set(3.2, 3.2, 1);
+        sp.scale.set(2.4, 2.4, 1);
         root.add(sp);
         (arr as THREE.Sprite[]).push(sp);
       }
@@ -83,7 +83,7 @@ export class CruiserView {
       const washRed = new THREE.Mesh(disc, GLOW.sirenRed);
       const washBlue = new THREE.Mesh(disc, GLOW.sirenBlue);
       for (const w of [washRed, washBlue]) {
-        w.scale.set(24, 1, 24);
+        w.scale.set(20, 1, 20);
         w.position.set(4, 0.06, 0);
         w.renderOrder = 1;
         root.add(w);

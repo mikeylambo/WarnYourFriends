@@ -119,17 +119,17 @@ export const GLOW = {
   tailHalo: reg(sprite(0xff2020, 0.55)),
   brakeHalo: reg(sprite(0xff3030, 1.0)),
   hazardHalo: reg(sprite(0xffa020, 0.95)),
-  sirenRed: reg(additive(radialTexture(), 0xff1a2a, 0.2)),
-  sirenBlue: reg(additive(radialTexture(), 0x2a5cff, 0.26)),
-  sirenRedHalo: reg(sprite(0xff2030, 1.0)),
-  sirenBlueHalo: reg(sprite(0x3060ff, 1.0)),
+  sirenRed: reg(additive(radialTexture(), 0xff1a2a, 0.11)),
+  sirenBlue: reg(additive(radialTexture(), 0x2a5cff, 0.14)),
+  sirenRedHalo: reg(sprite(0xff2030, 0.62)),
+  sirenBlueHalo: reg(sprite(0x3060ff, 0.62)),
   spotPool: reg(additive(radialTexture(), 0xdfe8ff, 0.12)),
 };
 
 /** Siren halos stay visible by day (they're light bars), just smaller. */
 const DAY_FLOOR = new Map<THREE.Material, number>([
-  [GLOW.sirenRedHalo, 0.7],
-  [GLOW.sirenBlueHalo, 0.7],
+  [GLOW.sirenRedHalo, 1],
+  [GLOW.sirenBlueHalo, 1],
   [GLOW.brakeHalo, 0.6],
   [GLOW.hazardHalo, 0.6],
   [GLOW.tailHalo, 0.25],

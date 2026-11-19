@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { RIM } from './render/toon';
-import { TUNING, type AbilityId, type UpgradeId, enableProto } from './tuning';
+import { TUNING, type AbilityId, type UpgradeId, type OutfitId, enableProto } from './tuning';
 import { RunState, ABILITIES } from './sim/run';
 import { Sim } from './sim/sim';
 import { Bot } from './sim/bot';
@@ -33,7 +33,7 @@ import { readFlags } from './debug';
 import { encodeInputs, type Submission } from './leaderboard/verify';
 import { mountBoard, prefetchSeed, takeSeed } from './leaderboardClient';
 import { Onboarding, type PromptId } from './onboarding';
-import { AWARDS, loadProfile, outfitUnlocked, record, rewardLine, saveProfile, unlockEdition, upgradePool, type Award } from './awards';
+import { AWARDS, loadProfile, outfitUnlocked, record, rewardLine, saveProfile, upgradePool, type Award } from './awards';
 import { GAME_SPEEDS, HUD_SIZES, loadSettings, saveSettings } from './settings';
 import { applyStoredTuning, mountTuningPanel, tuningChanged } from './tuningPanel';
 import { createGameApp, type InputDeviceFamily, type CoreSettings, type FrameAssembly, type GenreFrame, type RendererAdapter, type SLUWebShell } from '@slu/web-shell';
@@ -722,26 +722,34 @@ function openBriefing(goLive: boolean): Promise<void> {
 /** The Local News Awards (main menu): every award, its progress and what it gives, and the outfit picker. */
 function openAwards(): Promise<void> {
   const fmt = (n: number) => Math.round(n).toLocaleString();
+  const portraits = outfitPortraits();
   const draw = () => {
     const C = profile.counts;
     const rows = AWARDS.map((a) => {
       const won = profile.won.includes(a.id);
       const have = Math.min(a.n, C[a.stat]);
       const reward = rewardLine(a);
-      return `<li class="${won ? 'won' : ''}"><i>${won ? '★' : ''}</i><div><b>${esc(a.title)}</b><span>${esc(a.how)}${reward ? ` · ${esc(reward)}` : ''}</span>${won ? '' : `<em class="bar"><u style="width:${((have / a.n) * 100).toFixed(1)}%"></u></em><small>${fmt(have)} / ${fmt(a.n)}</small>`}</div></li>`;
+      const pct = won ? 100 : (have / a.n) * 100;
+      return `<li class="${won ? 'won' : ''}"><i class="medal" style="--p:${pct.toFixed(1)}%"><b>${won ? '★' : `${Math.floor(pct)}%`}</b></i><div><b>${esc(a.title)}</b><span>${esc(a.how)}</span>${reward ? `<em class="reward">${esc(reward)}</em>` : ''}${won ? '' : `<small>${fmt(have)} / ${fmt(a.n)}</small>`}</div></li>`;
     }).join('');
-    const outfits = (Object.keys(TUNING.outfits) as (keyof typeof TUNING.outfits)[])
+    const outfits = (Object.keys(TUNING.outfits) as OutfitId[])
       .map((id) => {
         const open = outfitUnlocked(profile, id);
         const by = AWARDS.find((a) => a.outfit === id);
-        return `<button class="go alt outfit${profile.outfit === id ? ' on' : ''}" data-o="${id}" ${open ? '' : 'disabled'}>${esc(TUNING.outfits[id].label)}${open ? '' : `<small>${esc(by?.title ?? '')}</small>`}</button>`;
+        const O = TUNING.outfits[id];
+        const pic = portraits[id];
+        const left = by && !open ? `${fmt(Math.min(by.n, C[by.stat]))} / ${fmt(by.n)}` : '';
+        return `<button class="go alt outfit${profile.outfit === id ? ' on' : ''}${open ? '' : ' locked'}" data-o="${id}" ${open ? '' : 'disabled'}>
+          <span class="pic">${pic ? `<img src="${pic}" alt="">` : ''}${O.plate !== null ? '<i class="tag">ARMOR</i>' : ''}${open ? '' : '<i class="lock">🔒</i>'}</span>
+          <b>${esc(O.label)}</b>${open ? (profile.outfit === id ? '<small>Wearing</small>' : '') : `<small>${esc(by?.title ?? '')} · ${left}</small>`}</button>`;
       })
       .join('');
     recapEl.innerHTML = `<div class="card briefing awards">
       <div class="kicker">THE LOCAL NEWS AWARDS</div>
-      <ul class="aw">${rows}</ul>
-      <div class="kicker sub">OUTFIT</div>
+      <div class="kicker sub">WARDROBE</div>
       <div class="outfits">${outfits}</div>
+      <div class="kicker sub">AWARDS · ${profile.won.length} / ${AWARDS.length}</div>
+      <ul class="aw">${rows}</ul>
       <div class="row"><button class="go" id="aw-back">Back</button></div>
     </div>`;
     for (const b of recapEl.querySelectorAll<HTMLButtonElement>('.outfit'))
@@ -1615,6 +1623,46 @@ function dropClip() {
   if (recapClip) URL.revokeObjectURL(recapClip);
   recapClip = null;
 }
+/**
+ * Run end (Mike, 2026-11-19: "Dissolve transition FX on run end"): the last live frame breaks up block by block, in
+ * random order, over what comes next. Copied in the same task as a render (the drawing buffer is still there).
+ */
+function dissolveOut() {
+  const R = TUNING.replay;
+  renderer.render(scene, rig.camera);
+  const rect = canvas.getBoundingClientRect();
+  const c = document.createElement('canvas');
+  c.width = canvas.width;
+  c.height = canvas.height;
+  const g = c.getContext('2d');
+  if (!g) return;
+  g.drawImage(canvas, 0, 0);
+  Object.assign(c.style, { position: 'fixed', left: `${rect.left}px`, top: `${rect.top}px`, width: `${rect.width}px`, height: `${rect.height}px`, zIndex: '40', pointerEvents: 'none' });
+  document.body.appendChild(c);
+  const B = Math.max(4, Math.round(R.dissolveBlock * (canvas.width / Math.max(1, rect.width))));
+  const cols = Math.ceil(c.width / B);
+  const order = Array.from({ length: cols * Math.ceil(c.height / B) }, (_, i) => i);
+  for (let i = order.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1)); // cosmetic
+    [order[i], order[j]] = [order[j], order[i]];
+  }
+  const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const t0 = performance.now();
+  let done = 0;
+  const tick = () => {
+    const k = Math.min(1, (performance.now() - t0) / (R.dissolve * 1000));
+    if (reduce) c.style.opacity = String(1 - k);
+    else {
+      // Eased: a few blocks first, then it goes all at once (a signal giving out).
+      const upto = Math.floor(order.length * k * k);
+      for (; done < upto; done++) g.clearRect((order[done] % cols) * B, Math.floor(order[done] / cols) * B, B, B);
+    }
+    if (k < 1) requestAnimationFrame(tick);
+    else c.remove();
+  };
+  requestAnimationFrame(tick);
+}
+
 function grabShot() {
   // Copied in the same task as the render, so the drawing buffer is still there.
   const W = Math.min(TUNING.replay.shotWidth, canvas.width);
@@ -1796,7 +1844,7 @@ function beginBroadcast(mode = 'broadcast') {
   nextSeed = null;
   // The very first broadcast a player goes live in is the guided one (TUNING.guided): its first segment opens calm.
   const guided = !flags.bot && !flags.autostart && !briefingSeen();
-  const edition = mode === 'run' ? profile.chosenEdition : 0;
+  const edition = 0; // Editions off (2026-11-19)
   lb = { mode: mode === 'run' ? 'run' : 'broadcast', seed, segments: [], buys: [], pool: upgradePool(profile), ...(guided ? { guided } : {}), ...(edition ? { edition } : {}) };
   if (mode === 'run') {
     run = new RunState(seed, lb.pool, edition); // Awards unlock the rest of the pool
@@ -2072,17 +2120,14 @@ app.ui.updateScreen('title', { title: 'Giant\nat Large', subtitle: 'Warn your fr
 // One menu (Mike: "clean up main menu/UX flow"): the two modes sit on it directly, so there's no
 // separate mode screen between Start and the broadcast.
 function refreshMainMenu() {
-  const E = TUNING.editions[profile.chosenEdition];
   app!.ui.updateScreen('main-menu', {
     title: 'Giant\nat Large',
     choices: [
       // One mode on the menu (Mike, 2026-11-17: Single Segment adds no challenge; 2026-11-18: no daily mode).
       // 'broadcast' (one segment) stays reachable by ?mode=broadcast for tests and evidence tools.
       // No subcopy (Mike, 2026-11-18): the labels say it.
-      { id: 'run', label: PROTO ? 'Story' : profile.chosenEdition ? `Go Live · ${E.name}` : 'Go Live' },
+      { id: 'run', label: PROTO ? 'Story' : 'Go Live' },
       ...(PROTO ? [{ id: 'endless', label: 'Endless' }] : []),
-      // Editions (2026-11-17): shown once a full run has unlocked the next one.
-      ...(profile.edition > 0 ? [{ id: 'edition', label: `Edition: ${E.name}` }] : []),
       { id: 'awards', label: 'Awards' },
       { id: 'howto', label: 'How to Play' },
       { id: 'settings', label: 'Settings' },
@@ -2096,12 +2141,6 @@ refreshMainMenu();
   app.flow.onActivate = (screen: string, choice: string) => {
     if (screen === 'main-menu' && choice === 'howto') void openBriefing(false).then(() => app!.ui.show('main-menu'));
     else if (screen === 'main-menu' && choice === 'awards') void openAwards().then(() => app!.ui.show('main-menu'));
-    else if (screen === 'main-menu' && choice === 'edition') {
-      profile.chosenEdition = (profile.chosenEdition + 1) % (profile.edition + 1);
-      saveProfile(profile);
-      refreshMainMenu();
-      app!.ui.show('main-menu');
-    }
     else if (screen === 'main-menu' && (choice === 'run' || choice === 'endless' || choice === 'broadcast')) flowActivate('mode-select', choice);
     else flowActivate(screen, choice);
   };
@@ -2194,6 +2233,7 @@ function frame(now: number) {
   }
   const stepPos = prev.stepPos + (g.stepPos - prev.stepPos) * alpha;
   const t = targetAt(s, d);
+  lastGiantAt = t;
   t.travel += Math.atan(rampSlope); // on the ramp: he (and the chopper) follow its curve
   const lateralVel = outro && !replay ? 0 : (g.d - prev.d) / SIM_DT;
   const heading = t.travel + Math.atan2(lateralVel, Math.max(4, g.speed)) * 0.5;
@@ -2284,14 +2324,14 @@ function frame(now: number) {
       newAwards = bot
         ? []
         : record(profile, { signedOff: sim.show.state === 'cleared', policeWrecked: runStats.crashes, objects: sim.stats.smashes + runStats.crashes, segment: run ? run.segment + 1 : 1, runWon: run?.phase === 'won' });
-      // Editions: a full run won at the newest edition unlocks the next.
-      editionUnlocked = !bot && run?.phase === 'won' ? unlockEdition(profile) : -1;
-      if (editionUnlocked > 0) refreshMainMenu();
+      // Editions are off (Mike, 2026-11-19): every run is the Evening News.
+      editionUnlocked = -1;
       saveProfile(profile);
       if (run?.phase !== 'meeting') {
         app?.shell.session.setPhase('results');
         statsReady = recordStats();
       }
+      if (!flags.stepMode) dissolveOut();
       // Tonight's top moment first, then the recap.
       if (moment && flags.replay && !flags.stepMode) startReplay(showRecap);
       else showRecap();
@@ -2506,6 +2546,39 @@ function silhouette() {
 }
 
 const poseCam = new THREE.PerspectiveCamera(40, 16 / 9, 0.5, 500);
+/** Where he was drawn last frame (the Awards screen photographs him there). */
+let lastGiantAt: { x: number; z: number; travel: number } | null = null;
+
+/**
+ * The Awards screen's outfit portraits (Mike, 2026-11-19: "could be more visual, esp with armor unlock"): the giant
+ * as he is right now, three-quarter front at chest height, once per outfit. Copied in the same task as each render.
+ */
+function outfitPortraits(): Partial<Record<OutfitId, string>> {
+  const out: Partial<Record<OutfitId, string>> = {};
+  const t = lastGiantAt;
+  if (!t || contextLost) return out;
+  const fx = Math.cos(t.travel), fz = Math.sin(t.travel);
+  const rx = -fz, rz = fx;
+  poseCam.aspect = canvas.width / Math.max(1, canvas.height);
+  poseCam.updateProjectionMatrix();
+  poseCam.position.set(t.x + fx * 8 + rx * 4, 3.4, t.z + fz * 8 + rz * 4);
+  poseCam.lookAt(t.x, 2.9, t.z);
+  const h = canvas.height;
+  const w = Math.round(h * 0.62);
+  const c = document.createElement('canvas');
+  c.width = Math.min(360, w);
+  c.height = Math.round(c.width / 0.62);
+  const g = c.getContext('2d');
+  if (!g) return out;
+  for (const id of Object.keys(TUNING.outfits) as OutfitId[]) {
+    giant.setOutfit(id);
+    renderer.render(scene, poseCam);
+    g.drawImage(canvas, (canvas.width - w) / 2, 0, w, h, 0, 0, c.width, c.height);
+    out[id] = c.toDataURL('image/jpeg', 0.85);
+  }
+  giant.setOutfit(profile.outfit);
+  return out;
+}
 
 /** Persist the bests (shell storage, per game id). */
 async function recordStats(): Promise<{ best: Stats; newBest: boolean } | null> {

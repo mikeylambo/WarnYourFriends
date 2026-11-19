@@ -737,6 +737,9 @@ export class Track {
    * Rampage surge (TUNING.targets): rows of traffic between s0 and s1 (already generated road, past the frame),
    * `fill` lanes a row, never every lane, never on top of what's there. Rival vans at `surgeVanChance`.
    */
+  /** Police hardware on the road (set by the sim), so a surge never drops traffic under a roadblock. */
+  occupied: (s0: number, s1: number) => { d: number; hw: number }[] = () => [];
+
   surge(s0: number, s1: number) {
     const T = TUNING.targets;
     const rng = this.rng;
@@ -748,6 +751,7 @@ export class Track {
       for (const lane of order.slice(0, n)) {
         const c = this.laneCenter(lane);
         if (this.propsBetween(s - 6, s + 6).some((p) => Math.abs(p.d - c) < p.hw + 1.2)) continue;
+        if (this.occupied(s - 6, s + 6).some((p) => Math.abs(p.d - c) < p.hw + 1.2)) continue;
         const kind: PropKind = rng.chance(T.surgeVanChance) ? 'newsvan' : rng.pick(rng.chance(0.6) ? HEAVY : MEDIUM);
         this.drop(kind, s + rng.range(-1, 1), c + rng.range(-0.25, 0.25));
       }

@@ -132,7 +132,7 @@ export class UnitViews {
       bar.position.set(-0.2, roof + 0.1, z);
       const sp = new THREE.Sprite(mat);
       sp.position.set(-0.2, roof + 0.25, z);
-      sp.scale.set(2.8, 2.8, 1);
+      sp.scale.set(2.1, 2.1, 1);
       body.add(bar, sp);
       (arr as THREE.Sprite[]).push(sp);
     }

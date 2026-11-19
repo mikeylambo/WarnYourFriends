@@ -143,9 +143,10 @@ export const TUNING = {
       fuel: 345,
       districts: [
         { zone: 'highway', name: 'Mile Zero Interstate', segments: 30, level: 1 },
-        { zone: 'bridge', name: 'Saltmarsh Bridge', segments: 16, level: 2 },
+        { zone: 'bridge', name: 'Saltmarsh Bridge', segments: 16, level: 3 }, // level 3: the harder two-lane chunks (2026-11-19)
         { zone: 'avenue', name: 'Downtown', segments: 32, level: 3 },
-        { zone: 'tunnel', name: 'Old Harbor Tunnel', segments: 16, level: 4 },
+        // Four lanes, two directions (Mike, 2026-11-19): the oncoming side comes at him inside the walls.
+        { zone: 'tunnel', name: 'Old Harbor Tunnel', segments: 16, level: 4, lanes: 4 },
         // The finale opens out to six lanes (Mike, 2026-11-18: the cover art's six-lane highway).
         { zone: 'highway', name: 'Uptown Expressway', segments: 34, level: 5, lanes: 6 },
       ] as { zone: 'highway' | 'avenue' | 'bridge' | 'tunnel'; name: string; segments: number; level: number; lanes?: number }[],
@@ -580,6 +581,9 @@ export const TUNING = {
    * (the highest wins; ties go to the later one). Shot from a cut-away angle.
    */
   replay: {
+    /** Run end dissolves to the replay/recap (Mike, 2026-11-19): length (s) and block size (px) of the broadcast-glitch dissolve. */
+    dissolve: 0.8,
+    dissolveBlock: 24,
     lead: 2.2, slow: 0.35, slowBefore: 0.35, slowAfter: 1.0, after: 1.6, angle: 'Long Lens',
     /** Outro frames spend up to this long (ms) fast-forwarding the replay's sim, so starting it doesn't hitch. */
     prerollMs: 4,
@@ -792,6 +796,11 @@ export const TUNING = {
     sideOffset: 1.6,
     /** Lateral easing speed for that offset (m/s). */
     sideSpeed: 3,
+    /** Escort cruiser footprint (half length / half width, m): matches the 4.8 × 1.95 m body drawn. */
+    hl: 2.4,
+    hw: 0.98,
+    /** Bumper gap the chase convoy (escort + pursuing cruisers) keeps nose-to-tail (Mike, 2026-11-19: "cars still drive over one another"). */
+    convoyGap: 1.2,
   },
 
   /**

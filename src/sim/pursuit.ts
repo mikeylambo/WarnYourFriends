@@ -568,6 +568,8 @@ export class Pursuit {
       // A rolling blockade drives on into whatever lands in its lane: never drop into one within 30m either way.
       if (this.units.some((x) => x.alive && x.unit === 'rolling' && Math.abs(x.s - at) < 30 && Math.abs(x.d - track.laneCenter(lane)) < x.hw + 1)) continue;
       if (police.some((x) => Math.abs(x.d - track.laneCenter(lane)) < x.hw + 1)) continue;
+      // Never onto moving traffic, nor into the path of an oncoming car within 24m (Mike, 2026-11-19: "cars still drive over one another").
+      if (track.movers.some((m) => m.alive && Math.abs(m.d - track.laneCenter(lane)) < m.hw + 1 && (Math.abs(m.s - at) < m.hl + 4 || (m.mover!.v < 0 && m.s > at && m.s - at < 24)))) continue;
       for (const x of police) blocked.add(Math.floor(x.d / W));
       if (blocked.size >= L) continue;
       // Prototype: a dropped car never closes his line through what's already ahead (chunks included).

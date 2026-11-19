@@ -35,6 +35,10 @@ export const CHUNKS: Chunk[] = [
   { id: 'two-quick', lanes: 2, level: 2, rows: [[0, 'c.'], [28, '.v'], [56, 'c.'], [84, '.c'], [112, 'v.']] },
   { id: 'two-dozer', lanes: 2, level: 3, rows: [[0, 'd.'], [28, '.c'], [40, 's.'], [68, 'c.'], [82, '.s']] },
   { id: 'two-tight', lanes: 2, level: 4, rows: [[0, 'c.'], [25, '.c'], [50, 'c.'], [75, '.c'], [100, 'c.']] },
+  // Harder two-lane stretches (Mike, 2026-11-19: "the two lane portions could be harder"): a switch every 24m,
+  // one metre over the tightest the solver passes at full sprint (23m).
+  { id: 'two-squeeze', lanes: 2, level: 3, zones: ['bridge'], rows: [[0, 'c.'], [24, '.c'], [48, 'c.'], [72, '.v'], [84, 'n.'], [98, 'c.'], [122, '.c']] },
+  { id: 'two-rush', lanes: 2, level: 4, zones: ['bridge'], rows: [[0, '.v'], [24, 'c.'], [48, '.c'], [72, 'v.'], [96, '.c'], [120, 'c.'], [144, '.v']] },
   { id: 'two-walls', lanes: 2, level: 5, rows: [[0, 'b.'], [24, '.v'], [48, 'd.'], [72, '.c'], [96, 'v.'], [120, '.d']] },
 
   // --- Three lanes (avenues) ------------------------------------------------------------------
@@ -55,8 +59,11 @@ export const CHUNKS: Chunk[] = [
   { id: 'four-wall', lanes: 4, level: 3, rows: [[0, 'cvc.'], [36, '.cvc'], [72, 'cv.c']] },
   { id: 'four-zig', lanes: 4, level: 4, rows: [[0, 'ccc.'], [38, '.ccc'], [76, 'ccc.'], [114, 'c.cc']] },
   // Two-way expressway (Mike, 2026-11-18): the left lanes come at him. Optional lanes, so never a forced hit.
-  { id: 'four-oncoming', lanes: 4, level: 4, zones: ['highway'], oncoming: 'oo..', rows: [[0, 'o.c.'], [20, '.o..'], [30, 'o..c'], [48, '.o..'], [60, 'n.c.'], [76, 'o...'], [92, '.o.c']] },
+  { id: 'four-oncoming', lanes: 4, level: 4, zones: ['highway', 'tunnel'], oncoming: 'oo..', rows: [[0, 'o.c.'], [20, '.o..'], [30, 'o..c'], [48, '.o..'], [60, 'n.c.'], [76, 'o...'], [92, '.o.c']] },
   { id: 'four-oncoming-rush', lanes: 4, level: 5, zones: ['highway'], oncoming: 'oo..', rows: [[0, 'o.v.'], [14, '.o..'], [30, 'o..c'], [44, '.o.s'], [62, 'oo.v'], [94, 'o.c.'], [108, '.o..']] },
+  // Two-way tunnel (Mike, 2026-11-19: "one of them could be a 4 laner, with 2 directions (tunnel maybe)").
+  { id: 'tunnel-two-way', lanes: 4, level: 3, zones: ['tunnel'], oncoming: 'oo..', rows: [[0, 'o.c.'], [12, '.o..'], [24, 'o..c'], [48, '.oc.'], [60, 'o...'], [72, '.o.v'], [96, 'o.c.']] },
+  { id: 'tunnel-rush', lanes: 4, level: 4, zones: ['tunnel'], oncoming: 'oo..', rows: [[0, 'o.v.'], [10, '.o..'], [24, 'oo.c'], [48, '.ov.'], [58, 'o...'], [72, '.o.v'], [96, 'o.cs'], [106, '.o..'], [120, 'o.c.']] },
   // Long and slow (box trucks): its lane is closed for the chunk; he overtakes on the open side.
   { id: 'four-convoy', lanes: 4, level: 3, rows: [[0, '.t.c'], [30, 'c.c.'], [60, '..c.'], [88, 's..c']] },
   { id: 'three-truck', lanes: 3, level: 3, rows: [[0, 't.c'], [30, '.c.'], [60, '..c'], [86, 's.s']] },

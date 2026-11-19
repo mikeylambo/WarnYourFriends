@@ -60,9 +60,11 @@ var TUNING = {
       fuel: 345,
       districts: [
         { zone: "highway", name: "Mile Zero Interstate", segments: 30, level: 1 },
-        { zone: "bridge", name: "Saltmarsh Bridge", segments: 16, level: 2 },
+        { zone: "bridge", name: "Saltmarsh Bridge", segments: 16, level: 3 },
+        // level 3: the harder two-lane chunks (2026-11-19)
         { zone: "avenue", name: "Downtown", segments: 32, level: 3 },
-        { zone: "tunnel", name: "Old Harbor Tunnel", segments: 16, level: 4 },
+        // Four lanes, two directions (Mike, 2026-11-19): the oncoming side comes at him inside the walls.
+        { zone: "tunnel", name: "Old Harbor Tunnel", segments: 16, level: 4, lanes: 4 },
         // The finale opens out to six lanes (Mike, 2026-11-18: the cover art's six-lane highway).
         { zone: "highway", name: "Uptown Expressway", segments: 34, level: 5, lanes: 6 }
       ]
@@ -496,6 +498,9 @@ var TUNING = {
    * (the highest wins; ties go to the later one). Shot from a cut-away angle.
    */
   replay: {
+    /** Run end dissolves to the replay/recap (Mike, 2026-11-19): length (s) and block size (px) of the broadcast-glitch dissolve. */
+    dissolve: 0.8,
+    dissolveBlock: 24,
     lead: 2.2,
     slow: 0.35,
     slowBefore: 0.35,
@@ -727,7 +732,12 @@ var TUNING = {
     /** Side offset from the giant's path for the 2nd and 3rd cruisers (m), dropped when a prop is in the way. */
     sideOffset: 1.6,
     /** Lateral easing speed for that offset (m/s). */
-    sideSpeed: 3
+    sideSpeed: 3,
+    /** Escort cruiser footprint (half length / half width, m): matches the 4.8 × 1.95 m body drawn. */
+    hl: 2.4,
+    hw: 0.98,
+    /** Bumper gap the chase convoy (escort + pursuing cruisers) keeps nose-to-tail (Mike, 2026-11-19: "cars still drive over one another"). */
+    convoyGap: 1.2
   },
   /**
    * Phase 2 segment (§4, LOCKED shape): 150s broadcast + 15s grace. v0.3: the
@@ -1355,6 +1365,10 @@ var CHUNKS = [
   { id: "two-quick", lanes: 2, level: 2, rows: [[0, "c."], [28, ".v"], [56, "c."], [84, ".c"], [112, "v."]] },
   { id: "two-dozer", lanes: 2, level: 3, rows: [[0, "d."], [28, ".c"], [40, "s."], [68, "c."], [82, ".s"]] },
   { id: "two-tight", lanes: 2, level: 4, rows: [[0, "c."], [25, ".c"], [50, "c."], [75, ".c"], [100, "c."]] },
+  // Harder two-lane stretches (Mike, 2026-11-19: "the two lane portions could be harder"): a switch every 24m,
+  // one metre over the tightest the solver passes at full sprint (23m).
+  { id: "two-squeeze", lanes: 2, level: 3, zones: ["bridge"], rows: [[0, "c."], [24, ".c"], [48, "c."], [72, ".v"], [84, "n."], [98, "c."], [122, ".c"]] },
+  { id: "two-rush", lanes: 2, level: 4, zones: ["bridge"], rows: [[0, ".v"], [24, "c."], [48, ".c"], [72, "v."], [96, ".c"], [120, "c."], [144, ".v"]] },
   { id: "two-walls", lanes: 2, level: 5, rows: [[0, "b."], [24, ".v"], [48, "d."], [72, ".c"], [96, "v."], [120, ".d"]] },
   // --- Three lanes (avenues) ------------------------------------------------------------------
   { id: "three-gate", lanes: 3, level: 1, rows: [[0, "c.c"], [32, ".c."], [64, "c.v"]] },
@@ -1373,8 +1387,11 @@ var CHUNKS = [
   { id: "four-wall", lanes: 4, level: 3, rows: [[0, "cvc."], [36, ".cvc"], [72, "cv.c"]] },
   { id: "four-zig", lanes: 4, level: 4, rows: [[0, "ccc."], [38, ".ccc"], [76, "ccc."], [114, "c.cc"]] },
   // Two-way expressway (Mike, 2026-11-18): the left lanes come at him. Optional lanes, so never a forced hit.
-  { id: "four-oncoming", lanes: 4, level: 4, zones: ["highway"], oncoming: "oo..", rows: [[0, "o.c."], [20, ".o.."], [30, "o..c"], [48, ".o.."], [60, "n.c."], [76, "o..."], [92, ".o.c"]] },
+  { id: "four-oncoming", lanes: 4, level: 4, zones: ["highway", "tunnel"], oncoming: "oo..", rows: [[0, "o.c."], [20, ".o.."], [30, "o..c"], [48, ".o.."], [60, "n.c."], [76, "o..."], [92, ".o.c"]] },
   { id: "four-oncoming-rush", lanes: 4, level: 5, zones: ["highway"], oncoming: "oo..", rows: [[0, "o.v."], [14, ".o.."], [30, "o..c"], [44, ".o.s"], [62, "oo.v"], [94, "o.c."], [108, ".o.."]] },
+  // Two-way tunnel (Mike, 2026-11-19: "one of them could be a 4 laner, with 2 directions (tunnel maybe)").
+  { id: "tunnel-two-way", lanes: 4, level: 3, zones: ["tunnel"], oncoming: "oo..", rows: [[0, "o.c."], [12, ".o.."], [24, "o..c"], [48, ".oc."], [60, "o..."], [72, ".o.v"], [96, "o.c."]] },
+  { id: "tunnel-rush", lanes: 4, level: 4, zones: ["tunnel"], oncoming: "oo..", rows: [[0, "o.v."], [10, ".o.."], [24, "oo.c"], [48, ".ov."], [58, "o..."], [72, ".o.v"], [96, "o.cs"], [106, ".o.."], [120, "o.c."]] },
   // Long and slow (box trucks): its lane is closed for the chunk; he overtakes on the open side.
   { id: "four-convoy", lanes: 4, level: 3, rows: [[0, ".t.c"], [30, "c.c."], [60, "..c."], [88, "s..c"]] },
   { id: "three-truck", lanes: 3, level: 3, rows: [[0, "t.c"], [30, ".c."], [60, "..c"], [86, "s.s"]] },
@@ -2018,6 +2035,8 @@ var Track = class {
    * Rampage surge (TUNING.targets): rows of traffic between s0 and s1 (already generated road, past the frame),
    * `fill` lanes a row, never every lane, never on top of what's there. Rival vans at `surgeVanChance`.
    */
+  /** Police hardware on the road (set by the sim), so a surge never drops traffic under a roadblock. */
+  occupied = () => [];
   surge(s0, s1) {
     const T = TUNING.targets;
     const rng = this.rng;
@@ -2029,6 +2048,7 @@ var Track = class {
       for (const lane of order.slice(0, n)) {
         const c = this.laneCenter(lane);
         if (this.propsBetween(s - 6, s + 6).some((p) => Math.abs(p.d - c) < p.hw + 1.2)) continue;
+        if (this.occupied(s - 6, s + 6).some((p) => Math.abs(p.d - c) < p.hw + 1.2)) continue;
         const kind = rng.chance(T.surgeVanChance) ? "newsvan" : rng.pick(rng.chance(0.6) ? HEAVY : MEDIUM);
         this.drop(kind, s + rng.range(-1, 1), c + rng.range(-0.25, 0.25));
       }
@@ -2850,6 +2870,7 @@ var Pursuit = class {
       const police = this.solidBetween(at - 5, at + 5).filter((x) => x !== u);
       if (this.units.some((x) => x.alive && x.unit === "rolling" && Math.abs(x.s - at) < 30 && Math.abs(x.d - track.laneCenter(lane)) < x.hw + 1)) continue;
       if (police.some((x) => Math.abs(x.d - track.laneCenter(lane)) < x.hw + 1)) continue;
+      if (track.movers.some((m) => m.alive && Math.abs(m.d - track.laneCenter(lane)) < m.hw + 1 && (Math.abs(m.s - at) < m.hl + 4 || m.mover.v < 0 && m.s > at && m.s - at < 24))) continue;
       for (const x of police) blocked.add(Math.floor(x.d / W));
       if (blocked.size >= L) continue;
       if (TUNING.proto.on && !sim.inRampage && !this.dropFair(at, lane, L)) continue;
@@ -3524,6 +3545,41 @@ var Sim = class {
   /** Abilities stack (Mike, 2026-11-17): up to `run.abilitySlots`, in the order bought; slot 2 has its own button. */
   abilities;
   ability2;
+  /**
+   * The chase convoy queues instead of stacking (Mike, 2026-11-19): escort and pursuing cruisers drive his path
+   * and never steered round each other. Nearest-to-him keeps its place; anything overlapping it drops back
+   * behind its bumper (only ever back, so the LOCKED spawn rule and the escort's gap floor still hold).
+   */
+  separateConvoy() {
+    const E = TUNING.escort;
+    const cars = [];
+    for (const c of this.escort.cruisers)
+      if (c.active) cars.push({ s: c.s, d: c.d, hl: E.hl, hw: E.hw, speed: c.speed, yields: false, set: (s, v) => {
+        c.s = s;
+        c.speed = v;
+      } });
+    for (const u of this.pursuit.units)
+      if (u.alive && u.unit === "cruiser" && u.s < this.giant.s)
+        cars.push({ s: u.s, d: u.d, hl: u.hl, hw: u.hw, speed: u.speed, yields: u.lost || !!u.backOff || u.phase === "leave", set: (s, v) => {
+          u.s = s;
+          u.speed = v;
+        } });
+    if (cars.length < 2) return;
+    cars.sort((a, b) => Number(a.yields) - Number(b.yields) || b.s - a.s);
+    for (let i = 1; i < cars.length; i++) {
+      const c = cars[i];
+      for (let j = 0; j < i; j++) {
+        const a = cars[j];
+        if (Math.abs(a.d - c.d) >= a.hw + c.hw) continue;
+        const limit = a.s - a.hl - c.hl - E.convoyGap;
+        if (c.s > limit) {
+          c.s = limit;
+          c.speed = Math.min(c.speed, a.speed);
+          c.set(c.s, c.speed);
+        }
+      }
+    }
+  }
   levels;
   /** An ability's level (1–3), 0 if not held. */
   levelOf(id) {
@@ -3561,6 +3617,7 @@ var Sim = class {
     this.pursuit = new Pursuit(opts.seed, this);
     const scratch = [];
     this.escort.solid = (a, b) => this.pursuit.solidBetween(a, b, scratch);
+    this.track.occupied = (a, b) => this.pursuit.units.filter((u) => u.alive && u.unit !== "chopper" && u.s + u.hl >= a && u.s - u.hl <= b);
     this.upgrades = new Set(opts.upgrades ?? []);
     this.abilities = (opts.upgrades ?? []).filter((u) => ["leap", "stare", "breakaway", "primeTime", "shoulder"].includes(u)).slice(0, TUNING.run.abilitySlots);
     this.levels = { ...opts.levels ?? {} };
@@ -3713,6 +3770,7 @@ var Sim = class {
       const c = this.escort.cruisers[id];
       this.emit({ type: "escortJoin", id, behind: this.giant.s - c.s });
     }
+    this.separateConvoy();
     this.track.ensure(this.giant.s + TUNING.track.aheadDistance);
     if ((this.tick & 63) === 0) this.track.prune(this.giant.s);
     const g = this.giant;
