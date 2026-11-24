@@ -9,7 +9,7 @@ import type { Sim } from '../sim/sim';
  * Presentation only; cosmetic randomness.
  */
 export class ViewerVideo {
-  readonly camera = new THREE.PerspectiveCamera(40, 128 / 220, 0.5, 500);
+  readonly camera = new THREE.PerspectiveCamera(40, 128 / 220, 0.5, TUNING.coverage.pipFar);
   private t = 0;
   private cooldown = 0;
   private spot = new THREE.Vector3();

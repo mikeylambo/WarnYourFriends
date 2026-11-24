@@ -72,6 +72,7 @@ tools/shots-bridge.mjs  Bridge furniture: a merge sign and lamps on the parapet,
 tools/shots-events.mjs  Traffic events: Police Net closing (BOXED IN meter), Rolling Blockade with the armored truck, Car Carrier dropping cars (ONLY=)
 tools/shots-story.mjs   Story: Tonight's Rundown card, the two-way tunnel, the run-end dissolve
 tools/story-balance.ts  Story balance: the bot plays N Story runs; finish rate, how runs end, hits/min per district
+tools/perf-draws.mjs    Draw-call budget: every WebGL draw per frame through a Story run (phone landscape); viewer video on vs off
 ```
 
 ## Deploys

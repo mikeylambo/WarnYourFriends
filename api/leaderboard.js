@@ -1180,6 +1180,8 @@ var TUNING = {
     /** The anchor desk split screen holds this long when a higher tier hits. */
     deskTime: 4.5,
     /** Viewer video (picture-in-picture): length, minimum gap, minimum Ratings tier. */
+    /** Viewer video's far plane (m): it frames him from ~10–25m, and drawing the city to 500m tripled the frame's draw calls (release pass, 2026-11-24). */
+    pipFar: 80,
     pipTime: 3.2,
     pipGap: 12,
     pipTier: 1
