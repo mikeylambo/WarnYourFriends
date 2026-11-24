@@ -27,6 +27,9 @@ var TUNING = {
     /** No brake (Mike, 2026-11-24: "no real reason to use the slow down mechanic, scrap it"): brake input is ignored, its prompts and binds are hidden, and the Police Net (escaped by braking) is off. */
     /** Target cars (2026-11-24): one per district at `share` of the way in; `score` points, ×`rampMult` in Rampage on top of Rampage's own double; `gain` audience. Endless: one every `endlessEvery` m. */
     target: { share: 0.4, score: 2500, rampMult: 2, gain: 20, endlessEvery: 900 },
+    /** District set pieces: the first lands this long after he enters (after the title card); the theme's spawn weight ×. */
+    themeDelay: 6,
+    themeWeight: 4,
     noBrake: true,
     firstChunk: 150,
     chunkReact: 0.45,
@@ -62,14 +65,14 @@ var TUNING = {
     story: {
       fuel: 345,
       districts: [
-        { zone: "highway", name: "Mile Zero Interstate", segments: 30, level: 1 },
-        { zone: "bridge", name: "Saltmarsh Bridge", segments: 16, level: 3 },
+        { zone: "highway", name: "Mile Zero Interstate", segments: 30, level: 1, theme: "carrier" },
+        { zone: "bridge", name: "Saltmarsh Bridge", segments: 16, level: 3, theme: "spike" },
         // level 3: the harder two-lane chunks (2026-11-19)
-        { zone: "avenue", name: "Downtown", segments: 32, level: 3 },
+        { zone: "avenue", name: "Downtown", segments: 32, level: 3, theme: "roadblock" },
         // Four lanes, two directions (Mike, 2026-11-19): the oncoming side comes at him inside the walls.
-        { zone: "tunnel", name: "Old Harbor Tunnel", segments: 16, level: 4, lanes: 4, oncoming: 2 },
+        { zone: "tunnel", name: "Old Harbor Tunnel", segments: 16, level: 4, lanes: 4, oncoming: 2, theme: "cruiser" },
         // The finale opens out to six lanes (Mike, 2026-11-18: the cover art's six-lane highway).
-        { zone: "highway", name: "Uptown Expressway", segments: 34, level: 5, lanes: 6, oncoming: 3, peak: true, pace: 1.4 }
+        { zone: "highway", name: "Uptown Expressway", segments: 34, level: 5, lanes: 6, oncoming: 3, peak: true, pace: 1.4, theme: "rolling" }
       ]
     },
     /**
@@ -2711,6 +2714,7 @@ var Pursuit = class {
     const P = TUNING.pursuit;
     if (sim.show.state !== "live") return;
     this.stepFinale();
+    this.stepTheme();
     if (sim.time >= (sim.guided ? Math.max(P.firstAt, TUNING.guided.calmFor) : P.firstAt)) {
       const H = P.byHeat[sim.show.heat - 1];
       this.spawnT += dt * (this.marked ? P.chopper.spawnBoost : 1) * this.pace;
@@ -2719,10 +2723,11 @@ var Pursuit = class {
         const kinds = H.kinds.filter((k) => this.allowed(k));
         if (kinds.length) {
           let total = 0;
-          for (const k of kinds) total += P.weights[k];
+          const w = (k) => P.weights[k] * (k === this.theme() ? TUNING.proto.themeWeight : 1);
+          for (const k of kinds) total += w(k);
           let r = this.rng.next() * total;
           let pick = kinds[0];
-          for (const k of kinds) if ((r -= P.weights[k]) < 0) {
+          for (const k of kinds) if ((r -= w(k)) < 0) {
             pick = k;
             break;
           }
@@ -2782,6 +2787,39 @@ var Pursuit = class {
    * no other tell is live (one tell at a time); dropped if the gore gets within `finaleGiveUp` m (too late to read).
    */
   finalePending = false;
+  /**
+   * District set pieces (Mike, 2026-11-24: "spikes / roadblocks could be a whole segment or recurring theme"): each
+   * Story district has a theme; one lands `themeDelay` s after he enters, whenever no other tell is live, and the
+   * district's random events lean to it.
+   */
+  themeDistrict = -1;
+  themePending = null;
+  themeAt = 0;
+  theme() {
+    if (!TUNING.proto.on) return null;
+    const dk = this.sim.track.segmentAt(this.sim.giant.s).district;
+    if (dk === void 0) return null;
+    const D = TUNING.proto.story.districts;
+    return D[Math.min(dk, D.length - 1)].theme ?? null;
+  }
+  stepTheme() {
+    const sim = this.sim;
+    const dk = sim.track.segmentAt(sim.giant.s).district;
+    if (!TUNING.proto.on || dk === void 0) return;
+    if (dk !== this.themeDistrict) {
+      this.themeDistrict = dk;
+      this.themePending = this.theme();
+      this.themeAt = sim.time + TUNING.proto.themeDelay;
+    }
+    const k = this.themePending;
+    if (!k || sim.time < this.themeAt) return;
+    if (this.tellActive || this.units.some((u) => u.alive && u.phase === "tell")) return;
+    if (k !== "cruiser" && !this.allowed(k)) return;
+    if (k === "carrier" ? this.spawnCarrier() : this.spawn(k)) {
+      this.themePending = null;
+      if (k === "carrier") this.carrierAt = sim.time + this.rng.range(TUNING.pursuit.carrier.every[0], TUNING.pursuit.carrier.every[1]);
+    }
+  }
   spawnFinale() {
     this.finalePending = true;
   }

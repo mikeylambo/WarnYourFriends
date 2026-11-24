@@ -224,6 +224,7 @@ export class Pursuit {
     const P = TUNING.pursuit;
     if (sim.show.state !== 'live') return;
     this.stepFinale();
+    this.stepTheme();
     // Spawning (§19 by Heat).
     if (sim.time >= (sim.guided ? Math.max(P.firstAt, TUNING.guided.calmFor) : P.firstAt)) {
       const H = P.byHeat[sim.show.heat - 1];
@@ -233,10 +234,11 @@ export class Pursuit {
         const kinds = H.kinds.filter((k) => this.allowed(k));
         if (kinds.length) {
           let total = 0;
-          for (const k of kinds) total += P.weights[k];
+          const w = (k: (typeof kinds)[number]) => P.weights[k] * (k === this.theme() ? TUNING.proto.themeWeight : 1);
+          for (const k of kinds) total += w(k);
           let r = this.rng.next() * total;
           let pick = kinds[0];
-          for (const k of kinds) if ((r -= P.weights[k]) < 0) {
+          for (const k of kinds) if ((r -= w(k)) < 0) {
             pick = k;
             break;
           }
@@ -307,6 +309,40 @@ export class Pursuit {
    * no other tell is live (one tell at a time); dropped if the gore gets within `finaleGiveUp` m (too late to read).
    */
   private finalePending = false;
+
+  /**
+   * District set pieces (Mike, 2026-11-24: "spikes / roadblocks could be a whole segment or recurring theme"): each
+   * Story district has a theme; one lands `themeDelay` s after he enters, whenever no other tell is live, and the
+   * district's random events lean to it.
+   */
+  private themeDistrict = -1;
+  private themePending: UnitKind | null = null;
+  private themeAt = 0;
+  private theme(): UnitKind | null {
+    if (!TUNING.proto.on) return null;
+    const dk = this.sim.track.segmentAt(this.sim.giant.s).district;
+    if (dk === undefined) return null;
+    const D = TUNING.proto.story.districts;
+    return (D[Math.min(dk, D.length - 1)].theme as UnitKind | undefined) ?? null;
+  }
+  private stepTheme() {
+    const sim = this.sim;
+    const dk = sim.track.segmentAt(sim.giant.s).district;
+    if (!TUNING.proto.on || dk === undefined) return;
+    if (dk !== this.themeDistrict) {
+      this.themeDistrict = dk;
+      this.themePending = this.theme();
+      this.themeAt = sim.time + TUNING.proto.themeDelay;
+    }
+    const k = this.themePending;
+    if (!k || sim.time < this.themeAt) return;
+    if (this.tellActive || this.units.some((u) => u.alive && u.phase === 'tell')) return;
+    if (k !== 'cruiser' && !this.allowed(k)) return;
+    if (k === 'carrier' ? this.spawnCarrier() : this.spawn(k)) {
+      this.themePending = null;
+      if (k === 'carrier') this.carrierAt = sim.time + this.rng.range(TUNING.pursuit.carrier.every[0], TUNING.pursuit.carrier.every[1]);
+    }
+  }
   spawnFinale() {
     this.finalePending = true;
   }

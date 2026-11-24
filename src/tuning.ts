@@ -113,6 +113,9 @@ export const TUNING = {
     /** No brake (Mike, 2026-11-24: "no real reason to use the slow down mechanic, scrap it"): brake input is ignored, its prompts and binds are hidden, and the Police Net (escaped by braking) is off. */
     /** Target cars (2026-11-24): one per district at `share` of the way in; `score` points, ×`rampMult` in Rampage on top of Rampage's own double; `gain` audience. Endless: one every `endlessEvery` m. */
     target: { share: 0.4, score: 2500, rampMult: 2, gain: 20, endlessEvery: 900 },
+    /** District set pieces: the first lands this long after he enters (after the title card); the theme's spawn weight ×. */
+    themeDelay: 6,
+    themeWeight: 4,
     noBrake: true,
     firstChunk: 150,
     chunkReact: 0.45,
@@ -148,14 +151,14 @@ export const TUNING = {
     story: {
       fuel: 345,
       districts: [
-        { zone: 'highway', name: 'Mile Zero Interstate', segments: 30, level: 1 },
-        { zone: 'bridge', name: 'Saltmarsh Bridge', segments: 16, level: 3 }, // level 3: the harder two-lane chunks (2026-11-19)
-        { zone: 'avenue', name: 'Downtown', segments: 32, level: 3 },
+        { zone: 'highway', name: 'Mile Zero Interstate', segments: 30, level: 1, theme: 'carrier' },
+        { zone: 'bridge', name: 'Saltmarsh Bridge', segments: 16, level: 3, theme: 'spike' }, // level 3: the harder two-lane chunks (2026-11-19)
+        { zone: 'avenue', name: 'Downtown', segments: 32, level: 3, theme: 'roadblock' },
         // Four lanes, two directions (Mike, 2026-11-19): the oncoming side comes at him inside the walls.
-        { zone: 'tunnel', name: 'Old Harbor Tunnel', segments: 16, level: 4, lanes: 4, oncoming: 2 },
+        { zone: 'tunnel', name: 'Old Harbor Tunnel', segments: 16, level: 4, lanes: 4, oncoming: 2, theme: 'cruiser' },
         // The finale opens out to six lanes (Mike, 2026-11-18: the cover art's six-lane highway).
-        { zone: 'highway', name: 'Uptown Expressway', segments: 34, level: 5, lanes: 6, oncoming: 3, peak: true, pace: 1.4 },
-      ] as { zone: 'highway' | 'avenue' | 'bridge' | 'tunnel'; name: string; segments: number; level: number; lanes?: number; /** Two-way for the whole district (2026-11-19): its left `oncoming` lanes come at him, every chunk. */ oncoming?: number; /** The run's peak (2026-11-24): only top-level chunks, no breathers from below. */ peak?: boolean; /** Police spawn pace in this district (×). */ pace?: number }[],
+        { zone: 'highway', name: 'Uptown Expressway', segments: 34, level: 5, lanes: 6, oncoming: 3, peak: true, pace: 1.4, theme: 'rolling' },
+      ] as { zone: 'highway' | 'avenue' | 'bridge' | 'tunnel'; name: string; segments: number; level: number; lanes?: number; /** Two-way for the whole district (2026-11-19): its left `oncoming` lanes come at him, every chunk. */ oncoming?: number; /** The run's peak (2026-11-24): only top-level chunks, no breathers from below. */ peak?: boolean; /** Police spawn pace in this district (×). */ pace?: number; /** Its set piece (2026-11-24): one guaranteed `themeDelay` s in, and the police lean to it (`themeWeight`). */ theme?: 'carrier' | 'spike' | 'roadblock' | 'cruiser' | 'rolling' }[],
     },
     /**
      * Story asks (Mike, 2026-11-19): the producer's asks span the whole run. Before going live he picks up to
