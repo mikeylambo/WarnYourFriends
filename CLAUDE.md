@@ -70,6 +70,7 @@ tools/shots-awards.mjs  Awards screen, and the giant in each outfit (side-on)
 tools/shots-a11y.mjs    HUD in play, a control prompt, Settings → Controls, HUD Size 130%
 tools/shots-bridge.mjs  Bridge furniture: a merge sign and lamps on the parapet, not over the water
 tools/shots-events.mjs  Traffic events: Police Net closing (BOXED IN meter), Rolling Blockade with the armored truck, Car Carrier dropping cars (ONLY=)
+tools/shots-story.mjs   Story: Tonight's Rundown card, the two-way tunnel, the run-end dissolve
 ```
 
 ## Deploys
