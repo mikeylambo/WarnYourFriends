@@ -751,7 +751,7 @@ function openPreShow(): Promise<boolean> {
       return `<button class="go alt ask t${a.tier}${on ? ' on' : ''}${locked ? ' locked' : ''}" data-a="${a.id}" ${locked ? 'disabled' : ''}><em>${tierName[a.tier]}</em><b>${esc(a.text.replace('{n}', String(a.n)))}</b>${sub ? `<small>${esc(sub)}</small>` : ''}<i>${locked ? '🔒' : on ? '✓' : ''}</i></button>`;
     };
     const mods = Object.entries(P.mods).map(([id, m]) => {
-      const open = modUnlocked(profile, id);
+      const open = PLAYTEST || modUnlocked(profile, id); // ?playtest=1: every mod open to try
       const on = profile.mods.includes(id);
       const by = P.storyAsks.find((a) => a.unlock === id);
       return `<button class="go alt mod${on ? ' on' : ''}" data-m="${id}" ${open ? '' : 'disabled'}><b>${esc(m.label)}</b><small>${open ? `${esc(m.how)} · ×${m.score}` : `🔒 ${esc(by?.text.replace('{n}', String(by.n)) ?? '')}`}</small></button>`;

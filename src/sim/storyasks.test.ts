@@ -47,7 +47,7 @@ describe('Tonight\'s Rundown offer', () => {
 });
 
 describe('traffic mods (2026-11-24)', () => {
-  it('Glass Jaw doubles the hit cost, Live Wire speeds the drain, Short Leash the CAUGHT fill; scores multiply at the end', () => {
+  it('Fragile doubles the hit cost, Attention Span speeds the drain, Short Leash the CAUGHT fill; scores multiply at the end', () => {
     const plain = new Sim({ seed: 9, growth: true });
     const m = new Sim({ seed: 9, growth: true, mods: ['liveWire', 'shortLeash'] });
     expect(m.show.decayMult).toBeCloseTo(plain.show.decayMult * 1.5);

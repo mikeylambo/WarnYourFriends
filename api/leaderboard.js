@@ -97,8 +97,9 @@ var TUNING = {
       heavyLoad: { label: "Heavy Load", how: "Each district picks traffic one level harder", score: 1.3 },
       hotPursuit: { label: "Hot Pursuit", how: "Police units come half again as often", score: 1.3, pace: 1.5 },
       // More mods (Mike, 2026-11-24: "traffic mods yes"): each leans on a different pressure, none touches the solver.
-      glassJaw: { label: "Glass Jaw", how: "Hits cost twice the audience", score: 1.3, hit: 2 },
-      liveWire: { label: "Live Wire", how: "The audience tunes out half again as fast", score: 1.25, drain: 1.5 },
+      // Labels renamed by Mike (2026-11-24); ids kept so saved unlocks carry over.
+      glassJaw: { label: "Fragile", how: "Hits cost twice the audience", score: 1.3, hit: 2 },
+      liveWire: { label: "Attention Span", how: "The audience tunes out half again as fast", score: 1.25, drain: 1.5 },
       shortLeash: { label: "Short Leash", how: "Slow down and the police catch him half again as fast", score: 1.2, catch: 1.5 }
     },
     reachGap: 36,
