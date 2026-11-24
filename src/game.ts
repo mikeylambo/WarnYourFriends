@@ -1340,17 +1340,32 @@ function present(e: SimEvent) {
     case 'unitSpawn':
       audio.whoop();
       break;
-    case 'lostTrack':
+    case 'lostTrack': {
+      // Hit feel (2026-11-24 audit): shaking one off reads, a whoosh where it was and a white ring on it.
       runStats.lost++;
+      const u = sim.pursuit.units.find((x) => x.id === e.id);
+      audio.whoosh(u ? where(u.s, u.d) : undefined);
+      if (u) {
+        sim.track.posAt(u.s, u.d, pos);
+        highway.ring(pos.x, pos.z, 5, 0xffffff, 0.45, 0.5);
+      }
+      haptic(I.dodge.haptic, I.dodge.hapticStrength);
       break;
-    case 'nearMiss':
+    }
+    case 'nearMiss': {
+      // A police car slipped by: the same tells as a near miss on traffic (whoosh, ring, a nudge, a tick).
       runStats.nearMiss++;
       pip.trigger(sim, sim.show.tier);
-      {
-        const u = sim.pursuit.units.find((x) => x.id === e.id);
-        audio.whoosh(u ? where(u.s, u.d) : undefined);
+      const u = sim.pursuit.units.find((x) => x.id === e.id);
+      audio.whoosh(u ? where(u.s, u.d) : undefined);
+      if (u) {
+        sim.track.posAt(u.s, u.d, pos);
+        highway.ring(pos.x, pos.z, 3.5, 0xffffff, 0.35, 0.45);
       }
+      rig.jolt(I.dodge.shake, 0.1);
+      haptic(I.dodge.haptic, I.dodge.hapticStrength);
       break;
+    }
     case 'dodge': {
       runStats.nearMiss++;
       audio.whoosh(where(e.s, e.d));
@@ -1382,7 +1397,12 @@ function present(e: SimEvent) {
       break;
     }
     case 'netEscape':
+      // Out of the Police Net: a release, not just a sound.
       audio.whoosh();
+      sim.track.posAt(g.s, g.d, pos);
+      highway.ring(pos.x, pos.z, 9, 0xffffff, 0.5, 0.55);
+      rig.jolt(3, 0.12);
+      haptic(90, 0.5);
       break;
     case 'carrierDrop':
       highway.dropIn(e.propId);
@@ -1405,8 +1425,12 @@ function present(e: SimEvent) {
       break;
     }
     case 'scoop':
-      // Prototype collectible: a bright ding (the chain tick, a step up), the smash event already threw its confetti.
+      // Exclusive: a bright ding (the chain tick, a step up), a gold ring where it was, a tick in the hand. The smash
+      // event already threw its confetti.
       audio.chainTick(3);
+      sim.track.posAt(e.s, e.d, pos);
+      highway.ring(pos.x, pos.z, 4, TUNING.rampageFx.aura.color, 0.4, 0.7);
+      haptic(45, 0.35);
       break;
     case 'zone': {
       // Story run: a title card as he enters each district (never covers the road; fades on its own).
@@ -1549,6 +1573,7 @@ function present(e: SimEvent) {
         asksUntil = sim.time + TUNING.hud.asksFlash; // the panel comes back to show it landing
         audio.chainEnd(4, false);
         asksList.querySelector(`[data-id="${e.id}"]`)?.classList.add('flash');
+        haptic(140, 0.6);
       }
       break;
     }
@@ -1647,7 +1672,19 @@ function present(e: SimEvent) {
       }
       break;
     case 'meterFull':
+      // Full audience: a gold pulse off him so the moment before Rampage reads, even with Auto Rampage off.
       audio.tierUp(1);
+      sim.track.posAt(g.s, g.d, pos);
+      highway.ring(pos.x, pos.z, 8 * gScale, TUNING.rampageFx.aura.color, 0.55, 0.6);
+      haptic(120, 0.6);
+      break;
+    case 'rampageEnd':
+      // The power drains away: a fading gold ring, the gear drops, a soft nudge. Clear that it's over.
+      sim.track.posAt(g.s, g.d, pos);
+      highway.ring(pos.x, pos.z, 10 * gScale, TUNING.rampageFx.aura.color, 0.8, 0.35);
+      audio.tierDown();
+      rig.jolt(2, 0.15);
+      haptic(70, 0.4);
       break;
     case 'rampageStart': {
       // Activation (Mike, 2026-11-17: "a bit more prominence"): a beat of hit-pause, a slam across the screen, a

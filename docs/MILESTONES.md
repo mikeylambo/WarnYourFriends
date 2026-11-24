@@ -19,7 +19,7 @@ Status: `[ ]` todo · `[~]` in progress · `[x]` done
 - [x] First broadcast teaches by doing (tutorial chunk: car in his lane → Exclusives row → spaced cars; first Exclusive / near miss prompts; Rampage guaranteed by 55s; no rules card): one swipe, one near miss, one Exclusive, the first Rampage forced, each prompted at the moment, no cards to read. Skippable for returning players.
 
 ### Hit feel audit
-- [ ] Every interaction has sound + particles + camera + number popup: smash (light/medium/heavy), near miss, Exclusive, rival van, target car, police crash, shake-off, Rampage start/end, ask complete, unlock.
+- [x] Every interaction has sound + particles + camera + number popup (2026-11-24 audit filled: Exclusive, police near miss, shake-off, net escape, audience full, Rampage end, ask done): smash (light/medium/heavy), near miss, Exclusive, rival van, target car, police crash, shake-off, Rampage start/end, ask complete, unlock.
 
 ### Front-screen progression
 - [x] Main menu shows: best Story score, Stories finished, the next award with its bar. (Today's Daily on the card: todo.)
@@ -34,7 +34,7 @@ Status: `[ ]` todo · `[~]` in progress · `[x]` done
 
 ### Accessibility
 - [x] Reduce Flashes, Reduced Motion, HUD size, rebinding.
-- [ ] Colour-blind check on gold / yellow / red cues (shape or label as well as colour).
+- [x] Colour-blind check (deuteranopia, protanopia, tritanopia sims in `docs/evidence/colorblind/`): every cue has a label, a shape or brightness, not hue alone.
 - [x] Tap-zone controls: Settings → Controls → Touch Lanes: Tap Sides.
 - [ ] Captions for any voice line.
 
