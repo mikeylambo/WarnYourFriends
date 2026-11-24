@@ -152,7 +152,8 @@ export function storyAskOffer(p: Profile, pickRandom: (n: number) => number): { 
         const j = pickRandom(i + 1);
         [list[i], list[j]] = [list[j], list[i]];
       }
-    open.push(...[...fresh, ...again].slice(0, P.storyOffer[tier - 1]));
+    // Done before: only offered again when there's nothing new at that tier (Mike, 2026-11-24: finished asks kept coming back).
+    open.push(...(fresh.length ? fresh : again).slice(0, P.storyOffer[tier - 1]));
     locked.push(...all.filter((a) => !can.includes(a)).slice(0, 1));
   }
   // Always a real choice (release pass, 2026-11-24): a new player has few asks open, so top up with easy ones

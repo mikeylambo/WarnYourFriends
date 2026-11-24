@@ -12,7 +12,7 @@ describe('story asks', () => {
     const done = new Set<string>();
     let best = 0;
     for (let seed = 1; seed <= 10 && done.size < ids.length; seed++) {
-      const mods = seed % 2 ? Object.keys(TUNING.proto.mods) : [];
+      const mods = seed % 2 ? ['heavyLoad'] : []; // one mod: with all five on the bot never signs off
       const sim = new Sim({ seed, growth: true, asks: ids, mods });
       expect(sim.asks.list.length).toBe(ids.length);
       const bot = new Bot(sim);

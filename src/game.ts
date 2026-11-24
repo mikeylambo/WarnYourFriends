@@ -1209,7 +1209,8 @@ function present(e: SimEvent) {
       break;
     }
     case 'smash': {
-      const k = e.cls === 'heavy' ? I.heavy : I.medium;
+      // Light things (yellow items, Scoops) get the light impact: no hitstop (Mike, 2026-11-24: pickups lagged).
+      const k = e.cls === 'heavy' ? I.heavy : e.cls === 'light' ? I.light : I.medium;
       // Debris flies along the run, and sideways on a smash-across.
       const lat = e.across ? Math.sign(e.d - g.d || 1) * 0.9 : 0;
       const dirX = Math.cos(h) - Math.sin(h) * lat;
@@ -1504,7 +1505,13 @@ function present(e: SimEvent) {
       if (e.onAir) runStats.crashes++;
       // Both go off his line, away from him.
       const side = Math.sign(e.d - g.d) || 1;
-      units.smash(e.id, Math.cos(h), Math.sin(h), e.speed, side);
+      // Readable from the chopper (Mike, 2026-11-24: "hard to tell when cars are kited into a crash"; on the bridge
+      // they seemed to vanish): the cruiser tumbles where it crashed instead of flying out of frame, under a
+      // siren-coloured flash and a column of smoke.
+      units.smash(e.id, Math.cos(h), Math.sin(h), Math.min(e.speed, TUNING.vfx.crashTumble), side);
+      sim.track.posAt(e.s, e.d, pos);
+      highway.ring(pos.x, pos.z, 10, 0xff2b3a, 0.55, 0.9);
+      highway.ring(pos.x, pos.z, 6, 0x3a6bff, 0.7, 0.9);
       if (e.propSmashed) (e.propId >= 1_000_000 ? units : highway).smash(e.propId, Math.cos(h), Math.sin(h), e.speed * 0.6, side);
       audio.smash('heavy', where(e.s, e.d));
       {

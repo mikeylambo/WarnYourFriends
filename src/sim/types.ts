@@ -24,6 +24,8 @@ export interface Prop {
   alive: boolean;
   /** Impact pass: already judged as passed (dodge or not). */
   judged?: boolean;
+  /** The closest it came to him alongside (m, edge to hit-box), for the close-call judgement. */
+  closest?: number;
   /** Segment index it belongs to (for streaming). */
   segment: number;
   /** Rampage timing (2026-11-17): breaks only in Rampage (concrete, police roadblocks); unbreakable until then. */

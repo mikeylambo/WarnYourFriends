@@ -172,7 +172,7 @@ export const TUNING = {
       { id: 's-crash', tier: 2, kind: 'crashBefore', district: 3, n: 2, text: 'Crash {n} police cars before the tunnel', requires: 's-rampage', unlock: 'hotPursuit' },
       { id: 's-chain', tier: 2, kind: 'chain', n: 15, text: 'Combo {n} stunts', requires: 's-near', unlock: 'glassJaw' },
       { id: 's-rampsmash', tier: 2, kind: 'rampsmash', n: 12, text: 'Smash {n} things in one Rampage', requires: 's-rivals' },
-      { id: 's-finish', tier: 2, kind: 'finish', n: 1, text: 'Make it to the sign-off' },
+      { id: 's-finish', tier: 1, kind: 'finish', n: 1, text: 'Make it to the sign-off' }, // Easy (Mike, 2026-11-24: it was a Medium that felt easy)
       { id: 's-tunnel', tier: 3, kind: 'cleanDistrict', district: 3, n: 1, text: 'Through the tunnel without a hit', requires: 's-bridge' },
       { id: 's-units', tier: 3, kind: 'units', n: 4, text: 'Flatten {n} police cars', requires: 's-crash', unlock: 'shortLeash' },
       // Replaces 'Shake the police chopper' (Mike, 2026-11-24: there's no real way to lose it).
@@ -376,6 +376,10 @@ export const TUNING = {
   },
 
   collision: {
+    /** Rampage crush reach (m, from his centre): his drawn body at Rampage size; a lane is 4m, a car in the next lane starts 3m out, so it never reaches across. */
+    rampageReach: 2.4,
+    /** Light things (yellow-ringed smashables, Scoops) break within this reach at any gear: his feet and shins, not just the hit-box. */
+    lightReach: 1.8,
     /** Speed kept after bouncing off something you can't smash. Never a stop. */
     bounceSpeedKeep: 0.55,
     /** Speed lost on a smash, by class. Smash "must never stall momentum" (§10). */
@@ -389,7 +393,7 @@ export const TUNING = {
   /** §10 impact scale (hitstop in 60 Hz frames, shake in px, haptic ms). */
   impact: {
     // Impact pass: every hit at least 3× the 2px footfall pulse (Medium was 2px, the same as a step).
-    light: { hitstop: 0, shake: 0, flashFrames: 0, haptic: 0, hapticStrength: 0 },
+    light: { hitstop: 0, shake: 0, flashFrames: 0, haptic: 35, hapticStrength: 0.3 }, // a short tick on every yellow item (Mike, 2026-11-24)
     medium: { hitstop: 4, shake: 6, flashFrames: 0, haptic: 70, hapticStrength: 0.45 },
     heavy: { hitstop: 7, shake: 11, flashFrames: 1, haptic: 140, hapticStrength: 0.95 },
     landmark: { hitstop: 10, shake: 14, flashFrames: 2, haptic: 250, hapticStrength: 1 },
@@ -711,7 +715,9 @@ export const TUNING = {
     emberRate: 45, speedLineRate: 22, speedLineMax: 48, skidMax: 12, skidLife: 6, skidAlpha: 0.55,
     /** Heavy smash: puffs, size (m), life (s), alpha. */ heavySmoke: [5, 3.6, 1.4, 0.68] as number[],
     /** Medium smash: a little dust. */ mediumDust: [3, 2.2, 0.9, 0.5] as number[],
-    /** Police crash: puffs and sparks. */ crashSmoke: [6, 4, 1.7, 0.72] as number[], crashSparks: 18,
+    /** Police crash: puffs and sparks (a bigger column: readable from the chopper, 2026-11-24). */ crashSmoke: [10, 5, 2.4, 0.8] as number[], crashSparks: 24,
+    /** A police crash's wreck launch speed cap (m/s): it tumbles on the spot, readable, not out of frame. */
+    crashTumble: 7,
     /** Metal smashed, and a bounce off something he can't break. */ metalSparks: 12, bounceSparks: 8,
     /** Stride / Rampage footfall dust puffs (per tier), size (m, scales with him). */ stepDust: [0, 1, 2] as number[], stepDustSize: 1.7,
   },
@@ -1156,8 +1162,8 @@ export const TUNING = {
     /** Only cars within this many metres across the road react. */
     lateralReach: 7,
     /** Visual swerve: lateral nudge (m) and yaw (deg) inside the car's own footprint; the hitbox doesn't move. */
-    swerveOffset: 0.35,
-    swerveYawDeg: 7,
+    swerveOffset: 0, // off (Mike, 2026-11-24: the half-swerve looked tacky; cars hold their lane)
+    swerveYawDeg: 0,
     /** At most one honk this often (s). */
     honkGap: 0.45,
     /**

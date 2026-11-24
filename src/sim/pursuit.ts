@@ -487,7 +487,7 @@ export class Pursuit {
     track.ensure(s + C.clearAhead + 20);
     const L = track.lanesAt(s);
     if (L < 2) return false;
-    for (let x = s - 10; x <= s + 200; x += 10) if (track.lanesAt(x) !== L) return false;
+    for (let x = s - 10; x <= s + 200; x += 10) if (track.lanesAt(x) !== L || track.segmentAt(x).zone === 'tunnel') return false;
     // Never his lane, and never a lane that's oncoming anywhere on its trip (prototype two-way stretches).
     const oncoming = new Set<number>();
     for (const tw of track.twoWay) {
@@ -560,7 +560,10 @@ export class Pursuit {
     const at = u.s - u.hl - 2;
     if (at - g.s < g.speed * C.dropLead) return; // he'd have no time to see it land: wait (no slot spent)
     const L = track.lanesAt(at);
-    const options = [u.lane, u.lane - 1, u.lane + 1].filter((l) => l >= 0 && l < L);
+    // Never in a tunnel, never into the oncoming side (Mike, 2026-11-24: cars appeared in his path in the tunnel).
+    if (track.segmentAt(at).zone === 'tunnel') return;
+    const tw = track.twoWay.find((w) => at >= w.s0 && at <= w.s1);
+    const options = [u.lane, u.lane - 1, u.lane + 1].filter((l) => l >= (tw ? tw.split : 0) && l < L);
     for (let tries = 0; tries < options.length; tries++) {
       const lane = options[this.rng.int(0, options.length - 1)];
       // Never the drop that closes the last open lane there.
@@ -770,9 +773,14 @@ export class Pursuit {
     track.ensure(s + 220);
     const L = track.lanesAt(s);
     for (let x = s - 10; x <= s + 200; x += 10) if (track.lanesAt(x) !== L) return false; // no merges under it
-    const n = L >= 3 ? L - 1 : L;
-    const lanes = Array.from({ length: L }, (_, i) => i);
-    if (L >= 3) lanes.splice(this.rng.int(0, L - 1), 1);
+    // Two-way road: only his side's lanes (Mike, 2026-11-24: the line drove through the oncoming traffic).
+    const span = track.twoWay.find((w) => s + 200 >= w.s0 && s - 10 <= w.s1);
+    const first = span ? span.split : 0;
+    const own = L - first;
+    if (own < 2) return false;
+    const lanes = Array.from({ length: own }, (_, i) => first + i);
+    if (own >= 3) lanes.splice(this.rng.int(0, own - 1), 1);
+    const n = lanes.length;
     const weak = this.rng.int(0, n - 1);
     // Rolling Blockade: from Heat 3 one car in the line is the armoured truck (never the weak link).
     const B = TUNING.pursuit.blockade;

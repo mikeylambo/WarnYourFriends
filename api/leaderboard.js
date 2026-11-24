@@ -87,7 +87,8 @@ var TUNING = {
       { id: "s-crash", tier: 2, kind: "crashBefore", district: 3, n: 2, text: "Crash {n} police cars before the tunnel", requires: "s-rampage", unlock: "hotPursuit" },
       { id: "s-chain", tier: 2, kind: "chain", n: 15, text: "Combo {n} stunts", requires: "s-near", unlock: "glassJaw" },
       { id: "s-rampsmash", tier: 2, kind: "rampsmash", n: 12, text: "Smash {n} things in one Rampage", requires: "s-rivals" },
-      { id: "s-finish", tier: 2, kind: "finish", n: 1, text: "Make it to the sign-off" },
+      { id: "s-finish", tier: 1, kind: "finish", n: 1, text: "Make it to the sign-off" },
+      // Easy (Mike, 2026-11-24: it was a Medium that felt easy)
       { id: "s-tunnel", tier: 3, kind: "cleanDistrict", district: 3, n: 1, text: "Through the tunnel without a hit", requires: "s-bridge" },
       { id: "s-units", tier: 3, kind: "units", n: 4, text: "Flatten {n} police cars", requires: "s-crash", unlock: "shortLeash" },
       // Replaces 'Shake the police chopper' (Mike, 2026-11-24: there's no real way to lose it).
@@ -291,6 +292,10 @@ var TUNING = {
     knockClearPast: 1
   },
   collision: {
+    /** Rampage crush reach (m, from his centre): his drawn body at Rampage size; a lane is 4m, a car in the next lane starts 3m out, so it never reaches across. */
+    rampageReach: 2.4,
+    /** Light things (yellow-ringed smashables, Scoops) break within this reach at any gear: his feet and shins, not just the hit-box. */
+    lightReach: 1.8,
     /** Speed kept after bouncing off something you can't smash. Never a stop. */
     bounceSpeedKeep: 0.55,
     /** Speed lost on a smash, by class. Smash "must never stall momentum" (§10). */
@@ -304,7 +309,8 @@ var TUNING = {
   /** §10 impact scale (hitstop in 60 Hz frames, shake in px, haptic ms). */
   impact: {
     // Impact pass: every hit at least 3× the 2px footfall pulse (Medium was 2px, the same as a step).
-    light: { hitstop: 0, shake: 0, flashFrames: 0, haptic: 0, hapticStrength: 0 },
+    light: { hitstop: 0, shake: 0, flashFrames: 0, haptic: 35, hapticStrength: 0.3 },
+    // a short tick on every yellow item (Mike, 2026-11-24)
     medium: { hitstop: 4, shake: 6, flashFrames: 0, haptic: 70, hapticStrength: 0.45 },
     heavy: { hitstop: 7, shake: 11, flashFrames: 1, haptic: 140, hapticStrength: 0.95 },
     landmark: { hitstop: 10, shake: 14, flashFrames: 2, haptic: 250, hapticStrength: 1 },
@@ -642,9 +648,11 @@ var TUNING = {
     heavySmoke: [5, 3.6, 1.4, 0.68],
     /** Medium smash: a little dust. */
     mediumDust: [3, 2.2, 0.9, 0.5],
-    /** Police crash: puffs and sparks. */
-    crashSmoke: [6, 4, 1.7, 0.72],
-    crashSparks: 18,
+    /** Police crash: puffs and sparks (a bigger column: readable from the chopper, 2026-11-24). */
+    crashSmoke: [10, 5, 2.4, 0.8],
+    crashSparks: 24,
+    /** A police crash's wreck launch speed cap (m/s): it tumbles on the spot, readable, not out of frame. */
+    crashTumble: 7,
     /** Metal smashed, and a bounce off something he can't break. */
     metalSparks: 12,
     bounceSparks: 8,
@@ -1134,8 +1142,9 @@ var TUNING = {
     /** Only cars within this many metres across the road react. */
     lateralReach: 7,
     /** Visual swerve: lateral nudge (m) and yaw (deg) inside the car's own footprint; the hitbox doesn't move. */
-    swerveOffset: 0.35,
-    swerveYawDeg: 7,
+    swerveOffset: 0,
+    // off (Mike, 2026-11-24: the half-swerve looked tacky; cars hold their lane)
+    swerveYawDeg: 0,
     /** At most one honk this often (s). */
     honkGap: 0.45,
     /**
@@ -1616,7 +1625,8 @@ var Track = class {
   stepMovers(dt, gs, gv) {
     const P = TUNING.proto;
     const sameLane = (a, b) => Math.abs(a.d - b.d) < a.hw + b.hw;
-    const blocked = (m, s0, s1, gap) => this.propsBetween(s0 - gap - 8, s1 + gap + 8).some((q) => q !== m && q.alive && sameLane(m, q) && q.s + q.hl > s0 - gap && q.s - q.hl < s1 + gap);
+    const blocked = (m, s0, s1, gap) => this.propsBetween(s0 - gap - 8, s1 + gap + 8).some((q) => q !== m && q.alive && sameLane(m, q) && q.s + q.hl > s0 - gap && q.s - q.hl < s1 + gap) || // Police and the escort count too (Mike, 2026-11-24: oncoming cars drove through roadblocks and the escort).
+    this.vehicles(s0 - gap - 8, s1 + gap + 8).some((q) => Math.abs(m.d - q.d) < m.hw + q.hw && q.s + q.hl > s0 - gap && q.s - q.hl < s1 + gap);
     for (const m of this.movers) {
       const mv = m.mover;
       if (!m.alive) continue;
@@ -2111,6 +2121,8 @@ var Track = class {
    */
   /** Police hardware on the road (set by the sim), so a surge never drops traffic under a roadblock. */
   occupied = () => [];
+  /** Police units and the escort between s0 and s1 (set by the sim): moving traffic brakes for them too. */
+  vehicles = () => [];
   surge(s0, s1) {
     const T = TUNING.targets;
     const rng = this.rng;
@@ -2187,6 +2199,12 @@ var Escort = class {
     }
     return false;
   }
+  /** Something solid in the lane right in front of its nose (within `convoyGap` + a car)? */
+  blockedAhead(s, d) {
+    const E = TUNING.escort;
+    const near = [...this.track.propsBetween(s, s + E.hl + 6), ...this.solid(s, s + E.hl + 6)];
+    return near.some((p) => p.alive && Math.abs(p.d - d) < p.hw + E.hw && p.s - p.hl > s && p.s - p.hl < s + E.hl * 2 + E.convoyGap);
+  }
   /** Returns ids of cruisers that joined this tick. */
   /**
    * Caught, by the escort (Mike, 2026-11-17: "sometimes I can still hold down for 5-10s and not get caught"):
@@ -2238,10 +2256,14 @@ var Escort = class {
         c.speed = Math.min(c.speed, g.speed);
       } else if (!lead && g.s - c.s < E.minGap) c.speed = Math.min(c.speed, g.speed * 0.85);
       const base = this.pathAt(c.s);
-      const target = !lead && c.side !== 0 && !this.blocked(c.s, base + c.side) ? c.side : 0;
+      const w = this.track.widthAt(c.s);
+      let target = !lead && c.side !== 0 && !this.blocked(c.s, base + c.side) ? c.side : 0;
+      if (this.blockedAhead(c.s, base + target)) {
+        c.s -= c.speed * dt;
+        c.speed = 0;
+      }
       c.off += clamp(target - c.off, -E.sideSpeed * dt, E.sideSpeed * dt);
       if (c.off !== 0 && this.blocked(c.s, base + c.off)) c.off += clamp(-c.off, -E.sideSpeed * 2 * dt, E.sideSpeed * 2 * dt);
-      const w = this.track.widthAt(c.s);
       c.d = clamp(base + c.off, 1.2, Math.max(1.2, w - 1.2));
     }
     return joined;
@@ -2880,7 +2902,7 @@ var Pursuit = class {
     track.ensure(s + C.clearAhead + 20);
     const L = track.lanesAt(s);
     if (L < 2) return false;
-    for (let x = s - 10; x <= s + 200; x += 10) if (track.lanesAt(x) !== L) return false;
+    for (let x = s - 10; x <= s + 200; x += 10) if (track.lanesAt(x) !== L || track.segmentAt(x).zone === "tunnel") return false;
     const oncoming = /* @__PURE__ */ new Set();
     for (const tw of track.twoWay) {
       if (tw.s1 < s - 10 || tw.s0 > s + C.clearAhead + 200) continue;
@@ -2940,7 +2962,9 @@ var Pursuit = class {
     const at = u.s - u.hl - 2;
     if (at - g.s < g.speed * C.dropLead) return;
     const L = track.lanesAt(at);
-    const options = [u.lane, u.lane - 1, u.lane + 1].filter((l) => l >= 0 && l < L);
+    if (track.segmentAt(at).zone === "tunnel") return;
+    const tw = track.twoWay.find((w) => at >= w.s0 && at <= w.s1);
+    const options = [u.lane, u.lane - 1, u.lane + 1].filter((l) => l >= (tw ? tw.split : 0) && l < L);
     for (let tries = 0; tries < options.length; tries++) {
       const lane = options[this.rng.int(0, options.length - 1)];
       const blocked = /* @__PURE__ */ new Set([lane]);
@@ -3117,9 +3141,13 @@ var Pursuit = class {
     track.ensure(s + 220);
     const L = track.lanesAt(s);
     for (let x = s - 10; x <= s + 200; x += 10) if (track.lanesAt(x) !== L) return false;
-    const n = L >= 3 ? L - 1 : L;
-    const lanes = Array.from({ length: L }, (_, i) => i);
-    if (L >= 3) lanes.splice(this.rng.int(0, L - 1), 1);
+    const span = track.twoWay.find((w) => s + 200 >= w.s0 && s - 10 <= w.s1);
+    const first = span ? span.split : 0;
+    const own = L - first;
+    if (own < 2) return false;
+    const lanes = Array.from({ length: own }, (_, i) => first + i);
+    if (own >= 3) lanes.splice(this.rng.int(0, own - 1), 1);
+    const n = lanes.length;
     const weak = this.rng.int(0, n - 1);
     const B = TUNING.pursuit.blockade;
     const armored = sim.show.heat >= B.armoredFrom && n >= 2 ? (weak + 1 + this.rng.int(0, n - 2)) % n : -1;
@@ -3753,6 +3781,11 @@ var Sim = class {
     const scratch = [];
     this.escort.solid = (a, b) => this.pursuit.solidBetween(a, b, scratch);
     this.track.occupied = (a, b) => this.pursuit.units.filter((u) => u.alive && u.unit !== "chopper" && u.s + u.hl >= a && u.s - u.hl <= b);
+    const EH = TUNING.escort;
+    this.track.vehicles = (a, b) => [
+      ...this.pursuit.units.filter((u) => u.alive && u.unit !== "chopper" && u.s + u.hl >= a && u.s - u.hl <= b),
+      ...this.escort.cruisers.filter((c) => c.active && c.s + EH.hl >= a && c.s - EH.hl <= b).map((c) => ({ s: c.s, d: c.d, hl: EH.hl, hw: EH.hw }))
+    ];
     this.upgrades = new Set(opts.upgrades ?? []);
     this.abilities = (opts.upgrades ?? []).filter((u) => ["leap", "stare", "breakaway", "primeTime", "shoulder"].includes(u)).slice(0, TUNING.run.abilitySlots);
     this.levels = { ...opts.levels ?? {} };
@@ -3981,11 +4014,16 @@ var Sim = class {
     const g = this.giant;
     const r = this.radius();
     const rank = this.smashRank();
+    for (const p of this.track.propsBetween(g.s - r, g.s + r)) {
+      if (!p.alive || p.judged) continue;
+      const gap = Math.abs(p.d - g.d) - p.hw - r;
+      p.closest = Math.min(p.closest ?? Infinity, gap);
+    }
     for (const p of this.track.propsBetween(g.s - r - 12, g.s)) {
       if (!p.alive || p.judged || p.s + p.hl > g.s - r) continue;
       p.judged = true;
       if (this.rankOf(p) <= rank || g.air > 0) continue;
-      const gap = Math.abs(p.d - g.d) - p.hw - r;
+      const gap = Math.min(p.closest ?? Infinity, Math.abs(p.d - g.d) - p.hw - r);
       if (gap < 0 || gap > (TUNING.proto.on ? TUNING.proto.dodgeGap : TUNING.collision.dodgeGap)) continue;
       this.emit({ type: "dodge", propId: p.id, s: p.s, d: p.d, gap });
       this.award("nearMiss");
@@ -4664,7 +4702,11 @@ var Sim = class {
       const cd = clamp(g.d, p.d - p.hw, p.d + p.hw);
       const ds = g.s - cs;
       const dd = g.d - cd;
-      if (ds * ds + dd * dd >= r * r) continue;
+      const C = TUNING.collision;
+      const reach = Math.max(r, this.inRampage ? C.rampageReach : 0, p.cls === "light" ? C.lightReach : 0);
+      const d2 = ds * ds + dd * dd;
+      if (d2 >= reach * reach) continue;
+      const inBody = d2 < r * r;
       const u = p;
       const ramming = u.unit === "cruiser" && u.phase === "act" && this.giant.shoulderT <= 0 && (TUNING.pursuit.cruiser.ramBeatsRampage || !this.inRampage);
       const pr = ramming ? CLASS_RANK.immovable : u.ram && this.giant.shoulderT > 0 ? CLASS_RANK.heavy : this.rankOf(p);
@@ -4675,6 +4717,7 @@ var Sim = class {
         this.emit({ type: "smash", propId: p.id, cls: p.cls, mat: p.mat, s: p.s, d: p.d, across, speed: g.speed });
         continue;
       }
+      if (!inBody) continue;
       const unit = p.unit;
       const moving = unit === "cruiser" || unit === "rolling";
       const headOn = Math.abs(g.d - p.d) < p.hw + r * 0.5;

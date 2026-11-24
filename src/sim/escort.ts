@@ -34,7 +34,7 @@ export class Escort {
   private pathD: number[] = [];
 
   /** Police units on the road (pursuit), so the escort steers round them too. */
-  solid: (s0: number, s1: number) => { d: number; hw: number; alive: boolean }[] = () => [];
+  solid: (s0: number, s1: number) => { s: number; hl: number; d: number; hw: number; alive: boolean }[] = () => [];
 
   constructor(seed: number, private track: Track) {
     const E = TUNING.escort;
@@ -74,6 +74,13 @@ export class Escort {
       if (p.alive && Math.abs(p.d - d) < p.hw + 1.1) return true;
     }
     return false;
+  }
+
+  /** Something solid in the lane right in front of its nose (within `convoyGap` + a car)? */
+  private blockedAhead(s: number, d: number): boolean {
+    const E = TUNING.escort;
+    const near = [...this.track.propsBetween(s, s + E.hl + 6), ...this.solid(s, s + E.hl + 6)];
+    return near.some((p) => p.alive && Math.abs(p.d - d) < p.hw + E.hw && p.s - p.hl > s && p.s - p.hl < s + E.hl * 2 + E.convoyGap);
   }
 
   /** Returns ids of cruisers that joined this tick. */
@@ -132,10 +139,16 @@ export class Escort {
         c.speed = Math.min(c.speed, g.speed);
       } else if (!lead && g.s - c.s < E.minGap) c.speed = Math.min(c.speed, g.speed * 0.85);
       const base = this.pathAt(c.s);
-      const target = !lead && c.side !== 0 && !this.blocked(c.s, base + c.side) ? c.side : 0;
+      const w = this.track.widthAt(c.s);
+      let target = !lead && c.side !== 0 && !this.blocked(c.s, base + c.side) ? c.side : 0;
+      // His line is blocked ahead (a car pulled into it after he passed): wait behind it, never through it
+      // (Mike, 2026-11-24: "cars still drive through each other" — mostly the escort). Oncoming traffic brakes for it too.
+      if (this.blockedAhead(c.s, base + target)) {
+        c.s -= c.speed * dt;
+        c.speed = 0;
+      }
       c.off += clamp(target - c.off, -E.sideSpeed * dt, E.sideSpeed * dt);
       if (c.off !== 0 && this.blocked(c.s, base + c.off)) c.off += clamp(-c.off, -E.sideSpeed * 2 * dt, E.sideSpeed * 2 * dt);
-      const w = this.track.widthAt(c.s);
       c.d = clamp(base + c.off, 1.2, Math.max(1.2, w - 1.2));
     }
     return joined;

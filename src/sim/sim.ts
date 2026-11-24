@@ -188,6 +188,11 @@ export class Sim {
     const scratch: Unit[] = [];
     this.escort.solid = (a, b) => this.pursuit.solidBetween(a, b, scratch);
     this.track.occupied = (a, b) => this.pursuit.units.filter((u) => u.alive && u.unit !== 'chopper' && u.s + u.hl >= a && u.s - u.hl <= b);
+    const EH = TUNING.escort;
+    this.track.vehicles = (a, b) => [
+      ...this.pursuit.units.filter((u) => u.alive && u.unit !== 'chopper' && u.s + u.hl >= a && u.s - u.hl <= b),
+      ...this.escort.cruisers.filter((c) => c.active && c.s + EH.hl >= a && c.s - EH.hl <= b).map((c) => ({ s: c.s, d: c.d, hl: EH.hl, hw: EH.hw })),
+    ];
     this.upgrades = new Set(opts.upgrades ?? []);
     // In the order bought (opts.upgrades keeps it), at most `abilitySlots`.
     this.abilities = (opts.upgrades ?? []).filter((u): u is AbilityId => (['leap', 'stare', 'breakaway', 'primeTime', 'shoulder'] as string[]).includes(u)).slice(0, TUNING.run.abilitySlots);
@@ -441,11 +446,18 @@ export class Sim {
     const g = this.giant;
     const r = this.radius();
     const rank = this.smashRank();
+    // The closest each thing comes while alongside him (Mike, 2026-11-24: oncoming close calls went unscored when he'd
+    // moved off by the time the car was behind him).
+    for (const p of this.track.propsBetween(g.s - r, g.s + r)) {
+      if (!p.alive || p.judged) continue;
+      const gap = Math.abs(p.d - g.d) - p.hw - r;
+      p.closest = Math.min(p.closest ?? Infinity, gap);
+    }
     for (const p of this.track.propsBetween(g.s - r - 12, g.s)) {
       if (!p.alive || p.judged || p.s + p.hl > g.s - r) continue;
       p.judged = true;
       if (this.rankOf(p) <= rank || g.air > 0) continue;
-      const gap = Math.abs(p.d - g.d) - p.hw - r;
+      const gap = Math.min(p.closest ?? Infinity, Math.abs(p.d - g.d) - p.hw - r);
       if (gap < 0 || gap > (TUNING.proto.on ? TUNING.proto.dodgeGap : TUNING.collision.dodgeGap)) continue;
       this.emit({ type: 'dodge', propId: p.id, s: p.s, d: p.d, gap });
       this.award('nearMiss');
@@ -1191,7 +1203,13 @@ export class Sim {
       const cd = clamp(g.d, p.d - p.hw, p.d + p.hw);
       const ds = g.s - cs;
       const dd = g.d - cd;
-      if (ds * ds + dd * dd >= r * r) continue;
+      // Crush reach (Mike, 2026-11-24: Rampage didn't break every car he ran through; some yellow items survived):
+      // what he CAN smash breaks within his drawn body, a little wider than the hit-box. Only ever smashes more.
+      const C = TUNING.collision;
+      const reach = Math.max(r, this.inRampage ? C.rampageReach : 0, p.cls === 'light' ? C.lightReach : 0);
+      const d2 = ds * ds + dd * dd;
+      if (d2 >= reach * reach) continue;
+      const inBody = d2 < r * r;
 
       // A Police Net flanker breaks only to a Shoulder Check (then it's Heavy); otherwise nothing moves it.
       const u = p as Unit;
@@ -1206,6 +1224,7 @@ export class Sim {
         this.emit({ type: 'smash', propId: p.id, cls: p.cls, mat: p.mat, s: p.s, d: p.d, across, speed: g.speed });
         continue;
       }
+      if (!inBody) continue; // within reach but unbreakable: only the hit-box itself can hit it
 
       // Can't smash it. Clear the overlap along the road (never through it). A moving unit
       // that swerved into him shoves him sideways instead (knock-back below), no jump back.

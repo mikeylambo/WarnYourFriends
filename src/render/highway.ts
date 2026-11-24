@@ -405,11 +405,14 @@ export class HighwayView {
       }
     }
     // Prototype two-way stretches: a double yellow line between the directions (built once, ahead of him).
+    // Built as the road is (Mike, 2026-11-24: in the tunnel it waited for the whole 640m district to exist first).
     for (const tw of track.twoWay) {
-      if (tw.built || track.end < tw.s1) continue;
-      tw.built = true;
+      const to = Math.min(tw.s1, track.end);
+      const from = tw.builtTo ?? tw.s0;
+      if (to <= from) continue;
+      tw.builtTo = to;
       const W = TUNING.lanes.width;
-      for (let s = tw.s0; s < tw.s1; s += 3) {
+      for (let s = from; s < to; s += 3) {
         for (const off of [-0.18, 0.18]) {
           const m = new THREE.Mesh(this.box, TWO_WAY_LINE);
           track.posAt(s, tw.split * W + off, this.pos);

@@ -178,7 +178,7 @@ export class Track {
   /** Prototype moving traffic (oncoming cars, slow trucks): kept apart from `props`, whose order along the road propsBetween relies on. */
   readonly movers: Prop[] = [];
   /** Two-way stretches (presentation paints a double yellow line at `split`, the lane edge between the directions). */
-  readonly twoWay: { s0: number; s1: number; split: number; built?: boolean; /** A whole two-way district: every chunk in it has `split` oncoming lanes on the left. */ district?: boolean }[] = [];
+  readonly twoWay: { s0: number; s1: number; split: number; built?: boolean; /** Presentation: line built up to here. */ builtTo?: number; /** A whole two-way district: every chunk in it has `split` oncoming lanes on the left. */ district?: boolean }[] = [];
 
   /**
    * Drive the moving traffic. Each waits until he's `moverWake` m short of it, then sets off from wherever puts it
@@ -190,7 +190,9 @@ export class Track {
     const sameLane = (a: Prop, b: Prop) => Math.abs(a.d - b.d) < a.hw + b.hw;
     /** Something in its lane within `gap` of the box [s0, s1]? (other movers and standing traffic both count) */
     const blocked = (m: Prop, s0: number, s1: number, gap: number) =>
-      this.propsBetween(s0 - gap - 8, s1 + gap + 8).some((q) => q !== m && q.alive && sameLane(m, q) && q.s + q.hl > s0 - gap && q.s - q.hl < s1 + gap);
+      this.propsBetween(s0 - gap - 8, s1 + gap + 8).some((q) => q !== m && q.alive && sameLane(m, q) && q.s + q.hl > s0 - gap && q.s - q.hl < s1 + gap) ||
+      // Police and the escort count too (Mike, 2026-11-24: oncoming cars drove through roadblocks and the escort).
+      this.vehicles(s0 - gap - 8, s1 + gap + 8).some((q) => Math.abs(m.d - q.d) < m.hw + q.hw && q.s + q.hl > s0 - gap && q.s - q.hl < s1 + gap);
     for (const m of this.movers) {
       const mv = m.mover!;
       if (!m.alive) continue;
@@ -749,6 +751,8 @@ export class Track {
    */
   /** Police hardware on the road (set by the sim), so a surge never drops traffic under a roadblock. */
   occupied: (s0: number, s1: number) => { d: number; hw: number }[] = () => [];
+  /** Police units and the escort between s0 and s1 (set by the sim): moving traffic brakes for them too. */
+  vehicles: (s0: number, s1: number) => { s: number; d: number; hl: number; hw: number }[] = () => [];
 
   surge(s0: number, s1: number) {
     const T = TUNING.targets;
