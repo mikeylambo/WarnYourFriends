@@ -7,7 +7,7 @@ import { Bot } from '../src/sim/bot';
 enableProto();
 const N = Number(process.argv[2] ?? 50);
 const D = TUNING.proto.story.districts;
-const per = D.map(() => ({ hits: 0, secs: 0, reached: 0 }));
+const per = D.map(() => ({ hits: 0, secs: 0, reached: 0, lost: 0 }));
 const ends: Record<string, number> = {};
 let cleared = 0;
 const scores: number[] = [];
@@ -24,8 +24,9 @@ for (let seed = 1000; seed < 1000 + N; seed++) {
   const why = sim.show.state === 'cleared' ? 'signed off' : `${sim.show.state}${sim.show.pinCause ? ' (' + sim.show.pinCause + ')' : ''}`;
   ends[why] = (ends[why] ?? 0) + 1;
   if (sim.show.state === 'cleared') cleared++;
+  else per[sim.track.segmentAt(sim.giant.s).district ?? 0].lost++;
   scores.push(Math.round(sim.show.banked));
 }
 scores.sort((a, b) => a - b);
 console.log(`Story x${N}: signed off ${((cleared / N) * 100).toFixed(0)}%  ends ${JSON.stringify(ends)}  score median ${scores[N >> 1]}`);
-D.forEach((d, i) => console.log(`  ${String(i + 1)}. ${(d.name ?? d.zone).padEnd(26)} reached ${String(per[i].reached).padStart(3)}/${N}  hits/min ${(per[i].hits / Math.max(1e-9, per[i].secs / 60)).toFixed(2)}`));
+D.forEach((d, i) => console.log(`  ${String(i + 1)}. ${(d.name ?? d.zone).padEnd(26)} reached ${String(per[i].reached).padStart(3)}/${N}  hits/min ${(per[i].hits / Math.max(1e-9, per[i].secs / 60)).toFixed(2)}  runs lost here ${per[i].lost}`));

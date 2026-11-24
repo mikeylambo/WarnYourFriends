@@ -148,8 +148,8 @@ export const TUNING = {
         // Four lanes, two directions (Mike, 2026-11-19): the oncoming side comes at him inside the walls.
         { zone: 'tunnel', name: 'Old Harbor Tunnel', segments: 16, level: 4, lanes: 4, oncoming: 2 },
         // The finale opens out to six lanes (Mike, 2026-11-18: the cover art's six-lane highway).
-        { zone: 'highway', name: 'Uptown Expressway', segments: 34, level: 5, lanes: 6, oncoming: 3 },
-      ] as { zone: 'highway' | 'avenue' | 'bridge' | 'tunnel'; name: string; segments: number; level: number; lanes?: number; /** Two-way for the whole district (2026-11-19): its left `oncoming` lanes come at him, every chunk. */ oncoming?: number }[],
+        { zone: 'highway', name: 'Uptown Expressway', segments: 34, level: 5, lanes: 6, oncoming: 3, peak: true, pace: 1.4 },
+      ] as { zone: 'highway' | 'avenue' | 'bridge' | 'tunnel'; name: string; segments: number; level: number; lanes?: number; /** Two-way for the whole district (2026-11-19): its left `oncoming` lanes come at him, every chunk. */ oncoming?: number; /** The run's peak (2026-11-24): only top-level chunks, no breathers from below. */ peak?: boolean; /** Police spawn pace in this district (×). */ pace?: number }[],
     },
     /**
      * Story asks (Mike, 2026-11-19): the producer's asks span the whole run. Before going live he picks up to

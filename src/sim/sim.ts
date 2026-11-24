@@ -158,6 +158,8 @@ export class Sim {
   /** First broadcast ever: a calm opening (no drain or police for `guided.calmFor` s, nothing unbreakable for `guided.clearFor` m). */
   readonly guided: boolean;
 
+  /** Police spawn pace from the traffic mods, before any district's own pace. */
+  private basePace = 1;
   /** Endless mode (prototype): no exit, no fuel. */
   readonly endless: boolean;
   private baseDecayMult = 1;
@@ -175,6 +177,7 @@ export class Sim {
     this.escort = new Escort(opts.seed, this.track);
     this.pursuit = new Pursuit(opts.seed, this);
     for (const m of this.mods) this.pursuit.pace *= TUNING.proto.mods[m].pace ?? 1;
+    this.basePace = this.pursuit.pace;
     const scratch: Unit[] = [];
     this.escort.solid = (a, b) => this.pursuit.solidBetween(a, b, scratch);
     this.track.occupied = (a, b) => this.pursuit.units.filter((u) => u.alive && u.unit !== 'chopper' && u.s + u.hl >= a && u.s - u.hl <= b);
@@ -346,7 +349,12 @@ export class Sim {
     }
     this.separateConvoy();
     const dk = this.track.segmentAt(this.giant.s).district;
-    if (dk !== undefined) this.asks.enter(dk, this.events);
+    if (dk !== undefined) {
+      this.asks.enter(dk, this.events);
+      // The story's peak district brings the police on faster too (2026-11-24: the finale is the run's hardest stretch).
+      const D = TUNING.proto.story.districts[Math.min(dk, TUNING.proto.story.districts.length - 1)];
+      this.pursuit.pace = this.basePace * (D.pace ?? 1);
+    }
     this.track.ensure(this.giant.s + TUNING.track.aheadDistance);
     if ((this.tick & 63) === 0) this.track.prune(this.giant.s);
     const g = this.giant;

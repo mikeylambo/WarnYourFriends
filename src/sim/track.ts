@@ -669,6 +669,9 @@ export class Track {
     if (!fits.length) return null;
     // Mostly at the current level, sometimes a breather from below.
     const top = fits.filter((c) => c.level >= level - 1);
+    const peak = this.district >= 0 && TUNING.proto.story.districts[Math.min(this.district, TUNING.proto.story.districts.length - 1)].peak;
+    const best = fits.filter((c) => c.level >= level);
+    if (peak && best.length) return this.rng.pick(best);
     return this.rng.pick(top.length && this.rng.chance(0.75) ? top : fits);
   }
 

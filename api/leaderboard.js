@@ -63,7 +63,7 @@ var TUNING = {
         // Four lanes, two directions (Mike, 2026-11-19): the oncoming side comes at him inside the walls.
         { zone: "tunnel", name: "Old Harbor Tunnel", segments: 16, level: 4, lanes: 4, oncoming: 2 },
         // The finale opens out to six lanes (Mike, 2026-11-18: the cover art's six-lane highway).
-        { zone: "highway", name: "Uptown Expressway", segments: 34, level: 5, lanes: 6, oncoming: 3 }
+        { zone: "highway", name: "Uptown Expressway", segments: 34, level: 5, lanes: 6, oncoming: 3, peak: true, pace: 1.4 }
       ]
     },
     /**
@@ -1450,6 +1450,9 @@ var CHUNKS = [
   // The finale is two-way the whole way (2026-11-19): more six-lane chunks with the left three oncoming.
   { id: "six-two-way-flow", lanes: 6, level: 4, oncoming: "ooo...", rows: [[0, "o.o.c."], [24, ".o...c"], [48, "o.oc.."], [72, ".o..v."], [96, "o.o..c"]] },
   { id: "six-two-way-dense", lanes: 6, level: 5, oncoming: "ooo...", rows: [[0, "oo...v"], [24, ".o.v.c"], [48, "o.oc.c"], [72, ".o..v."], [84, "o.o..."], [96, "oo.c.v"], [120, ".o.vc."]] },
+  // The finale is the run's peak (2026-11-24: the tunnel out-hit it): the forward side squeezed to one or two open lanes.
+  { id: "six-two-way-squeeze", lanes: 6, level: 5, oncoming: "ooo...", rows: [[0, "o.o.cv"], [24, ".o.c.v"], [48, "o.ocv."], [72, ".o.c.v"], [96, ".o..cv"]] },
+  { id: "six-two-way-weave", lanes: 6, level: 5, oncoming: "ooo...", rows: [[0, "o.o.cc"], [28, ".o.cc."], [56, "o.o.cv"], [84, ".o.vc."], [112, "oo..vc"]] },
   { id: "four-blockade", lanes: 4, level: 5, rows: [[0, "bdc."], [34, "c.vd"], [64, ".cbd"], [94, "cv.d"], [124, "d.cv"]] }
 ];
 var CHUNK_KINDS = { c: "car", v: "van", n: "newsvan", d: "dozer", b: "barricade", f: "foodtruck", s: "scoop", o: "car", t: "foodtruck" };
@@ -2019,6 +2022,9 @@ var Track = class {
     const fits = pool.filter((c) => c.lanes === lanes && c.level <= level && (!c.zones || c.zones.includes(zone)) && c.id !== this.lastChunkId && left(c));
     if (!fits.length) return null;
     const top = fits.filter((c) => c.level >= level - 1);
+    const peak = this.district >= 0 && TUNING.proto.story.districts[Math.min(this.district, TUNING.proto.story.districts.length - 1)].peak;
+    const best = fits.filter((c) => c.level >= level);
+    if (peak && best.length) return this.rng.pick(best);
     return this.rng.pick(top.length && this.rng.chance(0.75) ? top : fits);
   }
   place(kind, s, lane, seg, jitter = 0.2) {
@@ -3703,6 +3709,8 @@ var Sim = class {
   edition;
   /** First broadcast ever: a calm opening (no drain or police for `guided.calmFor` s, nothing unbreakable for `guided.clearFor` m). */
   guided;
+  /** Police spawn pace from the traffic mods, before any district's own pace. */
+  basePace = 1;
   /** Endless mode (prototype): no exit, no fuel. */
   endless;
   baseDecayMult = 1;
@@ -3719,6 +3727,7 @@ var Sim = class {
     this.escort = new Escort(opts.seed, this.track);
     this.pursuit = new Pursuit(opts.seed, this);
     for (const m of this.mods) this.pursuit.pace *= TUNING.proto.mods[m].pace ?? 1;
+    this.basePace = this.pursuit.pace;
     const scratch = [];
     this.escort.solid = (a, b) => this.pursuit.solidBetween(a, b, scratch);
     this.track.occupied = (a, b) => this.pursuit.units.filter((u) => u.alive && u.unit !== "chopper" && u.s + u.hl >= a && u.s - u.hl <= b);
@@ -3876,7 +3885,11 @@ var Sim = class {
     }
     this.separateConvoy();
     const dk = this.track.segmentAt(this.giant.s).district;
-    if (dk !== void 0) this.asks.enter(dk, this.events);
+    if (dk !== void 0) {
+      this.asks.enter(dk, this.events);
+      const D = TUNING.proto.story.districts[Math.min(dk, TUNING.proto.story.districts.length - 1)];
+      this.pursuit.pace = this.basePace * (D.pace ?? 1);
+    }
     this.track.ensure(this.giant.s + TUNING.track.aheadDistance);
     if ((this.tick & 63) === 0) this.track.prune(this.giant.s);
     const g = this.giant;

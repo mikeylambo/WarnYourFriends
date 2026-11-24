@@ -75,6 +75,9 @@ export const CHUNKS: Chunk[] = [
   // The finale is two-way the whole way (2026-11-19): more six-lane chunks with the left three oncoming.
   { id: 'six-two-way-flow', lanes: 6, level: 4, oncoming: 'ooo...', rows: [[0, 'o.o.c.'], [24, '.o...c'], [48, 'o.oc..'], [72, '.o..v.'], [96, 'o.o..c']] },
   { id: 'six-two-way-dense', lanes: 6, level: 5, oncoming: 'ooo...', rows: [[0, 'oo...v'], [24, '.o.v.c'], [48, 'o.oc.c'], [72, '.o..v.'], [84, 'o.o...'], [96, 'oo.c.v'], [120, '.o.vc.']] },
+  // The finale is the run's peak (2026-11-24: the tunnel out-hit it): the forward side squeezed to one or two open lanes.
+  { id: 'six-two-way-squeeze', lanes: 6, level: 5, oncoming: 'ooo...', rows: [[0, 'o.o.cv'], [24, '.o.c.v'], [48, 'o.ocv.'], [72, '.o.c.v'], [96, '.o..cv']] },
+  { id: 'six-two-way-weave', lanes: 6, level: 5, oncoming: 'ooo...', rows: [[0, 'o.o.cc'], [28, '.o.cc.'], [56, 'o.o.cv'], [84, '.o.vc.'], [112, 'oo..vc']] },
   { id: 'four-blockade', lanes: 4, level: 5, rows: [[0, 'bdc.'], [34, 'c.vd'], [64, '.cbd'], [94, 'cv.d'], [124, 'd.cv']] },
 ];
 
