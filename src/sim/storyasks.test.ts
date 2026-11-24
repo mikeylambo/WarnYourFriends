@@ -82,3 +82,32 @@ describe('target cars (2026-11-24)', () => {
     expect(crushed).toBeGreaterThan(0);
   }, 120_000);
 });
+
+describe('lane-changers (2026-11-24)', () => {
+  it('stay on the road, signal, and move a full lane before he arrives', async () => {
+    const { CHUNKS } = await import('./chunks');
+    for (const c of CHUNKS) for (const [, r] of c.rows) {
+      expect(r[0] === 'l', `${c.id}: 'l' in the leftmost lane`).toBe(false);
+      expect(r[c.lanes - 1] === 'r', `${c.id}: 'r' in the rightmost lane`).toBe(false);
+    }
+    let moved = 0;
+    for (let seed = 1; seed <= 6; seed++) {
+      const sim = new Sim({ seed, growth: true });
+      const bot = new Bot(sim);
+      const d0 = new Map<number, number>();
+      const last = new Map<number, string>();
+      for (let i = 0; i < 60 * 300 && sim.live; i++) {
+        sim.step(bot.input());
+        for (const p of sim.track.shifters) {
+          const sh = p.shift!;
+          if (!d0.has(p.id)) d0.set(p.id, p.d);
+          if (sh.state === 'move') expect(p.s - sim.giant.s).toBeGreaterThan(0);
+          if (sh.state === 'done' && last.get(p.id) === 'move' && Math.abs(p.d - d0.get(p.id)!) > TUNING.lanes.width - 0.01) moved++;
+          last.set(p.id, sh.state);
+          expect(sh.to).toBeGreaterThan(0);
+        }
+      }
+    }
+    expect(moved).toBeGreaterThan(3);
+  }, 120_000);
+});

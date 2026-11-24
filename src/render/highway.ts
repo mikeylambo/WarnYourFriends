@@ -449,6 +449,28 @@ export class HighwayView {
       g.position.set(this.pos.x, 0, this.pos.z);
       g.rotation.y = -track.headingAt(p.s) + (p.oncoming ? Math.PI : 0);
     }
+    // Lane-changers (2026-11-24): follow the sim across, the blinker on the side it's going, a little steer into it.
+    const blink = Math.sin(performance.now() / 120) > 0;
+    for (const p of track.shifters) {
+      const g = this.propViews.get(p.id);
+      const c = this.cars.get(p.id);
+      if (!g || !p.alive || !p.shift) continue;
+      const sh = p.shift;
+      track.posAt(p.s, p.d, this.pos);
+      g.position.set(this.pos.x, 0, this.pos.z);
+      const dir = Math.sign(sh.to - p.d);
+      const steer = sh.state === 'move' ? TUNING.traffic.shiftYawDeg * (Math.PI / 180) * dir * Math.sin(Math.PI * Math.min(1, sh.t / TUNING.proto.shift.time)) : 0;
+      const h = track.headingAt(p.s);
+      // Which body side faces +d: the body's local +z in the world against the road's +d direction.
+      g.rotation.y = -h - steer;
+      if (c) {
+        const across = { x: -Math.sin(h), z: Math.cos(h) };
+        const zSide = Math.sin(g.rotation.y) * across.x + Math.cos(g.rotation.y) * across.z > 0 ? 1 : 0;
+        const side = dir > 0 ? zSide : 1 - zSide;
+        const on = (sh.state === 'signal' || sh.state === 'move') && blink;
+        c.hazards.forEach((hz, i) => (hz.visible = on && i === side));
+      }
+    }
     for (const [id, g] of this.propViews) {
       if (!liveProps.has(id)) {
         this.group.remove(g);
@@ -1314,7 +1336,9 @@ export class HighwayView {
         this.spawnDebris(this.pos.x, this.pos.z, -Math.sin(this.sim.track.headingAt(p.s)) * c.brushDir, Math.cos(this.sim.track.headingAt(p.s)) * c.brushDir, 3, 6, [0xd9d2c4, 0x9fa4ad], [0.08, 0.2], 0.8);
         this.onBrush?.({ x: this.pos.x, z: this.pos.z });
       }
-      for (const hz of c.hazards) hz.visible = (c.braking || c.brushT >= 0) && blink;
+      // A lane-changer's blinker is set with its move (above); don't overwrite it while it signals or moves.
+      const sh = p.shift;
+      if (!sh || sh.state === 'wait' || sh.state === 'done') for (const hz of c.hazards) hz.visible = (c.braking || c.brushT >= 0) && blink;
       let off = 0;
       let yaw = 0;
       if (c.swerveT >= 0) {

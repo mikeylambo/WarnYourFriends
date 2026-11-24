@@ -55,6 +55,11 @@ export const CHUNKS: Chunk[] = [
   { id: 'four-scatter', lanes: 4, level: 1, rows: [[0, 'c..v'], [30, '.c..'], [60, '..vc'], [90, 'c...']] },
   { id: 'four-cones', lanes: 4, level: 1, rows: [[0, '.cc.'], [14, 's..s'], [26, 's..s'], [38, '.vv.'], [64, 'c..c']] },
   { id: 'four-dozers', lanes: 4, level: 2, rows: [[0, 'd..d'], [32, '.cc.'], [64, 'd..d']] },
+  // Cars that commit to a lane change (Mike, 2026-11-24): they signal as he closes in, then move over and stay.
+  { id: 'three-merge', lanes: 3, level: 2, rows: [[0, 'r..'], [30, '.c.'], [60, '..l'], [92, 'c..']] },
+  { id: 'three-switch', lanes: 3, level: 3, rows: [[0, '.r.'], [28, 'c..'], [56, '..l'], [84, '.c.'], [112, '.l.']] },
+  { id: 'four-merge', lanes: 4, level: 2, rows: [[0, 'r..c'], [30, '..l.'], [60, 'c.r.'], [92, '...l']] },
+  { id: 'four-cutin', lanes: 4, level: 4, rows: [[0, 'c.r.'], [32, '.l.c'], [64, 'r..v'], [96, '.c.l'], [128, '.cr.']] },
   { id: 'four-rival', lanes: 4, level: 2, rows: [[0, 'cv.c'], [32, '.cnv'], [64, 'c.vc'], [92, 's.s.']] },
   { id: 'four-wall', lanes: 4, level: 3, rows: [[0, 'cvc.'], [36, '.cvc'], [72, 'cv.c']] },
   { id: 'four-zig', lanes: 4, level: 4, rows: [[0, 'ccc.'], [38, '.ccc'], [76, 'ccc.'], [114, 'c.cc']] },
@@ -82,7 +87,7 @@ export const CHUNKS: Chunk[] = [
 ];
 
 /** The letters a chunk row may use, and what each places (`s` picks a small thing). */
-export const CHUNK_KINDS: Record<string, PropKind | 'small'> = { c: 'car', v: 'van', n: 'newsvan', d: 'dozer', b: 'barricade', f: 'foodtruck', s: 'scoop', o: 'car', t: 'foodtruck' };
+export const CHUNK_KINDS: Record<string, PropKind | 'small'> = { c: 'car', v: 'van', n: 'newsvan', d: 'dozer', b: 'barricade', f: 'foodtruck', s: 'scoop', o: 'car', t: 'foodtruck', l: 'car', r: 'car' };
 
 /** Lanes the solver can't use in a chunk: its oncoming lanes and any slow truck's lane. */
 export function closedLanes(c: Chunk): Set<number> {
@@ -94,7 +99,9 @@ export function closedLanes(c: Chunk): Set<number> {
 /** The same chunk with left and right swapped (endless mode: two-way stretches can run either side). */
 export function mirror(c: Chunk): Chunk {
   const rev = (s: string) => [...s].reverse().join('');
-  return { ...c, id: `${c.id}-mirrored`, rows: c.rows.map(([ds, r]) => [ds, rev(r)] as [number, string]), ...(c.oncoming ? { oncoming: rev(c.oncoming) } : {}) };
+  // A lane-changer mirrored moves the other way.
+  const flip = (s: string) => rev(s).replace(/[lr]/g, (x) => (x === 'l' ? 'r' : 'l'));
+  return { ...c, id: `${c.id}-mirrored`, rows: c.rows.map(([ds, r]) => [ds, flip(r)] as [number, string]), ...(c.oncoming ? { oncoming: rev(c.oncoming) } : {}) };
 }
 export const SMALL_KINDS: PropKind[] = ['sawhorse', 'cart', 'scooter', 'fence'];
 
@@ -110,7 +117,9 @@ export function chunkLength(c: Chunk): number {
  */
 export function solve(c: Chunk, opts = SOLVE): number[] {
   const closed = closedLanes(c);
-  const free = (row: string, l: number) => !closed.has(l) && (row[l] === '.' || row[l] === 's' || row[l] === 'n');
+  // A lane-changer ('l' moves one lane left, 'r' one right) blocks its own lane and the one it moves into, for the
+  // whole row: wherever it is when he gets there, the line holds (2026-11-24).
+  const free = (row: string, l: number) => !closed.has(l) && (row[l] === '.' || row[l] === 's' || row[l] === 'n') && row[l + 1] !== 'l' && row[l - 1] !== 'r';
   const shift = (ds: number) => Math.max(0, Math.floor(((ds - opts.clear) / opts.speed - opts.react) / opts.change));
   const stuck: number[] = [];
   for (let start = 0; start < c.lanes; start++) {

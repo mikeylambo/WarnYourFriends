@@ -329,6 +329,7 @@ export class Sim {
     this.stats.distancePoints += dp;
     this.stepLateral(dt);
     if (this.track.movers.length) this.track.stepMovers(dt, this.giant.s, this.giant.speed);
+    if (this.track.shifters.length) this.track.stepShifters(dt, this.giant.s);
     this.collide();
     this.judgePasses();
     const seg = this.track.segmentAt(this.giant.s);

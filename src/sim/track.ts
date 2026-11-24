@@ -595,6 +595,43 @@ export class Track {
   /** Chunk level (1–5) at `s`: climbs with distance and the run's segment. */
   /** Heavy Load (a traffic mod): every pick one level harder, capped at 5. */
   levelBonus = 0;
+  /** Lane-changers (chunk 'l' / 'r'): parked cars that move one lane over as he closes in. */
+  readonly shifters: Prop[] = [];
+
+  /** Signal at `shiftAt` m out, then move over in `shiftTime` s; a lane-changer whose new lane is taken stays put. */
+  stepShifters(dt: number, gs: number) {
+    const X = TUNING.proto.shift;
+    for (let i = this.shifters.length - 1; i >= 0; i--) {
+      const p = this.shifters[i];
+      const sh = p.shift!;
+      if (!p.alive || sh.state === 'done' || p.s < gs - 20) {
+        this.shifters.splice(i, 1);
+        continue;
+      }
+      if (sh.state === 'wait') {
+        if (p.s - gs > X.at) continue;
+        const taken = this.propsBetween(p.s - p.hl - 3, p.s + p.hl + 3).some((q) => q !== p && q.alive && Math.abs(q.d - sh.to) < q.hw + p.hw);
+        // Nor into a lane police traffic is coming up (a rolling blockade, a carrier): it would drive through it.
+        if (taken || this.vehicles(p.s - p.hl - 90, p.s + p.hl + 3).some((q) => Math.abs(q.d - sh.to) < q.hw + p.hw)) {
+          sh.state = 'done';
+          continue;
+        }
+        sh.state = 'signal';
+        sh.t = 0;
+      }
+      sh.t += dt;
+      if (sh.state === 'signal' && sh.t >= X.signal) {
+        sh.state = 'move';
+        sh.t = 0;
+      }
+      if (sh.state === 'move') {
+        const v = TUNING.lanes.width / X.time;
+        const dd = sh.to - p.d;
+        p.d += Math.sign(dd) * Math.min(Math.abs(dd), v * dt);
+        if (Math.abs(sh.to - p.d) < 1e-3) sh.state = 'done';
+      }
+    }
+  }
   /** Story districts as they're laid down (target cars go one per district). */
   readonly districtSpans: { k: number; s0: number; s1: number }[] = [];
   private targeted = new Set<number>();
@@ -688,6 +725,15 @@ export class Track {
           m.mover = { v: ch2 === 'o' ? -P.oncomingSpeed : P.truckSpeed, meet: at, min: ch.s0 - 2, max: ch.s0 + chunkLength(ch.c) + 6, active: false };
           if (ch2 === 'o') m.oncoming = true;
           this.movers.push(m);
+        } else if (ch2 === 'l' || ch2 === 'r') {
+          // A lane-changer: parked in its lane, it signals and moves over as he closes in.
+          this.place('car', at, l, seg);
+          const p = this.props[this.props.length - 1];
+          const to = l + (ch2 === 'l' ? -1 : 1);
+          if (to >= 0 && to < ch.c.lanes) {
+            p.shift = { to: this.laneCenter(to), state: 'wait', t: 0 };
+            this.shifters.push(p);
+          }
         } else this.place(k === 'small' ? this.rng.pick(SMALL_KINDS) : k, at, l, seg);
       }
       ch.last = s;

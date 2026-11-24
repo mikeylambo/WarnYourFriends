@@ -28,6 +28,8 @@ export interface Prop {
   closest?: number;
   /** A target car: breaks in Stride, pays `proto.target` points (doubled in Rampage). */
   bounty?: boolean;
+  /** A lane-changer (chunk 'l' / 'r'): where it moves to and how far along it is. */
+  shift?: { to: number; state: 'wait' | 'signal' | 'move' | 'done'; t: number };
   /** Segment index it belongs to (for streaming). */
   segment: number;
   /** Rampage timing (2026-11-17): breaks only in Rampage (concrete, police roadblocks); unbreakable until then. */

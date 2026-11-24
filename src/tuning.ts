@@ -116,6 +116,8 @@ export const TUNING = {
     /** District set pieces: the first lands this long after he enters (after the title card); the theme's spawn weight ×. */
     themeDelay: 6,
     themeWeight: 4,
+    /** Lane-changers: signal when he's `at` m out (~3.5s at Stride), for `signal` s, then move a lane over in `time` s; done well before he arrives, so what he reads is what he meets. */
+    shift: { at: 70, signal: 0.7, time: 1.1 },
     noBrake: true,
     firstChunk: 150,
     chunkReact: 0.45,
@@ -1173,6 +1175,8 @@ export const TUNING = {
     /** Only cars within this many metres across the road react. */
     lateralReach: 7,
     /** Visual swerve: lateral nudge (m) and yaw (deg) inside the car's own footprint; the hitbox doesn't move. */
+    /** A lane-changer steers into its move by this much at mid-move (deg). */
+    shiftYawDeg: 9,
     swerveOffset: 0, // off (Mike, 2026-11-24: the half-swerve looked tacky; cars hold their lane)
     swerveYawDeg: 0,
     /** At most one honk this often (s). */

@@ -147,8 +147,10 @@ export class Bot {
       for (const p of solid.filter((x) => x.alive && sim.rankOf(x) > rank).sort((a, b) => a.s - b.s)) {
         const lane = Math.max(0, Math.min(lanes - 1, Math.floor(p.d / W)));
         const last = rows[rows.length - 1];
-        if (last && p.s - g.s - last.ds < 3) last.blocked.add(lane);
-        else rows.push({ ds: p.s - g.s, blocked: new Set([lane]) });
+        const row = last && p.s - g.s - last.ds < 3 ? last : (rows.push({ ds: p.s - g.s, blocked: new Set<number>() }), rows[rows.length - 1]);
+        row.blocked.add(lane);
+        // A lane-changer still to move: its new lane counts too.
+        if (p.shift && p.shift.state !== 'done') row.blocked.add(Math.max(0, Math.min(lanes - 1, Math.floor(p.shift.to / W))));
       }
       // Moving traffic (oncoming cars, slow trucks): it won't be where it is now, so treat its lane as closed throughout.
       const movingLanes = new Set(track.movers.filter((m) => m.alive && m.mover?.active && m.s > g.s - 4 && m.s < g.s + g.speed * 4).map((m) => Math.max(0, Math.min(lanes - 1, Math.floor(m.d / W)))));

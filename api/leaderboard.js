@@ -30,6 +30,8 @@ var TUNING = {
     /** District set pieces: the first lands this long after he enters (after the title card); the theme's spawn weight ×. */
     themeDelay: 6,
     themeWeight: 4,
+    /** Lane-changers: signal when he's `at` m out (~3.5s at Stride), for `signal` s, then move a lane over in `time` s; done well before he arrives, so what he reads is what he meets. */
+    shift: { at: 70, signal: 0.7, time: 1.1 },
     noBrake: true,
     firstChunk: 150,
     chunkReact: 0.45,
@@ -1153,6 +1155,8 @@ var TUNING = {
     /** Only cars within this many metres across the road react. */
     lateralReach: 7,
     /** Visual swerve: lateral nudge (m) and yaw (deg) inside the car's own footprint; the hitbox doesn't move. */
+    /** A lane-changer steers into its move by this much at mid-move (deg). */
+    shiftYawDeg: 9,
     swerveOffset: 0,
     // off (Mike, 2026-11-24: the half-swerve looked tacky; cars hold their lane)
     swerveYawDeg: 0,
@@ -1463,6 +1467,11 @@ var CHUNKS = [
   { id: "four-scatter", lanes: 4, level: 1, rows: [[0, "c..v"], [30, ".c.."], [60, "..vc"], [90, "c..."]] },
   { id: "four-cones", lanes: 4, level: 1, rows: [[0, ".cc."], [14, "s..s"], [26, "s..s"], [38, ".vv."], [64, "c..c"]] },
   { id: "four-dozers", lanes: 4, level: 2, rows: [[0, "d..d"], [32, ".cc."], [64, "d..d"]] },
+  // Cars that commit to a lane change (Mike, 2026-11-24): they signal as he closes in, then move over and stay.
+  { id: "three-merge", lanes: 3, level: 2, rows: [[0, "r.."], [30, ".c."], [60, "..l"], [92, "c.."]] },
+  { id: "three-switch", lanes: 3, level: 3, rows: [[0, ".r."], [28, "c.."], [56, "..l"], [84, ".c."], [112, ".l."]] },
+  { id: "four-merge", lanes: 4, level: 2, rows: [[0, "r..c"], [30, "..l."], [60, "c.r."], [92, "...l"]] },
+  { id: "four-cutin", lanes: 4, level: 4, rows: [[0, "c.r."], [32, ".l.c"], [64, "r..v"], [96, ".c.l"], [128, ".cr."]] },
   { id: "four-rival", lanes: 4, level: 2, rows: [[0, "cv.c"], [32, ".cnv"], [64, "c.vc"], [92, "s.s."]] },
   { id: "four-wall", lanes: 4, level: 3, rows: [[0, "cvc."], [36, ".cvc"], [72, "cv.c"]] },
   { id: "four-zig", lanes: 4, level: 4, rows: [[0, "ccc."], [38, ".ccc"], [76, "ccc."], [114, "c.cc"]] },
@@ -1488,10 +1497,11 @@ var CHUNKS = [
   { id: "six-two-way-weave", lanes: 6, level: 5, oncoming: "ooo...", rows: [[0, "o.o.cc"], [28, ".o.cc."], [56, "o.o.cv"], [84, ".o.vc."], [112, "oo..vc"]] },
   { id: "four-blockade", lanes: 4, level: 5, rows: [[0, "bdc."], [34, "c.vd"], [64, ".cbd"], [94, "cv.d"], [124, "d.cv"]] }
 ];
-var CHUNK_KINDS = { c: "car", v: "van", n: "newsvan", d: "dozer", b: "barricade", f: "foodtruck", s: "scoop", o: "car", t: "foodtruck" };
+var CHUNK_KINDS = { c: "car", v: "van", n: "newsvan", d: "dozer", b: "barricade", f: "foodtruck", s: "scoop", o: "car", t: "foodtruck", l: "car", r: "car" };
 function mirror(c) {
   const rev = (s) => [...s].reverse().join("");
-  return { ...c, id: `${c.id}-mirrored`, rows: c.rows.map(([ds, r]) => [ds, rev(r)]), ...c.oncoming ? { oncoming: rev(c.oncoming) } : {} };
+  const flip = (s) => rev(s).replace(/[lr]/g, (x) => x === "l" ? "r" : "l");
+  return { ...c, id: `${c.id}-mirrored`, rows: c.rows.map(([ds, r]) => [ds, flip(r)]), ...c.oncoming ? { oncoming: rev(c.oncoming) } : {} };
 }
 var SMALL_KINDS = ["sawhorse", "cart", "scooter", "fence"];
 function chunkLength(c) {
@@ -1988,6 +1998,41 @@ var Track = class {
   /** Chunk level (1–5) at `s`: climbs with distance and the run's segment. */
   /** Heavy Load (a traffic mod): every pick one level harder, capped at 5. */
   levelBonus = 0;
+  /** Lane-changers (chunk 'l' / 'r'): parked cars that move one lane over as he closes in. */
+  shifters = [];
+  /** Signal at `shiftAt` m out, then move over in `shiftTime` s; a lane-changer whose new lane is taken stays put. */
+  stepShifters(dt, gs) {
+    const X = TUNING.proto.shift;
+    for (let i = this.shifters.length - 1; i >= 0; i--) {
+      const p = this.shifters[i];
+      const sh = p.shift;
+      if (!p.alive || sh.state === "done" || p.s < gs - 20) {
+        this.shifters.splice(i, 1);
+        continue;
+      }
+      if (sh.state === "wait") {
+        if (p.s - gs > X.at) continue;
+        const taken = this.propsBetween(p.s - p.hl - 3, p.s + p.hl + 3).some((q) => q !== p && q.alive && Math.abs(q.d - sh.to) < q.hw + p.hw);
+        if (taken || this.vehicles(p.s - p.hl - 90, p.s + p.hl + 3).some((q) => Math.abs(q.d - sh.to) < q.hw + p.hw)) {
+          sh.state = "done";
+          continue;
+        }
+        sh.state = "signal";
+        sh.t = 0;
+      }
+      sh.t += dt;
+      if (sh.state === "signal" && sh.t >= X.signal) {
+        sh.state = "move";
+        sh.t = 0;
+      }
+      if (sh.state === "move") {
+        const v = TUNING.lanes.width / X.time;
+        const dd = sh.to - p.d;
+        p.d += Math.sign(dd) * Math.min(Math.abs(dd), v * dt);
+        if (Math.abs(sh.to - p.d) < 1e-3) sh.state = "done";
+      }
+    }
+  }
   /** Story districts as they're laid down (target cars go one per district). */
   districtSpans = [];
   targeted = /* @__PURE__ */ new Set();
@@ -2076,6 +2121,14 @@ var Track = class {
           m.mover = { v: ch2 === "o" ? -P.oncomingSpeed : P.truckSpeed, meet: at, min: ch.s0 - 2, max: ch.s0 + chunkLength(ch.c) + 6, active: false };
           if (ch2 === "o") m.oncoming = true;
           this.movers.push(m);
+        } else if (ch2 === "l" || ch2 === "r") {
+          this.place("car", at, l, seg);
+          const p = this.props[this.props.length - 1];
+          const to = l + (ch2 === "l" ? -1 : 1);
+          if (to >= 0 && to < ch.c.lanes) {
+            p.shift = { to: this.laneCenter(to), state: "wait", t: 0 };
+            this.shifters.push(p);
+          }
         } else this.place(k === "small" ? this.rng.pick(SMALL_KINDS) : k, at, l, seg);
       }
       ch.last = s;
@@ -3995,6 +4048,7 @@ var Sim = class {
     this.stats.distancePoints += dp;
     this.stepLateral(dt);
     if (this.track.movers.length) this.track.stepMovers(dt, this.giant.s, this.giant.speed);
+    if (this.track.shifters.length) this.track.stepShifters(dt, this.giant.s);
     this.collide();
     this.judgePasses();
     const seg = this.track.segmentAt(this.giant.s);
