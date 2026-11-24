@@ -1233,6 +1233,8 @@ var TUNING = {
   },
   /** Phase 0c look: night by default; LIVE TIME follows the local clock. */
   look: {
+    /** Art pass (2026-11-24): the ink outline on vehicles (m per side), matching the giant's. */
+    inkWidth: 0.06,
     /** Bloom (Settings; review #66): only the brightest things glow (lights, sparks, embers, lit windows at night). */
     /** By look: daylight lifts the road and cars near white, so the day threshold sits above them (Mike, 2026-11-18: "entirely too much"). */
     bloom: { radius: 0.35, night: { strength: 0.55, threshold: 0.82 }, dusk: { strength: 0.35, threshold: 0.9 }, day: { strength: 0.15, threshold: 0.97 } },

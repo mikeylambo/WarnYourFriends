@@ -9,6 +9,7 @@ import { KIND_COLORS, MATERIAL_DEBRIS, PALETTE } from './palette';
 import { crackTexture, isToonCached, toon, toonRamp } from './toon';
 import { GLOW, facade } from './glow';
 import type { LampPos } from './lighting';
+import { TILE, groundTexture, type GroundTex } from './textures';
 
 const basicMats = new Map<number, THREE.MeshBasicMaterial>();
 /** Unlit double-sided colour, one material per colour (was one per sweep). */
@@ -20,6 +21,8 @@ function basicDouble(color: number): THREE.MeshBasicMaterial {
 
 /** A unit cone (trees), scaled per tree (review #48: a new ConeGeometry per tree). Shared: never disposed. */
 const UNIT_CONE = new THREE.ConeGeometry(1, 1, 6);
+/** Round trees (art pass): a faceted ball, squashed per tree. Shared: never disposed. */
+const UNIT_ICO = new THREE.IcosahedronGeometry(1, 0);
 const batchable = (m: THREE.Mesh) => ((m.userData.batch = true), m);
 
 /** One flat 1×1 plane (lane dashes, light pools, chevrons, throws), scaled per mesh. Shared: never disposed. */
@@ -36,7 +39,7 @@ function freeSegment(g: THREE.Object3D, box: THREE.BufferGeometry) {
   g.traverse((o) => {
     const m = o as THREE.Mesh;
     if ((m as THREE.InstancedMesh).isInstancedMesh) (m as THREE.InstancedMesh).dispose();
-    if (m.geometry && m.geometry !== box && m.geometry !== FLAT_PLANE && m.geometry !== UNIT_CONE) m.geometry.dispose();
+    if (m.geometry && m.geometry !== box && m.geometry !== FLAT_PLANE && m.geometry !== UNIT_CONE && m.geometry !== UNIT_ICO) m.geometry.dispose();
     const mat = m.material as THREE.Material | undefined;
     if (mat && !Array.isArray(mat) && mat.transparent && !isToonCached(mat)) mat.dispose();
   });
@@ -257,27 +260,64 @@ export function partsFor(p: Prop): Part[] {
 const UNIT_BOX = new THREE.BoxGeometry(1, 1, 1);
 const UNIT_WHEEL = new THREE.CylinderGeometry(0.5, 0.5, 1, 12).rotateX(Math.PI / 2); // axis across the vehicle
 const bodyGeos = new Map<string, THREE.BufferGeometry>();
+/** Textured ground (art pass): one shared toon material per colour and texture, the UVs in metres scaled by its tile. */
+const groundMats = new Map<string, THREE.MeshToonMaterial>();
+function groundMat(color: number, name: GroundTex): THREE.MeshToonMaterial {
+  const key = `${color}:${name}`;
+  let m = groundMats.get(key);
+  if (!m) {
+    const map = groundTexture(name).clone();
+    map.repeat.set(1 / TILE[name], 1 / TILE[name]);
+    map.needsUpdate = true;
+    groundMats.set(key, (m = new THREE.MeshToonMaterial({ color, map, gradientMap: toonRamp(), side: THREE.DoubleSide })));
+  }
+  return m;
+}
+/**
+ * Art pass (2026-11-24): the giant's ink outline on every vehicle, so the world and he read as one style. Each part's
+ * box grown by `inkWidth` m per side, drawn back-faces-only in ink; merged into the body's geometry as a second group,
+ * so it's one extra draw per vehicle, not one per part.
+ */
+const INK = new THREE.MeshBasicMaterial({ color: PALETTE.giantOutline, side: THREE.BackSide });
 export function propBody(p: Pick<Prop, 'kind' | 'hl' | 'hw'>, kc: number): THREE.Mesh {
   const key = `${p.kind}:${kc}:${p.hl}:${p.hw}`;
   let geo = bodyGeos.get(key);
   if (!geo) {
     const col = new THREE.Color();
-    const parts = partsFor(p as Prop).map(([x, y, z, w, h, d, c, shape, tilt]) => {
-      const g = (shape === 'wheel' ? UNIT_WHEEL : UNIT_BOX).clone();
-      g.scale(w, h, d);
-      if (tilt) g.rotateZ(tilt);
-      g.translate(x, y, z);
+    const t = TUNING.look.inkWidth;
+    const body: THREE.BufferGeometry[] = [];
+    const hull: THREE.BufferGeometry[] = [];
+    const all = partsFor(p as Prop);
+    // Thin things (fences, toll arms) are all thin parts: outline every part so the hull is never empty.
+    const thinOnly = all.every(([, , , w, h, d, , shape]) => Math.min(w, h, d) < 0.2 && shape !== 'wheel');
+    for (const [x, y, z, w, h, d, c, shape, tilt] of all) {
+      const make = (grow: number) => {
+        const g = (shape === 'wheel' ? UNIT_WHEEL : UNIT_BOX).clone();
+        g.scale(w + grow * 2, h + grow * 2, d + grow * 2);
+        if (tilt) g.rotateZ(tilt);
+        g.translate(x, y, z);
+        return g;
+      };
+      const g = make(0);
       col.setHex(c === 'kind' ? kc : c);
       const n = g.getAttribute('position').count;
       const arr = new Float32Array(n * 3);
       for (let i = 0; i < n; i++) arr.set([col.r, col.g, col.b], i * 3);
       g.setAttribute('color', new THREE.BufferAttribute(arr, 3));
-      return g;
-    });
-    geo = mergeGeometries(parts)!;
+      body.push(g);
+      // Thin parts (glass, stripes, trim) sit on the body: only the bigger shapes get an outline, so it stays a silhouette.
+      if (thinOnly || Math.min(w, h, d) >= 0.2 || shape === 'wheel') {
+        const hg = make(t);
+        hg.setAttribute('color', new THREE.BufferAttribute(new Float32Array(hg.getAttribute('position').count * 3), 3));
+        hull.push(hg);
+      }
+    }
+    const b = mergeGeometries(body)!;
+    const hl = mergeGeometries(hull)!;
+    geo = mergeGeometries([b, hl], true)!;
     bodyGeos.set(key, geo);
   }
-  return new THREE.Mesh(geo, toon(0xffffff, { vertexColors: true }));
+  return new THREE.Mesh(geo, [toon(0xffffff, { vertexColors: true }), INK]);
 }
 
 interface Debris {
@@ -517,6 +557,7 @@ export class HighwayView {
   /** Sweep cross-sections along the segment's samples into one geometry. */
   private sweep(seg: Segment, section: (i: number, s: number, w: number) => [number, number][], from = 0, to = seg.length): THREE.BufferGeometry {
     const verts: number[] = [];
+    const uvs: number[] = [];
     const idx: number[] = [];
     let k = 0;
     let prevCount = -1;
@@ -527,7 +568,10 @@ export class HighwayView {
       const h = seg.hs[i];
       const rx = -Math.sin(h);
       const rz = Math.cos(h);
-      for (const [d, y] of sec) verts.push(seg.xs[i] + rx * d, y, seg.zs[i] + rz * d);
+      for (const [d, y] of sec) {
+        verts.push(seg.xs[i] + rx * d, y, seg.zs[i] + rz * d);
+        uvs.push(d, s); // metres; ground textures scale by their tile size
+      }
       if (prevCount === sec.length) {
         const n = sec.length;
         const a0 = k - n;
@@ -538,6 +582,7 @@ export class HighwayView {
     }
     const g = new THREE.BufferGeometry();
     g.setAttribute('position', new THREE.Float32BufferAttribute(verts, 3));
+    g.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
     g.setIndex(idx);
     g.computeVertexNormals();
     return g;
@@ -564,20 +609,20 @@ export class HighwayView {
     const group = new THREE.Group();
     const W = TUNING.lanes.width;
     const wallH = TUNING.track.wallHeight;
-    const add = (geo: THREE.BufferGeometry, color: number, basic = false, paint = false) => {
-      const m = new THREE.Mesh(geo, basic ? basicDouble(color) : toon(color, paint ? { side: THREE.DoubleSide, emissive: PAINT_GLOW } : { side: THREE.DoubleSide }));
+    const add = (geo: THREE.BufferGeometry, color: number, basic = false, paint = false, tex?: GroundTex) => {
+      const m = new THREE.Mesh(geo, tex ? groundMat(color, tex) : basic ? basicDouble(color) : toon(color, paint ? { side: THREE.DoubleSide, emissive: PAINT_GLOW } : { side: THREE.DoubleSide }));
       group.add(m);
       return m;
     };
     // Ground either side, by zone (Phase 2 road variety).
     const zone = seg.zone;
     if (zone === 'highway') {
-      add(this.sweep(seg, () => [[-8, 0], [-0.9, 0.01]]), PALETTE.verge);
-      add(this.sweep(seg, (_i, s) => [[this.edgeW(s) + 0.9, 0.01], [this.edgeW(s) + 8, 0]]), PALETTE.verge);
+      add(this.sweep(seg, () => [[-8, 0], [-0.9, 0.01]]), PALETTE.verge, false, false, 'verge');
+      add(this.sweep(seg, (_i, s) => [[this.edgeW(s) + 0.9, 0.01], [this.edgeW(s) + 8, 0]]), PALETTE.verge, false, false, 'verge');
     } else if (zone === 'avenue') {
       // Sidewalks with a curb face.
-      add(this.sweep(seg, () => [[-6, 0.16], [-0.9, 0.16], [-0.9, 0]]), PALETTE.sidewalk);
-      add(this.sweep(seg, (_i, s) => [[this.edgeW(s) + 0.9, 0], [this.edgeW(s) + 0.9, 0.16], [this.edgeW(s) + 6, 0.16]]), PALETTE.sidewalk);
+      add(this.sweep(seg, () => [[-6, 0.16], [-0.9, 0.16], [-0.9, 0]]), PALETTE.sidewalk, false, false, 'paving');
+      add(this.sweep(seg, (_i, s) => [[this.edgeW(s) + 0.9, 0], [this.edgeW(s) + 0.9, 0.16], [this.edgeW(s) + 6, 0.16]]), PALETTE.sidewalk, false, false, 'paving');
     } else if (zone === 'bridge') {
       // Open water under a deck slab.
       add(this.sweep(seg, (_i, s) => [[-160, -0.03], [this.edgeW(s) + 160, -0.03]]), PALETTE.water);
@@ -585,7 +630,7 @@ export class HighwayView {
     } else {
       add(this.sweep(seg, (_i, s) => [[-1.6, 0.01], [this.edgeW(s) + 1.6, 0.01]]), PALETTE.deck);
     }
-    add(this.sweep(seg, (_i, s) => [[-0.9, 0.02], [this.edgeW(s) + 0.9, 0.02]]), PALETTE.road);
+    add(this.sweep(seg, (_i, s) => [[-0.9, 0.02], [this.edgeW(s) + 0.9, 0.02]]), PALETTE.road, false, false, 'asphalt');
     add(this.sweep(seg, () => [[0.15, 0.035], [0.35, 0.035]]), PALETTE.edgeLineLeft, false, true);
     add(this.sweep(seg, (_i, _s, w) => [[w - 0.35, 0.035], [w - 0.15, 0.035]]), PALETTE.edgeLineRight, false, true);
     // Edge barriers (the sim's walls): concrete on the highway, a curb on the avenue,
@@ -677,14 +722,27 @@ export class HighwayView {
       const ss = seg.s0 + rng.range(0, seg.length);
       this.sim.track.posAt(ss, left ? -off : this.edgeW(ss) + off, this.pos);
       const scale = rng.range(0.8, 1.5);
-      const crown = new THREE.Mesh(UNIT_CONE, toon(rng.pick(PALETTE.tree)));
-      crown.scale.set(2.2 * scale, 5 * scale, 2.2 * scale);
-      crown.position.set(this.pos.x, 3.5 * scale, this.pos.z);
+      // Art pass (2026-11-24): pines (two stacked cones) and round trees (a faceted ball), each with the giant's ink
+      // outline (a back-face copy grown a touch). All batched: a handful of instanced draws per segment.
+      const tint = rng.pick(PALETTE.tree);
+      const parts: [THREE.BufferGeometry, number, number, number][] = rng.chance(0.55)
+        ? [[UNIT_CONE, 2.6, 3.6, 2.6], [UNIT_CONE, 1.9, 3.0, 4.6]] // [geo, radius, height, y]
+        : [[UNIT_ICO, 2.3, 2.0, 3.6]];
+      for (const [geo, r, hh, y] of parts) {
+        const crown = new THREE.Mesh(geo, toon(tint));
+        crown.scale.set(r * scale, hh * scale, r * scale);
+        crown.position.set(this.pos.x, y * scale, this.pos.z);
+        const ink = new THREE.Mesh(geo, INK);
+        ink.scale.copy(crown.scale).multiplyScalar(1.04);
+        ink.position.copy(crown.position);
+        crown.userData.batch = ink.userData.batch = true;
+        group.add(crown, ink);
+      }
       const trunk = new THREE.Mesh(this.box, toon(PALETTE.trunk));
-      crown.userData.batch = trunk.userData.batch = true;
-      trunk.scale.set(0.4, 1.5 * scale, 0.4);
-      trunk.position.set(this.pos.x, 0.75 * scale, this.pos.z);
-      group.add(crown, trunk);
+      trunk.userData.batch = true;
+      trunk.scale.set(0.45, 2.2 * scale, 0.45);
+      trunk.position.set(this.pos.x, 1.1 * scale, this.pos.z);
+      group.add(trunk);
     }
     if (rng.chance(0.35)) {
       const left = rng.chance(0.5);

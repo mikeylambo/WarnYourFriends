@@ -41,7 +41,7 @@ Status: `[ ]` todo · `[~]` in progress · `[x]` done
 ## M2 — Next
 
 ### Art cohesion
-- [ ] Roads, trees and cars up to the giant's level (lighting stays). Options: Meshy (credits), GPT image → image-to-3D elsewhere, or a hand-authored stylized low-poly kit in code (no credits; consistent by construction).
+- [~] Roads, trees and cars up to the giant's level (code pass done 2026-11-24: ink outlines on vehicles and trees, pines + round trees, textured asphalt/verge/paving; painted textures pending, prompts in `docs/TEXTURE-PROMPTS.md`) (lighting stays). Options: Meshy (credits), GPT image → image-to-3D elsewhere, or a hand-authored stylized low-poly kit in code (no credits; consistent by construction).
 
 ### Performance
 - [ ] 60 fps on a mid-range Android and an older iPhone; load < 5 s; draw-call budget (`tools/perf-draws.mjs`) held.
