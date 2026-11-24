@@ -61,7 +61,9 @@ export class Input {
   private ability2Edge = false;
   private pauseEdge = false;
   private touch: { id: number; sx: number; sy: number; x: number; y: number; t0: number; fired: boolean } | null = null;
-  private pad = { flickArmed: true, left: false, right: false, rb: false, lb: false, y: false, start: false, brake: false };
+  private pad = { flickArmed: true, left: false, right: false, rb: false, lb: false, y: false, start: false, brake: false, cam: false };
+  /** Next camera angle (Mike, 2026-11-24: C on keyboard, D-pad up or R3 on a pad, the camera button on touch). */
+  private cameraEdge = false;
   onPadDisconnect: (() => void) | null = null;
   onAnyInput: (() => void) | null = null;
 
@@ -199,6 +201,17 @@ export class Input {
     return this.touch ? { ...this.touch, braking: this.touchBrake } : null;
   }
 
+  consumeCamera(): boolean {
+    this.pollPad();
+    const c = this.cameraEdge;
+    this.cameraEdge = false;
+    return c;
+  }
+  /** Keyboard C and the touch camera button. */
+  pressCamera() {
+    this.cameraEdge = true;
+  }
+
   consumePause(): boolean {
     this.pollPad();
     const p = this.pauseEdge;
@@ -230,6 +243,9 @@ export class Input {
     const y = pressed(3);
     if (y && !P.y) this.ability2Edge = true;
     P.y = y;
+    const cam = pressed(12) || pressed(11);
+    if (cam && !P.cam) this.cameraEdge = true;
+    P.cam = cam;
     // Stick flick: one lane per flick; re-arms when the stick comes back.
     const lx = gp.axes[0] ?? 0;
     if (P.flickArmed && Math.abs(lx) >= I.flickThreshold) {
@@ -257,7 +273,7 @@ export class Input {
   sample(): SimInput {
     this.pollPad();
     const held = this.keymap.brake.some((k) => this.keys.has(k)) || this.pad.brake || this.touchBrake;
-    const brake = this.capturing ? false : this.brakeToggle ? this.brakeLatch : held;
+    const brake = this.capturing || (TUNING.proto.on && TUNING.proto.noBrake) ? false : this.brakeToggle ? this.brakeLatch : held;
     if (this.capturing) this.laneEdge = 0;
     const lane = this.laneEdge;
     const shoulder = this.shoulderEdge;

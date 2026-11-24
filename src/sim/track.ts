@@ -594,6 +594,8 @@ export class Track {
   /** Chunk level (1–5) at `s`: climbs with distance and the run's segment. */
   /** Heavy Load (a traffic mod): every pick one level harder, capped at 5. */
   levelBonus = 0;
+  /** Heavy Load: every district takes only its top-level chunks (no breathers), like the finale. */
+  allPeak = false;
 
   levelAt(s: number): number {
     if (this.district >= 0) return Math.min(5, TUNING.proto.story.districts[Math.min(this.district, TUNING.proto.story.districts.length - 1)].level + this.levelBonus);
@@ -673,7 +675,7 @@ export class Track {
     const top = fits.filter((c) => c.level >= level - 1);
     const peak = this.district >= 0 && TUNING.proto.story.districts[Math.min(this.district, TUNING.proto.story.districts.length - 1)].peak;
     const best = fits.filter((c) => c.level >= level);
-    if (peak && best.length) return this.rng.pick(best);
+    if ((peak || this.allPeak) && best.length) return this.rng.pick(best);
     return this.rng.pick(top.length && this.rng.chance(0.75) ? top : fits);
   }
 

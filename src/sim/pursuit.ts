@@ -277,6 +277,8 @@ export class Pursuit {
     const sim = this.sim;
     // A roadblock still ahead of him (the finale's included) owns the next tell: nothing else joins until it's passed.
     if (this.units.some((u) => u.alive && u.unit === 'roadblock' && u.s > sim.giant.s)) return false;
+    // No brake in the pivot loop (Mike, 2026-11-24), and braking out the back was the Net's way out: no Nets.
+    if (k === 'net' && TUNING.proto.on && TUNING.proto.noBrake) return false;
     if (k === 'net') {
       const N = TUNING.pursuit.net;
       if (this.nets >= N.perSegment[Math.min(sim.show.segment, N.perSegment.length - 1)] || sim.time - this.netAt < N.minGap) return false;

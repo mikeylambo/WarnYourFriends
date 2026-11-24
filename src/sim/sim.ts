@@ -180,7 +180,10 @@ export class Sim {
     this.endless = !!opts.endless;
     this.track = new Track(opts.seed, opts.segment ?? 0, this.guided, this.edition.hard, this.endless);
     this.mods = (opts.mods ?? []).filter((m) => m in TUNING.proto.mods);
-    if (this.mods.includes('heavyLoad')) this.track.levelBonus = 1;
+    if (this.mods.includes('heavyLoad')) {
+      this.track.levelBonus = 1;
+      this.track.allPeak = true; // Mike, 2026-11-24: "barely noticed the difference"
+    }
     this.escort = new Escort(opts.seed, this.track);
     this.pursuit = new Pursuit(opts.seed, this);
     for (const m of this.mods) this.pursuit.pace *= TUNING.proto.mods[m].pace ?? 1;

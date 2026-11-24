@@ -490,7 +490,9 @@ export class GiantView {
   /** Cape top corners: the clasp side sits low under the pauldron, the far side over the bare shoulder. */
   private capeAnchor(clasp: boolean, out: THREE.Vector3): THREE.Vector3 {
     const S = PAULDRON_SIDE;
-    return this.torso.localToWorld(clasp ? out.set(-0.66, 1.2, S * 0.62) : out.set(-0.66, 1.4, -S * 0.6));
+    // Across the upper back, under the shoulder blades (Mike, 2026-11-24: it hung from his low back).
+    const M = TUNING.giantModel;
+    return this.torso.localToWorld(clasp ? out.set(-0.66, M.capeClaspY, S * 0.62) : out.set(-0.66, M.capeClaspY + 0.2, -S * 0.6));
   }
 
   /**

@@ -43,6 +43,8 @@ applyStoredTuning();
 const PROTO = !new URLSearchParams(location.search).has('classic');
 /** Playtest tools (play data export, live tuning on T): ?playtest=1 only, hidden from players (release pass, 2026-11-24). */
 const PLAYTEST = new URLSearchParams(location.search).has('playtest');
+/** No brake in the pivot loop (TUNING.proto.noBrake): its prompts, hints and binds are hidden. */
+const NOBRAKE = PROTO && TUNING.proto.noBrake;
 if (PROTO) {
   enableProto();
   document.documentElement.classList.add('proto');
@@ -339,6 +341,11 @@ const triggerLog: { t: number; kind: string }[] = [];
 let bot: Bot | null = null;
 const audio = new Audio();
 const input = new Input(canvas, $('btn-shoulder'), $('btn-pause'), $('btn-ability'), document.getElementById('btn-ability2'));
+$('btn-cam').addEventListener('pointerdown', (e) => {
+  e.preventDefault();
+  e.stopPropagation();
+  input.pressCamera();
+});
 /** Accessibility settings into the input layer: rebound keys and the brake toggle. */
 function applyControls() {
   input.keymap = settings.keys ? (Object.fromEntries(KEY_ACTIONS.map((a) => [a, [settings.keys![a]]])) as Record<KeyAction, string[]>) : { ...DEFAULT_KEYS };
@@ -364,7 +371,7 @@ const onboarding = new Onboarding($('prompt'), (id: PromptId) => {
     audience: `Audience dropping: smash something`,
     kite: `Steer the police car beside you into what's ahead of it`,
     boxed: `Boxed in: ${k('brake')} and drop out the back, or Rampage through (${fire})`,
-    caught: settings.brakeToggle ? `Police on your tail: press ${k('brake')} again and run` : `Police on your tail: let go of ${k('brake')} and run`,
+    caught: NOBRAKE ? 'Police on your tail: get back up to speed' : settings.brakeToggle ? `Police on your tail: press ${k('brake')} again and run` : `Police on your tail: let go of ${k('brake')} and run`,
     exit: `Exit open: get to the far-right lane`,
     ability: ab ? `<b>${esc(ab.label.toUpperCase())}</b> ${k('ability')} ${esc(ab.blurb)}` : '',
     ability2: ab2 ? `<b>${esc(ab2.label.toUpperCase())}</b> ${k('ability2')} ${esc(ab2.blurb)}` : '',
@@ -872,7 +879,7 @@ function openControls(): Promise<void> {
     const K = current();
     recapEl.innerHTML = `<div class="card briefing controls">
       <div class="kicker">CONTROLS · KEYBOARD</div>
-      <ul class="binds">${KEY_ACTIONS.map((a) => `<li><span>${NAMES[a]}</span><button class="go alt bind" data-a="${a}">${waiting === a ? 'Press a key…' : `<kbd>${esc(keyLabel(K[a]))}</kbd>`}</button></li>`).join('')}</ul>
+      <ul class="binds">${KEY_ACTIONS.filter((a) => !(NOBRAKE && a === 'brake')).map((a) => `<li><span>${NAMES[a]}</span><button class="go alt bind" data-a="${a}">${waiting === a ? 'Press a key…' : `<kbd>${esc(keyLabel(K[a]))}</kbd>`}</button></li>`).join('')}</ul>
       <p class="how">${settings.keys ? 'Arrow keys no longer double as lanes once you rebind.' : 'Defaults also take the arrow keys, S / Space for Brake, W for Shoulder Check and Q for Ability.'} Pause stays on Esc or P. Pads and touch keep their own controls.</p>
       <div class="row"><button class="go" id="ctl-back">Back</button><button class="go alt" id="ctl-reset">Reset</button></div>
     </div>`;
@@ -1017,6 +1024,66 @@ function nextAwardLine(): string {
 }
 
 /** The 11 O'Clock Recap (§20: results as the evening news). */
+/**
+ * The unlock stinger (Mike, 2026-11-24: "more lively unlocks (pop-up screens)"): one card per new award or traffic mod,
+ * full screen over the replay's last frame, with its art, a slam-in, a shine, a sting and a rumble. A press moves on;
+ * each card also moves on by itself after `unlockHold` s. Never for the bot or in step mode (tests and evidence).
+ */
+function showUnlocks(done: () => void, force = false) {
+  const items: { kicker: string; title: string; sub: string; art: string }[] = [];
+  // An outfit shows as its colours (cape cloth over its plates, the hem band): a portrait render needs him in shot.
+  const hex = (c: number | null | undefined, d: number) => `#${(c ?? d).toString(16).padStart(6, '0')}`;
+  const swatch = (o: OutfitId) => {
+    const O = TUNING.outfits[o];
+    return `<span class="u-swatch" style="--cloth:${hex(O.cape ?? O.cloth ?? O.full, PALETTE.giantCape)};--plate:${hex(O.plate ?? O.full, PALETTE.giantBone)};--band:${hex(O.band, PALETTE.giantBone)}"></span>`;
+  };
+  for (const a of newAwards) {
+    const art = a.outfit ? swatch(a.outfit) : a.upgrade ? `<img src="${UPGRADE_ART[a.upgrade]}" alt="" />` : '<i>★</i>';
+    items.push({ kicker: a.outfit ? 'NEW OUTFIT' : a.upgrade ? 'NEW UPGRADE' : 'AWARD', title: a.outfit ? TUNING.outfits[a.outfit].label : a.title, sub: a.outfit || a.upgrade ? a.title : a.how, art });
+  }
+  for (const m of newUnlocks) items.push({ kicker: 'TRAFFIC MOD', title: TUNING.proto.mods[m].label, sub: `${TUNING.proto.mods[m].how} · score ×${TUNING.proto.mods[m].score}`, art: `<i>×${TUNING.proto.mods[m].score}</i>` });
+  if (!items.length || (!force && (bot || flags.stepMode || attract))) return done();
+  const el = document.createElement('div');
+  el.id = 'unlock';
+  document.body.appendChild(el);
+  let i = -1;
+  let timer = 0;
+  const step = () => {
+    clearTimeout(timer);
+    i++;
+    if (i >= items.length) {
+      el.remove();
+      removeEventListener('keydown', press, true);
+      el.removeEventListener('pointerdown', press);
+      clearInterval(pad);
+      done();
+      return;
+    }
+    const it = items[i];
+    el.innerHTML = `<div class="u-card"><small>UNLOCKED · ${esc(it.kicker)}</small><div class="u-art">${it.art}</div><b>${esc(it.title)}</b><span>${esc(it.sub)}</span></div>`;
+    audio.chainTick(4);
+    setTimeout(() => audio.chainTick(6), 140);
+    haptic(220, 0.8);
+    timer = window.setTimeout(step, TUNING.replay.unlockHold * 1000);
+  };
+  const armedAt = performance.now() + 400;
+  const press = (e: Event) => {
+    if (performance.now() < armedAt) return;
+    e.preventDefault();
+    e.stopPropagation();
+    step();
+  };
+  addEventListener('keydown', press, true);
+  el.addEventListener('pointerdown', press);
+  let held = true;
+  const pad = window.setInterval(() => {
+    const down = [...(navigator.getGamepads?.() ?? [])].some((g) => g?.buttons[0]?.pressed);
+    if (down && !held && performance.now() >= armedAt) step();
+    held = down;
+  }, 50);
+  step();
+}
+
 function showRecap() {
   audio.setGear(0, true); // a replay may have raised it
   const sh = sim.show;
@@ -2027,7 +2094,7 @@ window.addEventListener('keydown', (e) => {
   }
   const playing = started && !paused && !attract;
   if (e.code === 'KeyH' && playing && PLAYTEST) toggleHeadOn(); // dev: preview Head-On and the swoop home
-  if (e.code === 'KeyC' && playing && PLAYTEST) setAngle(director.current + 1, director.side); // dev: next angle (held until C comes back to Chase High)
+  if (e.code === 'KeyC' && playing) input.pressCamera(); // next angle (held until it comes back round to Chase High)
   if (e.code === 'KeyR' && playing) {
     nextSeed = flags.seedFixed ? flags.seed : null;
     beginBroadcast(run ? 'run' : dailyMode ? 'daily' : endlessMode ? 'endless' : 'broadcast');
@@ -2141,7 +2208,7 @@ app = await createGameApp({
           // Playtest (Mike, 2026-11-17: "missed copying the run data"): every broadcast's numbers, any time. ?playtest=1 only.
           ...(PLAYTEST ? [{ tab: 'game' as SettingsTab, id: 'wyf-playdata', label: 'Copy Play Data', description: 'Copies every broadcast you have played (or saves a file)' }] : []),
           { tab: 'controls', id: 'wyf-controls', label: 'Rebind Keys' },
-          { tab: 'controls', id: 'wyf-brake', label: `Brake: ${settings.brakeToggle ? 'Toggle' : 'Hold'}`, description: 'Toggle: press once to brake, again to run' },
+          ...(NOBRAKE ? [] : [{ tab: 'controls' as SettingsTab, id: 'wyf-brake', label: `Brake: ${settings.brakeToggle ? 'Toggle' : 'Hold'}`, description: 'Toggle: press once to brake, again to run' }]),
           { tab: 'display', id: 'wyf-hudsize', label: `HUD Size: ${Math.round(settings.hudSize * 100)}%` },
           { tab: 'display', id: 'wyf-colors', label: `HUD Colours: ${settings.hudColors === 'network' ? 'Network' : 'WYF 6'}`, description: 'The station\'s purple and cream, or network red, blue and white' },
           { tab: 'display', id: 'wyf-cuts', label: `Camera Cuts: ${onOff(settings.cameraCuts)}`, description: 'Off holds the Chase High shot' },
@@ -2274,6 +2341,8 @@ function frame(now: number) {
   last = now;
 
   if (input.consumePause()) requestPause();
+  // Next camera angle from any device (Mike, 2026-11-24: keyboard had it, pad and touch didn't).
+  if (input.consumeCamera() && started && !paused && !attract && !replay) setAngle(director.current + 1, director.side);
   touchUi.hidden = input.device !== 'touch' || attract || !sim.live;
   document.documentElement.classList.toggle('touch', input.device === 'touch');
 
@@ -2441,8 +2510,10 @@ function frame(now: number) {
       }
       if (!flags.stepMode) dissolveOut();
       // Tonight's top moment first, then the recap.
-      if (moment && flags.replay && !flags.stepMode) startReplay(showRecap);
-      else showRecap();
+      // Unlocks get their own moment before the recap (Mike, 2026-11-24: "more lively unlocks").
+      const next = () => showUnlocks(showRecap);
+      if (moment && flags.replay && !flags.stepMode) startReplay(next);
+      else next();
     }
   }
   // Back (Esc / B / Circle) closes How to Play.
@@ -2558,8 +2629,8 @@ function updateGlyphs() {
     chip2.key.textContent = glyph('ability2');
     const key = (a: GlyphAction, what: string) => `<span><kbd>${esc(glyph(a))}</kbd>${what}</span>`;
     controlsEl.innerHTML = fam === 'touch'
-      ? `<span>Swipe to change lanes · hold down to brake</span>`
-      : key('lanes', 'Lane') + key('brake', 'Brake') + key('shoulder', 'Rampage') + key('pause', 'Pause');
+      ? `<span>Swipe to change lanes${NOBRAKE ? '' : ' · hold down to brake'}</span>`
+      : key('lanes', 'Lane') + (NOBRAKE ? '' : key('brake', 'Brake')) + key('shoulder', 'Rampage') + key('camera', 'Camera') + key('pause', 'Pause');
     recapEl.dataset.fam = '';
   }
   controlsEl.hidden = attract || !sim.live || sim.time > TUNING.input.controlsHintTime;
@@ -2971,6 +3042,12 @@ window.__GAME = {
   coverage: () => ({ cls: document.getElementById('hud')!.className, desk: !document.getElementById('desk')!.hidden, ticker: !document.getElementById('ticker')!.hidden, pip: pip.active, cold: !document.getElementById('coldopen')!.hidden }),
   /** Dev: roll viewer video now. */
   viewerVideo: () => pip.trigger(sim, 3, true),
+  /** Evidence: show the unlock stinger for these awards / traffic mods. */
+  previewUnlocks(awards: string[], mods: string[] = []) {
+    newAwards = AWARDS.filter((a) => awards.includes(a.id));
+    newUnlocks = mods;
+    showUnlocks(() => {}, true);
+  },
   setTimescale(v: number) {
     flags.timescale = v;
   },

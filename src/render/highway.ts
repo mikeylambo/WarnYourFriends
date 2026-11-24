@@ -1221,12 +1221,15 @@ export class HighwayView {
       body.add(hz);
       hazards.push(hz);
     }
-    const throwGeo = FLAT_PLANE;
-    const beam = new THREE.Mesh(throwGeo, GLOW.headPool);
-    beam.position.set(L / 2 + 6.5, 0.055, 0);
-    beam.scale.set(13, 1, 6.5);
-    beam.renderOrder = 1;
-    g.add(beam);
+    // Two throws, one per headlight, on the body so they move with the car (Mike, 2026-11-24: one cone looked tacky).
+    for (const side of [-1, 1]) {
+      const beam = new THREE.Mesh(FLAT_PLANE, GLOW.headPool);
+      beam.position.set(L / 2 + 5.6, 0.055, side * W * 0.36);
+      beam.scale.set(11, 1, 3.6);
+      beam.renderOrder = 1;
+      body.add(beam);
+    }
+    void g;
     this.cars.set(p.id, { prop: p, group: g, body, tails, hazards, braking: false, swerveT: -1, swerveDir: 1, honked: false, bounceY: 0, bounceV: 0, brushT: -1, brushDir: 1 });
   }
 

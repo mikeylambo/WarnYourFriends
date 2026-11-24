@@ -24,6 +24,8 @@ var TUNING = {
     /** Authored chunks (src/sim/chunks.ts): the gap between two chunks (m), and the reaction time the solver allows (s). */
     chunkGap: 34,
     /** First traffic this far down the road (m): he reaches ~115m as the 6s opening hero shot swoops home, so the first cars come after it, in Chase High. */
+    /** No brake (Mike, 2026-11-24: "no real reason to use the slow down mechanic, scrap it"): brake input is ignored, its prompts and binds are hidden, and the Police Net (escaped by braking) is off. */
+    noBrake: true,
     firstChunk: 150,
     chunkReact: 0.45,
     /** Chunk level climbs one step every this many metres (and one per run segment). */
@@ -98,7 +100,7 @@ var TUNING = {
     ],
     /** Traffic mods (unlocked by story asks): harder runs on purpose, for a score multiplier. Both keep every chunk solver-proven. */
     mods: {
-      heavyLoad: { label: "Heavy Load", how: "Each district picks traffic one level harder", score: 1.3 },
+      heavyLoad: { label: "Heavy Load", how: "Harder traffic everywhere, no easy stretches", score: 1.3 },
       hotPursuit: { label: "Hot Pursuit", how: "50% more police on his tail", score: 1.3, pace: 1.5 },
       // More mods (Mike, 2026-11-24: "traffic mods yes"): each leans on a different pressure, none touches the solver.
       // Labels renamed by Mike (2026-11-24); ids kept so saved unlocks carry over.
@@ -163,6 +165,8 @@ var TUNING = {
    */
   shoulderAnim: { time: 0.5, windup: 0.18, strikeEnd: 0.6, twistBack: 0.45, twistDrive: -1.15, leanDrive: 0.55, leanBack: -0.12, drop: 0.22, armTuck: 1.25, armFling: 1.1 },
   giantModel: {
+    /** Cape clasp height on the torso (m, torso space; the far corner 0.2 higher): across the upper back (was 1.2, the low back). */
+    capeClaspY: 1.6,
     /** Cape length from the clasp line (m): knee length at Jog (v0.3 §10). */
     capeLength: 1.9,
     /** Cape half-width at the shoulders and at the hem (m): narrow so the legs read past it. */
@@ -541,6 +545,8 @@ var TUNING = {
    */
   replay: {
     /** Run end dissolves to the replay/recap (Mike, 2026-11-19): length (s) and block size (px) of the broadcast-glitch dissolve. */
+    /** Each unlock card holds this long before moving on by itself (s). */
+    unlockHold: 3,
     dissolve: 0.8,
     dissolveBlock: 24,
     lead: 2.2,
@@ -1976,6 +1982,8 @@ var Track = class {
   /** Chunk level (1–5) at `s`: climbs with distance and the run's segment. */
   /** Heavy Load (a traffic mod): every pick one level harder, capped at 5. */
   levelBonus = 0;
+  /** Heavy Load: every district takes only its top-level chunks (no breathers), like the finale. */
+  allPeak = false;
   levelAt(s) {
     if (this.district >= 0) return Math.min(5, TUNING.proto.story.districts[Math.min(this.district, TUNING.proto.story.districts.length - 1)].level + this.levelBonus);
     return Math.max(1, Math.min(5, 1 + this.levelBonus + this.segmentNo + Math.floor(s / TUNING.proto.levelEvery)));
@@ -2047,7 +2055,7 @@ var Track = class {
     const top = fits.filter((c) => c.level >= level - 1);
     const peak = this.district >= 0 && TUNING.proto.story.districts[Math.min(this.district, TUNING.proto.story.districts.length - 1)].peak;
     const best = fits.filter((c) => c.level >= level);
-    if (peak && best.length) return this.rng.pick(best);
+    if ((peak || this.allPeak) && best.length) return this.rng.pick(best);
     return this.rng.pick(top.length && this.rng.chance(0.75) ? top : fits);
   }
   place(kind, s, lane, seg, jitter = 0.2) {
@@ -2711,6 +2719,7 @@ var Pursuit = class {
     if (TUNING.proto.on && this.sim.time < this.quietUntil && (k === "net" || k === "rolling" || k === "carrier")) return false;
     const sim = this.sim;
     if (this.units.some((u) => u.alive && u.unit === "roadblock" && u.s > sim.giant.s)) return false;
+    if (k === "net" && TUNING.proto.on && TUNING.proto.noBrake) return false;
     if (k === "net") {
       const N = TUNING.pursuit.net;
       if (this.nets >= N.perSegment[Math.min(sim.show.segment, N.perSegment.length - 1)] || sim.time - this.netAt < N.minGap) return false;
@@ -3773,7 +3782,10 @@ var Sim = class {
     this.endless = !!opts.endless;
     this.track = new Track(opts.seed, opts.segment ?? 0, this.guided, this.edition.hard, this.endless);
     this.mods = (opts.mods ?? []).filter((m) => m in TUNING.proto.mods);
-    if (this.mods.includes("heavyLoad")) this.track.levelBonus = 1;
+    if (this.mods.includes("heavyLoad")) {
+      this.track.levelBonus = 1;
+      this.track.allPeak = true;
+    }
     this.escort = new Escort(opts.seed, this.track);
     this.pursuit = new Pursuit(opts.seed, this);
     for (const m of this.mods) this.pursuit.pace *= TUNING.proto.mods[m].pace ?? 1;

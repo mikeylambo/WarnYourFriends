@@ -312,9 +312,10 @@ export class UnitViews {
     v.beam!.quaternion.setFromUnitVectors(UP, dir.normalize().negate());
     v.beam!.scale.set(r, len, r);
     (v.beam!.material as THREE.MeshBasicMaterial).opacity = (lock ? 0.09 : 0.06) * fade;
-    // Locked: his lane is marked for units, a pulsing stripe running ahead of him.
-    v.mark!.visible = lock;
-    if (lock) {
+    // The marked-lane stripe is off (Mike, 2026-11-24: it read as a lane lighting up for no reason, and looked like
+    // the roadblock's open-lane glow). The pool and beam still show the lock.
+    v.mark!.visible = false;
+    if (false as boolean) {
       const ahead = 14;
       track.posAt(u.s + ahead, track.laneCenter(u.lane), this.pos);
       v.mark!.position.set(this.pos.x, 0.07, this.pos.z);

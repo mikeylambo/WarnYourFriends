@@ -75,11 +75,14 @@ export class CruiserView {
         tl.scale.set(0.06, 0.18, 0.34);
         root.add(tl);
       }
-      const beam = new THREE.Mesh(throwGeo, GLOW.headPool);
-      beam.position.set(L / 2 + 6.5, 0.055, 0);
-      beam.scale.set(13, 1, 6.5);
-      beam.renderOrder = 1;
-      root.add(beam);
+      // Two throws, one per headlight (Mike, 2026-11-24).
+      for (const side of [-1, 1]) {
+        const beam = new THREE.Mesh(throwGeo, GLOW.headPool);
+        beam.position.set(L / 2 + 5.6, 0.055, side * W * 0.36);
+        beam.scale.set(11, 1, 3.6);
+        beam.renderOrder = 1;
+        root.add(beam);
+      }
       const washRed = new THREE.Mesh(disc, GLOW.sirenRed);
       const washBlue = new THREE.Mesh(disc, GLOW.sirenBlue);
       for (const w of [washRed, washBlue]) {

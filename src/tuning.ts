@@ -110,6 +110,8 @@ export const TUNING = {
     /** Authored chunks (src/sim/chunks.ts): the gap between two chunks (m), and the reaction time the solver allows (s). */
     chunkGap: 34,
     /** First traffic this far down the road (m): he reaches ~115m as the 6s opening hero shot swoops home, so the first cars come after it, in Chase High. */
+    /** No brake (Mike, 2026-11-24: "no real reason to use the slow down mechanic, scrap it"): brake input is ignored, its prompts and binds are hidden, and the Police Net (escaped by braking) is off. */
+    noBrake: true,
     firstChunk: 150,
     chunkReact: 0.45,
     /** Chunk level climbs one step every this many metres (and one per run segment). */
@@ -182,7 +184,7 @@ export const TUNING = {
     ] as { id: string; tier: 1 | 2 | 3; kind: string; n: number; text: string; district?: number; requires?: string; unlock?: string }[],
     /** Traffic mods (unlocked by story asks): harder runs on purpose, for a score multiplier. Both keep every chunk solver-proven. */
     mods: {
-      heavyLoad: { label: 'Heavy Load', how: 'Each district picks traffic one level harder', score: 1.3 },
+      heavyLoad: { label: 'Heavy Load', how: 'Harder traffic everywhere, no easy stretches', score: 1.3 },
       hotPursuit: { label: 'Hot Pursuit', how: '50% more police on his tail', score: 1.3, pace: 1.5 },
       // More mods (Mike, 2026-11-24: "traffic mods yes"): each leans on a different pressure, none touches the solver.
       // Labels renamed by Mike (2026-11-24); ids kept so saved unlocks carry over.
@@ -252,6 +254,8 @@ export const TUNING = {
   shoulderAnim: { time: 0.5, windup: 0.18, strikeEnd: 0.6, twistBack: 0.45, twistDrive: -1.15, leanDrive: 0.55, leanBack: -0.12, drop: 0.22, armTuck: 1.25, armFling: 1.1 },
 
   giantModel: {
+    /** Cape clasp height on the torso (m, torso space; the far corner 0.2 higher): across the upper back (was 1.2, the low back). */
+    capeClaspY: 1.6,
     /** Cape length from the clasp line (m): knee length at Jog (v0.3 §10). */
     capeLength: 1.9,
     /** Cape half-width at the shoulders and at the hem (m): narrow so the legs read past it. */
@@ -625,6 +629,8 @@ export const TUNING = {
    */
   replay: {
     /** Run end dissolves to the replay/recap (Mike, 2026-11-19): length (s) and block size (px) of the broadcast-glitch dissolve. */
+    /** Each unlock card holds this long before moving on by itself (s). */
+    unlockHold: 3,
     dissolve: 0.8,
     dissolveBlock: 24,
     lead: 2.2, slow: 0.35, slowBefore: 0.35, slowAfter: 1.0, after: 1.6, angle: 'Long Lens',
