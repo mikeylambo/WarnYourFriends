@@ -374,6 +374,8 @@ const onboarding = new Onboarding($('prompt'), (id: PromptId) => {
     blocked: PROTO ? `Cars and trucks don't break until Rampage. Dodge them ${k('lanes')}` : `Bulldozers and armored trucks don't break. Change lanes ${k('lanes')}`,
     concrete: `Concrete and yellow-roof police lines only break in <b>RAMPAGE</b>. Save it, or go round`,
     meter: PROTO ? `Squeeze past cars for a <b>NEAR MISS</b>. Grab yellow <b>EXCLUSIVES</b>. Both fill the <b>AUDIENCE</b>; full audience: <b>RAMPAGE</b>` : `Smash and dodge to fill the <b>RAMPAGE</b> meter`,
+    exclusive: `<b>EXCLUSIVE!</b> Yellow pickups fill the <b>AUDIENCE</b>`,
+    nearMiss: `<b>NEAR MISS!</b> Squeezing past cars fills the <b>AUDIENCE</b>`,
     ready: `<b>RAMPAGE READY</b> ${settings.autoRampage ? 'Here it goes' : `Press ${k('shoulder')}`}`,
     hit: PROTO ? `Hits lose the audience, and the police close in` : `Hits cost Rampage meter`,
     ram: `Police swerving in: dodge ${k('lanes')}`,
@@ -2027,11 +2029,16 @@ function beginBroadcast(mode = 'broadcast') {
     newRun(seed, Math.max(0, Math.min(TUNING.run.segments - 1, flags.seg ?? 0)), flags.ability ? [flags.ability] : [], flags.ability ? { [flags.ability]: flags.level } : {}, guided);
   }
   bot = flags.bot ? new Bot(sim) : null;
-  // First broadcast ever: How to Play first, then the cold open.
-  if (!bot && !flags.autostart && !briefingSeen()) {
-    started = false;
-    void openBriefing(true).then(() => start());
-  } else start();
+  // First broadcast ever: no rules card (2026-11-24, teach by doing). The guided opening and the one-time prompts
+  // teach in play; How to Play stays on the menu.
+  if (guided) {
+    try {
+      localStorage.setItem(BRIEF_KEY, '1');
+    } catch {
+      /* private mode: it just shows the guided opening again */
+    }
+  }
+  start();
 }
 
 /** Back to the menus: the bot takes over a fresh broadcast behind them. */

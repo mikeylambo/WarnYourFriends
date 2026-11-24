@@ -16,7 +16,7 @@ Status: `[ ]` todo · `[~]` in progress · `[x]` done
 - [x] Moderation path: a way to delete an entry (admin key, not in the client). `LB_ADMIN_KEY` env still to set in Vercel.
 
 ### Teaching opening (first five minutes)
-- [ ] First broadcast teaches by doing: one swipe, one near miss, one Exclusive, the first Rampage forced, each prompted at the moment, no cards to read. Skippable for returning players.
+- [x] First broadcast teaches by doing (tutorial chunk: car in his lane → Exclusives row → spaced cars; first Exclusive / near miss prompts; Rampage guaranteed by 55s; no rules card): one swipe, one near miss, one Exclusive, the first Rampage forced, each prompted at the moment, no cards to read. Skippable for returning players.
 
 ### Hit feel audit
 - [ ] Every interaction has sound + particles + camera + number popup: smash (light/medium/heavy), near miss, Exclusive, rival van, target car, police crash, shake-off, Rampage start/end, ask complete, unlock.

@@ -557,7 +557,8 @@ export const TUNING = {
    * Landmarks keep their own patterns. The flag rides the leaderboard submission so the server replays it the same.
    */
   /** meterGain: Rampage meter gains × this during the calm, so a first-timer's first Rampage lands inside it (bot: 21s → ~12s). */
-  guided: { calmFor: 25, clearFor: 400, meterGain: 1.8 },
+  /** rampageBy: if Rampage hasn't fired by this sim time (s), the audience tops up so the first one lands in the first minute. */
+  guided: { calmFor: 25, clearFor: 400, meterGain: 1.8, rampageBy: 55 },
 
   /**
    * Things worth aiming for (Mike, 2026-11-17: "not enough to do during the runs, especially during Rampage").

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { enableProto } from '../tuning';
+import { TUNING, enableProto } from '../tuning';
+import { NO_INPUT } from './types';
 import { Sim } from './sim';
 import { Bot } from './bot';
 
@@ -35,4 +36,21 @@ describe('everything stays on the road (prototype)', () => {
     }
     expect(carrierOverlaps / Math.max(1, carrierFrames)).toBeLessThan(0.03);
   }, 60000);
+});
+
+describe('teaching opening (2026-11-24)', () => {
+  it('a first broadcast opens on the tutorial chunk and Rampage lands by guided.rampageBy', () => {
+    const sim = new Sim({ seed: 7, segment: 0, upgrades: [], levels: {}, growth: true, guided: true });
+    const early = sim.track.props.filter((p) => p.s < 300);
+    // A car in his starting lane, then a row of Exclusives across the road.
+    expect(early.some((p) => p.kind === 'car' && Math.abs(p.d - sim.giant.d) < 1)).toBe(true);
+    expect(early.filter((p) => p.kind === 'scoop').length).toBeGreaterThanOrEqual(3);
+    let at = -1;
+    for (let i = 0; i < 60 * (TUNING.guided.rampageBy + 2) && sim.live && at < 0; i++) {
+      sim.step(sim.giant.meter >= 100 ? { ...NO_INPUT, shoulder: true } : NO_INPUT);
+      if (sim.inRampage) at = sim.time;
+    }
+    expect(at).toBeGreaterThan(0);
+    expect(at).toBeLessThanOrEqual(TUNING.guided.rampageBy + 0.1);
+  });
 });

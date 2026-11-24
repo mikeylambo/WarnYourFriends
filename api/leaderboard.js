@@ -467,7 +467,8 @@ var TUNING = {
    * Landmarks keep their own patterns. The flag rides the leaderboard submission so the server replays it the same.
    */
   /** meterGain: Rampage meter gains × this during the calm, so a first-timer's first Rampage lands inside it (bot: 21s → ~12s). */
-  guided: { calmFor: 25, clearFor: 400, meterGain: 1.8 },
+  /** rampageBy: if Rampage hasn't fired by this sim time (s), the audience tops up so the first one lands in the first minute. */
+  guided: { calmFor: 25, clearFor: 400, meterGain: 1.8, rampageBy: 55 },
   /**
    * Things worth aiming for (Mike, 2026-11-17: "not enough to do during the runs, especially during Rampage").
    * - Rival news vans (a rival station's van, dish on the roof): `newsvanChance` of Heavy traffic slots. Flattening one
@@ -1513,6 +1514,10 @@ var CHUNKS = [
   { id: "six-two-way-weave", lanes: 6, level: 5, oncoming: "ooo...", rows: [[0, "o.o.cc"], [28, ".o.cc."], [56, "o.o.cv"], [84, ".o.vc."], [112, "oo..vc"]] },
   { id: "four-blockade", lanes: 4, level: 5, rows: [[0, "bdc."], [34, "c.vd"], [64, ".cbd"], [94, "cv.d"], [124, "d.cv"]] }
 ];
+var TUTORIAL = [
+  { id: "tutorial-4", lanes: 4, level: 0, rows: [[0, "..c."], [50, "ssss"], [95, ".c.."], [135, "...c"], [175, "c..."], [210, "ssss"]] },
+  { id: "tutorial-3", lanes: 3, level: 0, rows: [[0, ".c."], [50, "sss"], [95, "c.."], [135, "..c"], [175, ".c."], [210, "sss"]] }
+];
 var CHUNK_KINDS = { c: "car", v: "van", n: "newsvan", d: "dozer", b: "barricade", f: "foodtruck", s: "scoop", o: "car", t: "foodtruck", l: "car", r: "car" };
 function mirror(c) {
   const rev = (s) => [...s].reverse().join("");
@@ -1583,6 +1588,7 @@ var Track = class {
     this.hardMult = hardMult;
     this.segmentNo = segment;
     this.hardFrom = guided ? TUNING.guided.clearFor : TUNING.props.immovableFrom;
+    this.tutorial = guided;
     const Pc = TUNING.pacing;
     this.gapScale = Pc.rowGapScale[Math.min(segment, Pc.rowGapScale.length - 1)];
     this.landmarkScale = Pc.landmarkEveryScale[Math.min(segment, Pc.landmarkEveryScale.length - 1)];
@@ -1639,6 +1645,8 @@ var Track = class {
   segmentNo;
   /** Guided first broadcast: nothing unbreakable this close to the start (m). */
   hardFrom;
+  /** First broadcast ever: the next chunk is the teaching opening (once). */
+  tutorial = false;
   /** Edition: × bulldozer and concrete chances. */
   hardMult;
   get end() {
@@ -2102,7 +2110,9 @@ var Track = class {
         if (s0 >= end) return;
         const lanes = this.lanesAt(s0);
         const span = this.twoWay.find((w) => w.district && s0 >= w.s0 && s0 < w.s1);
-        const c = this.pickChunk(lanes, this.levelAt(s0), seg.zone, span?.split ?? 0);
+        const teach = this.tutorial && !span ? TUTORIAL.find((t) => t.lanes === lanes) : void 0;
+        this.tutorial = false;
+        const c = teach ?? this.pickChunk(lanes, this.levelAt(s0), seg.zone, span?.split ?? 0);
         if (!c) {
           this.nextChunkS = s0 + 10;
           continue;
@@ -3920,6 +3930,7 @@ var Sim = class {
   edition;
   /** First broadcast ever: a calm opening (no drain or police for `guided.calmFor` s, nothing unbreakable for `guided.clearFor` m). */
   guided;
+  rampagedOnce = false;
   /** The product of one effect over the traffic mods on (1 when none sets it). */
   modProduct(k) {
     return this.mods.reduce((x, m) => x * (TUNING.proto.mods[m][k] ?? 1), 1);
@@ -4103,6 +4114,8 @@ var Sim = class {
     }
     if (this.endless) this.show.decayMult = this.baseDecayMult * (1 + this.time / TUNING.proto.endlessRamp);
     this.show.step(dt, this.time + dt, this.giant.tier, outnumbered, this.events);
+    if (this.guided && TUNING.proto.on && !this.rampagedOnce && !this.inRampage && this.time >= TUNING.guided.rampageBy) this.show.ratings = 100;
+    if (this.inRampage) this.rampagedOnce = true;
     if (TUNING.proto.on && !this.inRampage) {
       const was = this.giant.meter;
       this.giant.meter = this.show.ratings;

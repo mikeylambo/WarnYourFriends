@@ -105,7 +105,7 @@ try {
   // 1–2. Desktop: click the real start button.
   {
     const { ctx, page, problems } = await bootAndStart(browser, 'desktop click', { viewport: { width: 1280, height: 720 } }, async (p) => {
-      // One menu: the mode is on it. A first broadcast shows How to Play; Go live starts it.
+      // One menu: the mode is on it. A first broadcast goes straight in (teach by doing).
       for (const id of ['start', 'run']) {
         await p.click(`[data-choice-id="${id}"]`);
         await p.waitForTimeout(150);
@@ -115,11 +115,11 @@ try {
       if (!(await p.isVisible('#recap .preshow'))) fail("Tonight's Rundown did not show for Story");
       else ok("Tonight's Rundown shows for Story");
       await p.click('#ps-go');
-      await p.waitForSelector('#brief-go', { timeout: 3000 }).catch(() => {});
-      if (!(await p.isVisible('#brief-go'))) fail('How to Play did not show before the first broadcast');
-      else ok('How to Play shows before the first broadcast');
-      if (await p.evaluate(() => window.__GAME.started)) fail('broadcast started behind How to Play');
-      await p.click('#brief-go');
+      // Teach by doing (2026-11-24): the first broadcast goes straight in, guided, opening on the tutorial chunk.
+      await p.waitForFunction(() => window.__GAME.started, null, { timeout: 5000 }).catch(() => {});
+      const g = await p.evaluate(() => ({ started: window.__GAME.started, guided: window.__GAME.sim.guided, card: !!document.querySelector('#brief-go'), tut: window.__GAME.sim.track.props.filter((x) => x.kind === 'scoop' && x.s < 300).length }));
+      if (g.started && g.guided && !g.card && g.tut >= 4) ok(`first broadcast: straight in, guided, the teaching opening on the road (${g.tut} Exclusives)`);
+      else fail(`first broadcast: ${JSON.stringify(g)}`);
     });
     // Authored SFX: every file decodes once audio is unlocked by the start click.
     await page.waitForFunction(() => Object.keys(window.__GAME.sfx()).length >= 16, null, { timeout: 8000 }).catch(() => {});
@@ -166,8 +166,8 @@ try {
       }
       await p.waitForSelector('#recap .preshow', { timeout: 3000 }).catch(() => {});
       await p.tap('#ps-go');
-      await p.waitForSelector('#brief-go', { timeout: 3000 }).catch(() => {});
-      await p.tap('#brief-go');
+      // No rules card on the first broadcast any more (teach by doing); tap it only if a build still shows one.
+      if (await p.waitForSelector('#brief-go', { timeout: 1500 }).catch(() => null)) await p.tap('#brief-go');
     });
     if (problems.length) fail(`mobile boot problems:\n    ${problems.join('\n    ')}`);
     // Play is landscape on phones (2026-11-24): turned upright mid-broadcast, the rotate card covers it and it pauses.
