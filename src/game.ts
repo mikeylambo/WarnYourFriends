@@ -13,6 +13,7 @@ import { Lighting, timeOfDayAt } from './render/lighting';
 import { CruiserView } from './render/cruisers';
 import { UnitViews } from './render/units';
 import { ViewerVideo } from './render/pip';
+import { RampageAura } from './render/aura';
 import { Vfx } from './render/vfx';
 import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
@@ -98,7 +99,12 @@ function updateRampageFx(dt: number, now: number) {
   // Never over the recap or the meeting (he can still be in Rampage when the broadcast ends).
   document.documentElement.classList.toggle('rampage', rampK > 0.5 && recapEl.hidden);
   document.documentElement.classList.toggle('reduceflashes', settings.reduceFlashes);
+  // A broadcast is on screen (the rotate-to-landscape card only covers play, not the menus).
+  document.documentElement.classList.toggle('playing', !attract && recapEl.hidden);
+  // Phone upright mid-broadcast: hold it paused behind the rotate card (resume from the pause menu once sideways).
+  if (portraitTouch.matches && !paused) requestPause();
 }
+const portraitTouch = matchMedia('(orientation: portrait) and (pointer: coarse)');
 const debugEl = $('debug');
 const tierbar = $('tierbar');
 const chyPlace = document.querySelector('#chyron .place') as HTMLElement;
@@ -132,7 +138,7 @@ const chainClock = chainEl.querySelector('.clock i') as HTMLElement;
 /** Spectacle stunt names on the combo counter (what just counted, so the player learns the menu). */
 /** Ability levels on cards and the chip. */
 const ROMAN = ['', 'I', 'II', 'III'];
-const STUNT_LABEL: Record<string, string> = { rival: 'RIVAL NEWS VAN', medium: 'SMASH', heavy: 'HEAVY SMASH', unit: 'POLICE CAR', policeCrash: 'POLICE CRASH', collateral: 'COLLATERAL', nearMiss: 'NEAR MISS', ramDodge: 'DODGED', lostTrack: 'SHOOK ONE', chopperShaken: 'LOST THE CHOPPER', leapLand: 'LANDING', breakawayLand: 'BREAKAWAY', scoop: 'SCOOP', target: 'TARGET' };
+const STUNT_LABEL: Record<string, string> = { rival: 'RIVAL NEWS VAN', medium: 'SMASH', heavy: 'HEAVY SMASH', unit: 'POLICE CAR', policeCrash: 'POLICE CRASH', collateral: 'COLLATERAL', nearMiss: 'NEAR MISS', ramDodge: 'DODGED', lostTrack: 'SHOOK ONE', chopperShaken: 'LOST THE CHOPPER', leapLand: 'LANDING', breakawayLand: 'BREAKAWAY', scoop: 'EXCLUSIVE', target: 'TARGET' };
 let chainResultT = 0;
 const gearPips = [...gearsEl.querySelectorAll('i')] as HTMLElement[];
 const gearName = gearsEl.querySelector('.nm') as HTMLElement;
@@ -330,6 +336,8 @@ const coverage = new Coverage();
 const pip = new ViewerVideo($('pip'));
 const vfx = new Vfx();
 scene.add(vfx.group);
+const aura = new RampageAura();
+scene.add(aura.root);
 vfx.reduceFlashes = settings.reduceFlashes;
 /** Run stats for the recap, counted from sim events. */
 const runStats = { heavy: 0, units: 0, crashes: 0, bestChain: 0, lost: 0, dodged: 0, nearMiss: 0, best: null as Headline | null, bestRatings: -1 };
@@ -364,7 +372,7 @@ const onboarding = new Onboarding($('prompt'), (id: PromptId) => {
     lanes: PROTO ? `Change lanes ${k('lanes')}: weave through the traffic` : `Change lanes ${k('lanes')} and smash the traffic`,
     blocked: PROTO ? `Cars and trucks don't break until Rampage. Dodge them ${k('lanes')}` : `Bulldozers and armored trucks don't break. Change lanes ${k('lanes')}`,
     concrete: `Concrete and yellow-roof police lines only break in <b>RAMPAGE</b>. Save it, or go round`,
-    meter: PROTO ? `Close dodges and yellow <b>SCOOPS</b> win the <b>AUDIENCE</b>. Full audience: <b>RAMPAGE</b>` : `Smash and dodge to fill the <b>RAMPAGE</b> meter`,
+    meter: PROTO ? `Squeeze past cars for a <b>NEAR MISS</b>. Grab yellow <b>EXCLUSIVES</b>. Both fill the <b>AUDIENCE</b>; full audience: <b>RAMPAGE</b>` : `Smash and dodge to fill the <b>RAMPAGE</b> meter`,
     ready: `<b>RAMPAGE READY</b> ${settings.autoRampage ? 'Here it goes' : `Press ${k('shoulder')}`}`,
     hit: PROTO ? `Hits lose the audience, and the police close in` : `Hits cost Rampage meter`,
     ram: `Police swerving in: dodge ${k('lanes')}`,
@@ -698,7 +706,7 @@ function openBriefing(goLive: boolean): Promise<void> {
     <div class="kicker">YOU'RE GOING LIVE</div>
     <ol class="steps">
       <li><b>Run.</b> He never stops. ${k('lanes')} change lanes.</li>
-      ${PROTO ? `<li><b>Dodge.</b> Weave through the traffic. Close calls win the audience; hits lose it, and the police close in.</li>
+      ${PROTO ? `<li><b>Dodge.</b> Weave through the traffic. Near misses (squeezing past cars) and yellow Exclusives win the audience; hits lose it, and the police close in.</li>
       <li><b>Rampage.</b> Full audience? ${settings.autoRampage ? 'It fires by itself' : `Press ${k('shoulder')}`} and he smashes everything.</li>` : `<li><b>Smash.</b> Run through the traffic. Go round bulldozers.</li>
       <li><b>Rampage.</b> Smashing fills the meter. Full? ${settings.autoRampage ? 'It fires by itself' : `Press ${k('shoulder')}`} and he runs through everything.</li>`}
     </ol>
@@ -711,8 +719,8 @@ function openBriefing(goLive: boolean): Promise<void> {
     <ol class="steps">
       <li><b>Run.</b> He never stops. ${k('lanes')} change lanes, ${k('brake')} brake.</li>
       <li><b>Smash.</b> He flattens cars, carts and police cars. Bulldozers, armored trucks and a police car swerving into you don't break: go round. Concrete and yellow-roof police lines break only in Rampage. Hitting any of them costs Rampage meter.</li>
-      <li><b>Rampage.</b> Smashes, close calls and combos fill the Rampage meter. When it's full, ${settings.autoRampage ? 'Rampage fires by itself' : `press ${k('shoulder')}`}: for 8 seconds he runs through everything, at double score. Keep smashing to make it last.</li>
-      <li><b>Keep them watching.</b> Smashes, close calls and combos fill the audience bar. Empty, they cut to commercial.</li>
+      <li><b>Rampage.</b> Smashes, near misses and combos fill the Rampage meter. When it's full, ${settings.autoRampage ? 'Rampage fires by itself' : `press ${k('shoulder')}`}: for 8 seconds he runs through everything, at double score. Keep smashing to make it last.</li>
+      <li><b>Keep them watching.</b> Smashes, near misses and combos fill the audience bar. Empty, they cut to commercial.</li>
       <li><b>Lose the police.</b> Run a car beside you into whatever is in its lane. Slow down and they catch you: busted. Boxed in by the armored truck, brake out the back or Rampage through it.</li>
       <li><b>Take the exit.</b> At ${clock} a ramp opens on the right. Be in the far-right lane when you reach it; miss it and coverage ends.</li>
     </ol>
@@ -1648,6 +1656,9 @@ function present(e: SimEvent) {
         haptic(R.slamHaptic, 0.9);
       }
       rig.jolt(R.slamShake, 0.25);
+      // The gold burst: shockwave rings off his feet as the aura lights.
+      sim.track.posAt(sim.giant.s, sim.giant.d, pos);
+      for (const [size, life, op] of R.aura.burst) highway.ring(pos.x, pos.z, size * gScale, R.aura.color, life, op);
       break;
     }
     case 'meterLoss':
@@ -1757,26 +1768,16 @@ function startClip() {
     clipRec = null;
   }
 }
-/** The recap card alternates: the clip plays through, then the still holds a moment, then the clip again. */
+/** The recap card loops the clip continuously (Mike, 2026-11-24: the still hold between plays read as a freeze). */
 function mountClip() {
   const fig = recapEl.querySelector('.rc-shot');
   if (!fig || !recapClip || fig.querySelector('video')) return;
   const v = document.createElement('video');
-  Object.assign(v, { src: recapClip, muted: true, playsInline: true });
+  Object.assign(v, { src: recapClip, muted: true, playsInline: true, loop: true });
   fig.prepend(v);
   fig.classList.add('clip');
-  let hold = 0;
-  const play = () => {
-    fig.classList.remove('still');
-    v.currentTime = 0;
-    void v.play().catch(() => {});
-  };
-  v.addEventListener('ended', () => {
-    fig.classList.add('still');
-    clearTimeout(hold);
-    hold = window.setTimeout(() => { if (v.isConnected) play(); }, TUNING.replay.clipStillHold * 1000);
-  });
-  play();
+  fig.classList.remove('still');
+  void v.play().catch(() => {});
 }
 
 function stopClip() {
@@ -2556,6 +2557,7 @@ function frame(now: number) {
   }
 
   updateRampageFx(paused ? 0 : realDt, performance.now() / 1000);
+  aura.update(paused ? 0 : realDt, attract ? 0 : rampK, t.x, t.z, gScale, rig.camera, settings.reduceFlashes);
   // Rampage aura: embers lift off him and speed lines streak past while it lasts (review #65).
   if (rampK > 0 && !paused && sim.live && !attract) {
     const V = TUNING.vfx;

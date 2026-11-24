@@ -1114,10 +1114,15 @@ html.endless #live #fuel, html.endless #clocklbl { display: none !important; }
 #recap .preshow > .row { position: sticky; bottom: 0; z-index: 1; margin: 0; padding: 10px 0 16px; background: inherit; }
 @media (max-width: 560px) {
   #recap .preshow .asks-pick { grid-template-columns: 1fr; }
-  #recap .preshow .mods { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  #recap .preshow .mod small { display: none; }
+  #recap .preshow .mods { grid-template-columns: 1fr; }
 }
-@media (max-height: 480px) { #recap .preshow .how { display: none; } #recap .preshow .ask small, #recap .preshow .mod small { display: none; } }
+@media (max-height: 480px) { #recap .preshow .how { display: none; } #recap .preshow .ask small { display: none; } }
+/* Mods always say what they do (Mike, 2026-11-24); landscape phones: asks and mods side by side. */
+#recap .preshow .mod small { display: block; font-size: 11px; line-height: 1.25; }
+@media (orientation: landscape) and (max-height: 560px) {
+  #recap .preshow .mods { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  #recap .preshow .asks-pick { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
 #recap .rc-asks li.failed { opacity: 0.55; text-decoration: line-through; }
 
 /* The unlock stinger (2026-11-24): full screen, slam-in, a shine across the card. */
@@ -1137,3 +1142,13 @@ html.endless #live #fuel, html.endless #clocklbl { display: none !important; }
 #recap .preshow .mod { padding-left: 64px; min-height: 58px; }
 #recap .preshow .mod .mthumb { position: absolute; left: 8px; top: 50%; transform: translateY(-50%); width: 44px; height: 44px; object-fit: cover; border: 2px solid rgba(26, 16, 32, 0.6); }
 #recap .preshow .mod:disabled .mthumb { filter: grayscale(1) brightness(0.55); }
+
+/* --- Landscape on phones (Mike, 2026-11-24: portrait cut the chyron and tips off). Browsers can't force rotation
+   (iOS Safari), so play asks for it; the menus still work upright. --- */
+#rotate { display: none; position: fixed; inset: 0; z-index: 50; align-items: center; justify-content: center; text-align: center; background: rgba(10, 8, 20, 0.94); color: #f2e6cf; }
+#rotate div { display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 24px; }
+#rotate i { width: 46px; height: 76px; border: 4px solid #f2e6cf; border-radius: 9px; animation: rot-phone 1.8s ease-in-out infinite; }
+#rotate b { font: italic 900 24px/1.1 var(--f-head); text-transform: uppercase; }
+#rotate span { font-size: 14px; opacity: 0.75; }
+@keyframes rot-phone { 0%, 25% { transform: rotate(0); } 60%, 100% { transform: rotate(-90deg); } }
+@media (orientation: portrait) and (pointer: coarse) { html.playing #rotate { display: flex; } }

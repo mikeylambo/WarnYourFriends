@@ -105,12 +105,12 @@ export class Coverage {
       if (up && ratingsTier >= 2) this.deskUntil = this.time + TUNING.coverage.deskTime;
     }
     // The anchor desk cuts in on RAMPAGE and above, then steps aside.
-    this.desk.hidden = !(this.time < this.deskUntil);
+    this.desk.hidden = !TUNING.coverage.anchorDesk || !(this.time < this.deskUntil);
   }
 
   /** The broadcast ended: the desk takes the shot. */
   end() {
     this.deskUntil = this.time + 99;
-    this.desk.hidden = false;
+    this.desk.hidden = !TUNING.coverage.anchorDesk;
   }
 }

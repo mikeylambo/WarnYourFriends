@@ -175,10 +175,10 @@ export const TUNING = {
     storySpare: 1,
     storyOffer: [2, 2, 2],
     storyAsks: [
-      { id: 's-scoops', tier: 1, kind: 'scoops', n: 8, text: 'Grab {n} Scoops' },
+      { id: 's-scoops', tier: 1, kind: 'scoops', n: 8, text: 'Grab {n} Exclusives' },
       { id: 's-rampage', tier: 1, kind: 'rampage', n: 3, text: 'Go Rampage {n} times' },
       { id: 's-rivals', tier: 1, kind: 'rivals', n: 2, text: 'Flatten {n} rival news vans' },
-      { id: 's-near', tier: 1, kind: 'nearMiss', n: 12, text: '{n} close calls' },
+      { id: 's-near', tier: 1, kind: 'nearMiss', n: 12, text: '{n} near misses' },
       { id: 's-bridge', tier: 2, kind: 'cleanDistrict', district: 1, n: 1, text: 'Cross Saltmarsh Bridge without a hit', requires: 's-scoops', unlock: 'heavyLoad' },
       { id: 's-crash', tier: 2, kind: 'crashBefore', district: 3, n: 2, text: 'Crash {n} police cars before the tunnel', requires: 's-rampage', unlock: 'hotPursuit' },
       { id: 's-chain', tier: 2, kind: 'chain', n: 15, text: 'Combo {n} stunts', requires: 's-near', unlock: 'glassJaw' },
@@ -189,7 +189,7 @@ export const TUNING = {
       { id: 's-tunnel', tier: 3, kind: 'cleanDistrict', district: 3, n: 1, text: 'Through the tunnel without a hit', requires: 's-bridge' },
       { id: 's-units', tier: 3, kind: 'units', n: 4, text: 'Flatten {n} police cars', requires: 's-crash', unlock: 'shortLeash' },
       // Replaces 'Shake the police chopper' (Mike, 2026-11-24: there's no real way to lose it).
-      { id: 's-scoops20', tier: 3, kind: 'scoops', n: 20, text: 'Grab {n} Scoops', requires: 's-scoops', unlock: 'liveWire' },
+      { id: 's-scoops20', tier: 3, kind: 'scoops', n: 20, text: 'Grab {n} Exclusives', requires: 's-scoops', unlock: 'liveWire' },
       { id: 's-clean', tier: 3, kind: 'cleanRun', n: 1, text: 'Sign off without a single hit', requires: 's-tunnel' },
       { id: 's-modded', tier: 3, kind: 'finishModded', n: 1, text: 'Sign off with a traffic mod on', requires: 's-finish' },
     ] as { id: string; tier: 1 | 2 | 3; kind: string; n: number; text: string; district?: number; requires?: string; unlock?: string }[],
@@ -360,7 +360,14 @@ export const TUNING = {
    * and the meter's countdown. All under 3 Hz; Reduce Flashes holds the throb still.
    */
   /** Activation: hit-pause frames, a one-frame flash (off under Reduce Flashes), a camera jolt (px) and a rumble (ms). */
-  rampageFx: { rimColor: 0xff5a1f, rimBoost: 2.4, rimFloor: 0.5, /** Dusk and day: barely brighter, just hotter in colour. */ rimBoostLit: 1.15, ease: 0.25, pulseHz: 1.6, pulseAmp: 0.25, slamHitstop: 6, slamFlash: 2, slamShake: 7, slamHaptic: 220 },
+  rampageFx: {
+    /**
+     * Gold aura (Mike, 2026-11-24: "Hercules glow / SSJ aura", gold): halo + flame tongues behind him, additive.
+     * height: aura height per unit of his size (m, a head above him); behind: pushed away from the camera (m) so he
+     * stays in front; flicker/lick under 3 Hz (photosensitivity); burst: the gold shockwave rings when it fires.
+     */
+    aura: { color: 0xffc83a, height: 4.8, behind: 0.8, haloScale: 1.25, haloOpacity: 0.55, flames: 5, flameWidth: 0.42, flameHeight: 0.95, flameLick: 0.25, flameOpacity: 0.6, flicker: 0.12, flickerHz: 2.2, lickHz: 2.6, burst: [[16, 0.7, 0.95], [10, 0.5, 0.9], [22, 0.9, 0.6]] as [number, number, number][] },
+    rimColor: 0xffc23a, rimBoost: 2.4, rimFloor: 0.5, /** Dusk and day: barely brighter, just hotter in colour. */ rimBoostLit: 1.15, ease: 0.25, pulseHz: 1.6, pulseAmp: 0.25, slamHitstop: 6, slamFlash: 2, slamShake: 7, slamHaptic: 220 },
 
   shoulderCheck: {
     /** §7 0.25s burst that smashes one mass class up (unchanged in v0.3). */
@@ -651,8 +658,6 @@ export const TUNING = {
     shotAfter: 0.2, shotWidth: 960,
     /** The recap's looping clip: recorded off the canvas during the replay at this frame rate and bitrate; under `clipMin` s (skipped early) the still stays. */
     clipFps: 30, clipBitrate: 2_500_000, clipMin: 1.5,
-    /** Between plays of the clip, the still (the moment as it lands) holds this long (s). Mike: "alternate photos and clips". */
-    clipStillHold: 3,
     score: { policeCrash: 10, unitSmash: 7, leapLand: 4, breakawayLand: 5, heavyAcross: 6, heavy: 4, nearMiss: 4, ramMiss: 4 },
   },
 
@@ -760,11 +765,11 @@ export const TUNING = {
       { name: 'Wide Side', yawDeg: 35, pitchDeg: 52, distance: 55, fov: 35, lookAheadTime: 0.5 },
       { name: 'Long Lens', yawDeg: 15, pitchDeg: 40, distance: 70, fov: 22, lookAheadTime: 0.7 },
       // Mike: head-on as a cut-away, from higher up (44° vs the 18° experiment). Far and telephoto so ≥2s of road ahead fits below him.
-      { name: 'Head-On', yawDeg: 12, pitchDeg: 44, distance: 108, fov: 16, headOn: true, swoopHome: true },
+      { name: 'Head-On', yawDeg: 12, pitchDeg: 44, distance: 128, fov: 16, headOn: true, swoopHome: true },
       // Mike: a higher head-on. Steeper means more road per screen, so further out to keep ≥2s below him.
-      { name: 'High Head-On', yawDeg: 10, pitchDeg: 58, distance: 122, fov: 17, headOn: true, swoopHome: true },
+      { name: 'High Head-On', yawDeg: 10, pitchDeg: 58, distance: 140, fov: 17, headOn: true, swoopHome: true },
       // Mike: almost directly above. Travel stays screen-up; shows lanes, merges and the convoy like a map.
-      { name: 'Overhead', yawDeg: 0, pitchDeg: 82, distance: 70, fov: 30, swoopHome: true },
+      { name: 'Overhead', yawDeg: 0, pitchDeg: 82, distance: 80, fov: 30, swoopHome: true },
       // Mike (2026-11-17): the sign-off sweeps deeper into a head-on, low and close, looking back down the road he came
       // along; framed behind him so the end of the ramp ahead of him is out of shot. Outro only.
       { name: 'Sign-Off', yawDeg: 16, pitchDeg: 20, distance: 46, fov: 24, headOn: true, outro: true, lookBehind: 9, swoopHome: true },
@@ -811,8 +816,8 @@ export const TUNING = {
     cutFlashFrames: 1,
     /** Frame the point this many seconds ahead of the giant (speed × time). */
     lookAheadTime: 1.6,
-    /** The giant never sits lower than this fraction of the screen height (0 top, 1 bottom). */
-    giantMaxScreenY: 0.85,
+    /** The giant never sits lower than this fraction of the screen height (0 top, 1 bottom). Mike (2026-11-24): 0.85 put him under the chyron in landscape. */
+    giantMaxScreenY: 0.66,
     /** At least this much road visible ahead, in seconds at current speed. */
     minRoadAheadSeconds: 2,
     /** Distance changes between tiers ease over this long. */
@@ -1227,6 +1232,8 @@ export const TUNING = {
     coldOpen: 2.2,
     /** The anchor desk split screen holds this long when a higher tier hits. */
     deskTime: 4.5,
+    /** Anchor desk window shown at all (Mike, 2026-11-24: off for now; it fought the CAM button, and the chopper shot is the show). */
+    anchorDesk: false,
     /** Viewer video (picture-in-picture): length, minimum gap, minimum Ratings tier. */
     /** Viewer video's far plane (m): it frames him from ~10–25m, and drawing the city to 500m tripled the frame's draw calls (release pass, 2026-11-24). */
     pipFar: 80,
@@ -1288,7 +1295,7 @@ export const TUNING = {
     flickThreshold: 0.6,
     flickRelease: 0.3,
     /** Swipe: at least this many px, within this time. */
-    swipeMinPx: 40,
+    swipeMinPx: 48,
     swipeMaxTime: 0.35,
     /** Swipe down and hold to brake: downward drag past this many px. */
     swipeDownBrakePx: 40,

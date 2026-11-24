@@ -60,7 +60,7 @@ export class Input {
   private abilityEdge = false;
   private ability2Edge = false;
   private pauseEdge = false;
-  private touch: { id: number; sx: number; sy: number; x: number; y: number; t0: number; fired: boolean } | null = null;
+  private touch: { id: number; sx: number; sy: number; x: number; y: number; t0: number; fired: boolean; lastDir?: number } | null = null;
   private pad = { flickArmed: true, left: false, right: false, rb: false, lb: false, y: false, start: false, brake: false, cam: false };
   /** Next camera angle (Mike, 2026-11-24: C on keyboard, D-pad up or R3 on a pad, the camera button on touch). */
   private cameraEdge = false;
@@ -152,14 +152,20 @@ export class Input {
       const dx = s.x - s.sx;
       const dy = s.y - s.sy;
       const fast = (performance.now() - s.t0) / 1000 <= I.swipeMaxTime;
-      if (!s.fired && fast && Math.abs(dx) >= I.swipeMinPx && Math.abs(dx) > Math.abs(dy) * 1.2) {
-        this.laneEdge = Math.sign(dx);
-        s.fired = true;
-        // A new swipe can start from here without lifting the thumb.
+      const dir = Math.sign(dx);
+      // One swipe = one lane (Mike, 2026-11-24: a single flick moved two). Without lifting the thumb, only a
+      // reversal can fire again; the same direction needs a fresh touch.
+      if (fast && dir !== s.lastDir && Math.abs(dx) >= I.swipeMinPx && Math.abs(dx) > Math.abs(dy) * 1.2) {
+        this.laneEdge = dir;
+        s.lastDir = dir;
         s.sx = s.x;
         s.sy = s.y;
         s.t0 = performance.now();
-        s.fired = false;
+      } else if (s.lastDir && dir === s.lastDir) {
+        // Keep the origin under the thumb while it carries on the same way, so a reversal is measured from the turn.
+        s.sx = s.x;
+        s.sy = s.y;
+        s.t0 = performance.now();
       }
     }
   }
