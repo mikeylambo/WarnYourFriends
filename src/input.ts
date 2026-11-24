@@ -48,6 +48,8 @@ export class Input {
   keymap: Record<KeyAction, string[]> = { ...DEFAULT_KEYS };
   /** Accessibility: Brake toggles on a press instead of holding (keyboard, pad, swipe). */
   brakeToggle = false;
+  /** Tap the left / right half of the screen for a lane (instead of swiping). */
+  tapZones = false;
   private brakeLatch = false;
   /** Toggle mode with the brake latched on (the HUD shows BRAKE ON). */
   get brakeLatched(): boolean {
@@ -138,6 +140,11 @@ export class Input {
     if (this.touch) return;
     const t = e.changedTouches[0];
     this.touch = { id: t.identifier, sx: t.clientX, sy: t.clientY, x: t.clientX, y: t.clientY, t0: performance.now(), fired: false };
+    if (this.tapZones) {
+      // One lane per tap, on touch-down (fastest); the touch then can't also fire as a swipe.
+      this.laneEdge = t.clientX < window.innerWidth / 2 ? -1 : 1;
+      this.touch.fired = true;
+    }
   }
 
   private onTouchMove(e: TouchEvent) {
@@ -155,7 +162,7 @@ export class Input {
       const dir = Math.sign(dx);
       // One swipe = one lane (Mike, 2026-11-24: a single flick moved two). Without lifting the thumb, only a
       // reversal can fire again; the same direction needs a fresh touch.
-      if (fast && dir !== s.lastDir && Math.abs(dx) >= I.swipeMinPx && Math.abs(dx) > Math.abs(dy) * 1.2) {
+      if (!this.tapZones && fast && dir !== s.lastDir && Math.abs(dx) >= I.swipeMinPx && Math.abs(dx) > Math.abs(dy) * 1.2) {
         this.laneEdge = dir;
         s.lastDir = dir;
         s.sx = s.x;

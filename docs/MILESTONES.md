@@ -27,15 +27,15 @@ Status: `[ ]` todo · `[~]` in progress · `[x]` done
 
 ### Platform polish
 - [x] Landscape for play on phones (rotate card + pause).
-- [ ] Installable (PWA manifest + icons), fullscreen launch.
-- [ ] Audio respects the phone: unlocks on first tap, stops on background, resumes cleanly.
+- [x] Installable (PWA manifest + icons), fullscreen landscape launch; tab title fixed (was "Giant at Large").
+- [x] Audio unlocks on first tap and pauses with the game on background (iOS's silent switch can't be read by a web page).
 - [ ] Safe areas checked on notch / Dynamic Island / Android cutouts in landscape.
-- [ ] Haptics on/off setting.
+- [x] Haptics on/off setting (already there).
 
 ### Accessibility
 - [x] Reduce Flashes, Reduced Motion, HUD size, rebinding.
 - [ ] Colour-blind check on gold / yellow / red cues (shape or label as well as colour).
-- [ ] Tap-zone controls (tap left/right half) as an alternative to swipes.
+- [x] Tap-zone controls: Settings → Controls → Touch Lanes: Tap Sides.
 - [ ] Captions for any voice line.
 
 ## M2 — Next

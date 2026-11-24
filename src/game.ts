@@ -359,6 +359,7 @@ $('btn-cam').addEventListener('pointerdown', (e) => {
 function applyControls() {
   input.keymap = settings.keys ? (Object.fromEntries(KEY_ACTIONS.map((a) => [a, [settings.keys![a]]])) as Record<KeyAction, string[]>) : { ...DEFAULT_KEYS };
   input.brakeToggle = settings.brakeToggle;
+  input.tapZones = settings.tapZones;
   glyphFamily = null; // redraw the on-screen key labels
 }
 applyControls();
@@ -2214,6 +2215,7 @@ app = await createGameApp({
           // Playtest (Mike, 2026-11-17: "missed copying the run data"): every broadcast's numbers, any time. ?playtest=1 only.
           ...(PLAYTEST ? [{ tab: 'game' as SettingsTab, id: 'wyf-playdata', label: 'Copy Play Data', description: 'Copies every broadcast you have played (or saves a file)' }] : []),
           { tab: 'controls', id: 'wyf-controls', label: 'Rebind Keys' },
+          { tab: 'controls' as SettingsTab, id: 'wyf-tapzones', label: `Touch Lanes: ${settings.tapZones ? 'Tap Sides' : 'Swipe'}`, description: 'Tap Sides: tap the left or right half of the screen to change lanes' },
           ...(NOBRAKE ? [] : [{ tab: 'controls' as SettingsTab, id: 'wyf-brake', label: `Brake: ${settings.brakeToggle ? 'Toggle' : 'Hold'}`, description: 'Toggle: press once to brake, again to run' }]),
           { tab: 'display', id: 'wyf-hudsize', label: `HUD Size: ${Math.round(settings.hudSize * 100)}%` },
           { tab: 'display', id: 'wyf-colors', label: `HUD Colours: ${settings.hudColors === 'network' ? 'Network' : 'WYF 6'}`, description: 'The station\'s purple and cream, or network red, blue and white' },
@@ -2251,7 +2253,10 @@ app = await createGameApp({
           return true;
         }
         const next = <T,>(list: T[], v: T) => list[(list.indexOf(v) + 1) % list.length];
-        if (id === 'wyf-brake') {
+        if (id === 'wyf-tapzones') {
+          settings.tapZones = !settings.tapZones;
+          applyControls();
+        } else if (id === 'wyf-brake') {
           settings.brakeToggle = !settings.brakeToggle;
           applyControls();
         } else if (id === 'wyf-hudsize') {

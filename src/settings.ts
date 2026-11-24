@@ -18,6 +18,8 @@ export interface Settings {
   debugChosen?: boolean;
   /** Accessibility (2026-11-17). Brake toggles on a press instead of holding. */
   brakeToggle: boolean;
+  /** Accessibility (2026-11-24): tap the left or right half of the screen to change lanes, instead of swiping. */
+  tapZones: boolean;
   /** HUD size multiplier (1, 1.15, 1.3). */
   hudSize: number;
   /** Game speed (1, 0.9, 0.8, 0.7). Below 1 the leaderboard is off (it's an assist). */
@@ -47,7 +49,7 @@ function readKeys(v: unknown): Record<KeyAction, string> | null {
 }
 
 const KEY = 'wyf.settings.v1';
-const DEFAULTS: Settings = { reducedMotion: false, reduceFlashes: false, debug: false, cameraCuts: true, liveTime: false, hudColors: 'wyf', giantSize: 'growth', brakeToggle: false, hudSize: 1, gameSpeed: 1, autoRampage: false, bloom: true, keys: null };
+const DEFAULTS: Settings = { reducedMotion: false, reduceFlashes: false, debug: false, cameraCuts: true, liveTime: false, hudColors: 'wyf', giantSize: 'growth', brakeToggle: false, tapZones: false, hudSize: 1, gameSpeed: 1, autoRampage: false, bloom: true, keys: null };
 /** Touch screens default to Auto Rampage (one less thing to reach for). */
 const coarse = () => typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches;
 
@@ -67,6 +69,7 @@ export function loadSettings(): Settings {
       hudColors: parsed.hudColors === 'network' ? 'network' : 'wyf',
       giantSize: parsed.giantSize === 'fixed' || parsed.giantSize === 'big' ? parsed.giantSize : 'growth',
       brakeToggle: parsed.brakeToggle === true,
+      tapZones: parsed.tapZones === true,
       hudSize: HUD_SIZES.includes(parsed.hudSize as number) ? (parsed.hudSize as number) : 1,
       gameSpeed: GAME_SPEEDS.includes(parsed.gameSpeed as number) ? (parsed.gameSpeed as number) : 1,
       autoRampage: typeof parsed.autoRampage === 'boolean' ? parsed.autoRampage : coarse(),
