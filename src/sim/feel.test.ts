@@ -43,12 +43,12 @@ describe('feel baseline (prototype)', () => {
     expect(rampsPerMin).toBeGreaterThanOrEqual(1.1);
     expect(rampsPerMin).toBeLessThanOrEqual(2.6);
     expect(firstMedian).toBeLessThanOrEqual(40);
-  });
+  }, 60_000); // 12 headless runs: seconds, not milliseconds
   it('endless: always ends, and not too soon', () => {
     const runs = Array.from({ length: 8 }, (_, i) => play(201 + i, true, 1200));
     const t = runs.map((r) => r.sim.time).sort((a, b) => a - b);
     console.log(`feel: endless survival median ${t[t.length >> 1].toFixed(0)}s (${t.map((x) => x.toFixed(0)).join(' ')})`);
     expect(runs.every((r) => !r.sim.live)).toBe(true);
     expect(t[t.length >> 1]).toBeGreaterThanOrEqual(150);
-  });
+  }, 60_000); // 8 endless runs up to 1200s each
 });
