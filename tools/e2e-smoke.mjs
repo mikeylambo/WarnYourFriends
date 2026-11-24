@@ -110,8 +110,13 @@ try {
         await p.click(`[data-choice-id="${id}"]`);
         await p.waitForTimeout(150);
       }
-      await p.waitForSelector('#recap .briefing', { timeout: 3000 }).catch(() => {});
-      if (!(await p.isVisible('#recap .briefing'))) fail('How to Play did not show before the first broadcast');
+      // Story opens Tonight's Rundown first (pick the asks, go live), then How to Play on a first broadcast.
+      await p.waitForSelector('#recap .preshow', { timeout: 3000 }).catch(() => {});
+      if (!(await p.isVisible('#recap .preshow'))) fail("Tonight's Rundown did not show for Story");
+      else ok("Tonight's Rundown shows for Story");
+      await p.click('#ps-go');
+      await p.waitForSelector('#brief-go', { timeout: 3000 }).catch(() => {});
+      if (!(await p.isVisible('#brief-go'))) fail('How to Play did not show before the first broadcast');
       else ok('How to Play shows before the first broadcast');
       if (await p.evaluate(() => window.__GAME.started)) fail('broadcast started behind How to Play');
       await p.click('#brief-go');
@@ -159,7 +164,9 @@ try {
         await p.tap(`[data-choice-id="${id}"]`);
         await p.waitForTimeout(150);
       }
-      await p.waitForSelector('#recap .briefing', { timeout: 3000 }).catch(() => {});
+      await p.waitForSelector('#recap .preshow', { timeout: 3000 }).catch(() => {});
+      await p.tap('#ps-go');
+      await p.waitForSelector('#brief-go', { timeout: 3000 }).catch(() => {});
       await p.tap('#brief-go');
     });
     if (problems.length) fail(`mobile boot problems:\n    ${problems.join('\n    ')}`);
@@ -169,9 +176,9 @@ try {
   // 2b. Keyboard start ("press any key").
   {
     const { ctx } = await bootAndStart(browser, 'keyboard', { viewport: { width: 1280, height: 720 } }, async (p) => {
-      // Keyboard only: Enter through the title, the main menu (Full Broadcast) and How to Play (Go live).
-      // How to Play ignores input for its first 250ms (no accidental double-press), so give each screen a beat.
-      for (let i = 0; i < 3; i++) {
+      // Keyboard only: Enter through the title, the main menu (Story), Tonight's Rundown (Go Live) and How to Play.
+      // Cards ignore input for their first 250ms (no accidental double-press), so give each screen a beat.
+      for (let i = 0; i < 4; i++) {
         await p.keyboard.press('Enter');
         await p.waitForTimeout(450);
       }
@@ -290,7 +297,7 @@ try {
     const ctx = await browser.newContext({ viewport: { width: 1280, height: 720 } });
     const page = await ctx.newPage();
     const problems = watch(page);
-    await page.goto(`${URL}?seed=5&autostart=1`);
+    await page.goto(`${URL}?seed=5&autostart=1&classic=1`); // classic: no moving traffic to refuse a lane
     await page.waitForFunction(() => document.documentElement.dataset.boot === 'ok', null, { timeout: 15000 });
     await page.waitForFunction(() => window.__GAME.state().time > 0.5, null, { timeout: 15000 });
     await page.evaluate(() => window.__GAME.setAngle(3, 1));
@@ -325,7 +332,7 @@ try {
     const ctx = await browser.newContext({ viewport: { width: 1280, height: 720 } });
     const page = await ctx.newPage();
     const problems = watch(page);
-    await page.goto(`${URL}?seed=2&bot=1&step=1`);
+    await page.goto(`${URL}?seed=2&bot=1&step=1&classic=1&playtest=1`); // the classic 150s broadcast; playtest shows Copy play data
     await page.waitForFunction(() => window.__GAME && window.__GAME.started, null, { timeout: 15000 });
     const mid = await page.evaluate(async () => {
       window.__GAME.step(60 * 90);
@@ -384,13 +391,36 @@ try {
     await ctx.close();
   }
 
+  // 7b. The game (the pivot loop, 2026-11-24): a full Story run with the bot → recap with its board, no page errors.
+  {
+    const ctx = await browser.newContext({ viewport: { width: 1280, height: 720 } });
+    const page = await ctx.newPage();
+    const problems = watch(page);
+    await page.goto(`${URL}?seed=4&bot=1&step=1&mode=run`);
+    await page.waitForFunction(() => window.__GAME && window.__GAME.started, null, { timeout: 15000 });
+    const end = await page.evaluate(() => {
+      for (let i = 0; i < 30 && window.__GAME.show().live; i++) window.__GAME.step(60 * 15);
+      return { show: window.__GAME.show(), run: window.__GAME.run() };
+    });
+    await page.waitForFunction(() => window.__GAME.recap(), null, { timeout: 15000 }).catch(() => {});
+    const rc = await page.evaluate(() => ({ recap: window.__GAME.recap(), board: !!document.querySelector('#recap .board, #recap [class*="board"]'), playdata: !!document.getElementById('playdata') }));
+    await page.screenshot({ path: 'test-results/e2e-story-recap.png' });
+    if (end.show.live) fail(`Story still live after 450s (${end.show.state})`);
+    else ok(`Story ended: ${end.show.state}, run ${end.run?.phase}, banked ${Math.round(end.show.banked)}`);
+    if (!rc.recap?.title) fail('Story: no recap');
+    else ok(`Story recap: "${rc.recap.title}"`);
+    if (rc.playdata) fail('Story: playtest button visible without ?playtest=1');
+    if (problems.length) fail(`Story problems:\n    ${problems.join('\n    ')}`);
+    await ctx.close();
+  }
+
   // 8. Phase 3: the five-segment run. Segment 1 auto-played by the bot → recap (SEGMENT 1 OF 5)
   //    → Producer's Meeting (3 pitches, keyboard) → buy → segment 2 starts hotter with the upgrade.
   {
     const ctx = await browser.newContext({ viewport: { width: 1280, height: 720 } });
     const page = await ctx.newPage();
     const problems = watch(page);
-    await page.goto(`${URL}?seed=11&bot=1&step=1&mode=run`); // a seed the bot clears segment 1 on (seed 10 busts since the dozer)
+    await page.goto(`${URL}?seed=11&bot=1&step=1&mode=run&classic=1`); // a seed the bot clears segment 1 on (seed 10 busts since the dozer)
     await page.waitForFunction(() => window.__GAME && window.__GAME.started, null, { timeout: 15000 });
     await page.evaluate(() => window.__GAME.step(60 * 170));
     await page.waitForFunction(() => window.__GAME.recap(), null, { timeout: 15000 }).catch(() => {});
@@ -479,7 +509,7 @@ try {
     await page.click('[data-choice-id="howto"]');
     await page.waitForSelector('#recap .briefing', { timeout: 3000 }).catch(() => {});
     const runBefore = await page.evaluate(() => window.__GAME.sim.seed);
-    await page.evaluate(() => (window.__GAME.sim.time = 164.9));
+    await page.evaluate(() => (window.__GAME.sim.time = 1e4)); // far past the fuel: the attract broadcast ends
     await page.waitForFunction((s) => window.__GAME.sim.seed !== s, runBefore, { timeout: 12000 }).catch(() => {});
     const b = await page.evaluate((s) => ({ rolled: window.__GAME.sim.seed !== s, open: !!document.querySelector('#recap .briefing') && !document.getElementById('recap').hidden }), runBefore);
     if (!b.rolled) fail('attract broadcast did not roll over (test setup)');
@@ -488,7 +518,7 @@ try {
     await page.keyboard.press('Escape');
     await page.waitForTimeout(400);
     if (m.hud || m.asks) fail(`broadcast HUD shows behind the menu (${JSON.stringify(m)})`);
-    else if (m.choices !== 'run|awards|howto|settings') fail(`main menu choices: ${m.choices}`);
+    else if (m.choices !== 'run|endless|awards|howto|settings') fail(`main menu choices: ${m.choices}`);
     else ok(`main menu over a clean chopper shot: ${m.choices}`);
     await ctx.close();
   }

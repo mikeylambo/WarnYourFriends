@@ -81,7 +81,7 @@ function rows(top: Row[], you: { rank: number; score: number } | null): string {
  * With a saved name it posts straight away; the first time, it asks for one.
  */
 export function mountBoard(el: HTMLElement, mode: BoardMode, sub: Submission | null, why?: string) {
-  const title = mode === 'run' ? 'Full Broadcast board' : 'Single Segment board';
+  const title = mode === 'run' ? 'Story board' : mode === 'endless' ? 'Endless board' : 'Single Segment board';
   const head = (right = '') => `<div class="hd">${title}<span>${right}</span></div>`;
   const player = playerId();
   let posted = false;

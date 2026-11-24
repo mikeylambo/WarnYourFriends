@@ -1047,10 +1047,10 @@ export const TUNING = {
    * Leaderboard (§29: shared, server-side). Scores are re-simulated from the inputs on the server.
    */
   leaderboard: {
-    /** Board season: bumped when the rules change what a score means (2: the Rampage loop, 2026-11-17). Old boards stay in the store, unread. */
-    season: 2,
-    /** Inputs per segment a submission may carry: 165s segment + the outro, with room (60 Hz). */
-    maxTicks: 20000,
+    /** Board season: bumped when the rules change what a score means (2: the Rampage loop, 2026-11-17; 3: the pivot loop is the game, 2026-11-24). Old boards stay in the store, unread. */
+    season: 3,
+    /** Inputs per segment a submission may carry (60 Hz): Endless runs to ~1200s at worst (feel baseline cap), Story ~345s + outro. */
+    maxTicks: 80000,
     /** Longest name on the board (fits the recap row at phone width). */
     nameMax: 14,
     /** Rows shown on the recap board. */

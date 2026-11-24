@@ -1,4 +1,8 @@
+import { enableProto } from '../src/tuning';
 import { handle, redisFromEnv } from './leaderboard';
+
+// The pivot loop is the game (2026-11-24): the server re-plays scores under the same rules as the client.
+enableProto();
 
 /** Vercel Node function entry (bundled to api/leaderboard.js by tools/build-api.mjs). */
 interface Req {

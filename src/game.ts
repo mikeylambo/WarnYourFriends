@@ -30,7 +30,7 @@ import coverUrl from './assets/title-cover.webp';
 import { UPGRADE_ART } from './upgradeArt';
 import { PlayLog, appendLog, exportLog, type PlayEntry } from './playlog';
 import { readFlags } from './debug';
-import { encodeInputs, type Submission } from './leaderboard/verify';
+import { encodeInputs, type BoardMode, type Submission } from './leaderboard/verify';
 import { mountBoard, prefetchSeed, takeSeed } from './leaderboardClient';
 import { Onboarding, type PromptId } from './onboarding';
 import { AWARDS, loadProfile, modUnlocked, storyAskOffer, outfitUnlocked, record, rewardLine, saveProfile, upgradePool, type Award } from './awards';
@@ -39,8 +39,10 @@ import { applyStoredTuning, mountTuningPanel, tuningChanged } from './tuningPane
 import { createGameApp, type InputDeviceFamily, type CoreSettings, type FrameAssembly, type GenreFrame, type RendererAdapter, type SLUWebShell } from '@slu/web-shell';
 
 applyStoredTuning();
-/** The prototype core loop (DECISIONS 2026-11-18): ?proto=1 turns it on for this page load. */
-const PROTO = new URLSearchParams(location.search).has('proto');
+/** The pivot core loop (DECISIONS 2026-11-18) is the game (2026-11-24); ?classic=1 brings back the old loop for comparison. */
+const PROTO = !new URLSearchParams(location.search).has('classic');
+/** Playtest tools (play data export, live tuning on T): ?playtest=1 only, hidden from players (release pass, 2026-11-24). */
+const PLAYTEST = new URLSearchParams(location.search).has('playtest');
 if (PROTO) {
   enableProto();
   document.documentElement.classList.add('proto');
@@ -389,14 +391,14 @@ const recentEvents: SimEvent[] = [];
 const playLog = new PlayLog();
 let lastEntry: PlayEntry | null = null;
 // Recap REPLAY state (declared up here: newRun runs at boot). See startReplay below.
-let simOpts: { seed: number; segment: number; upgrades: UpgradeId[]; levels: Partial<Record<AbilityId, number>>; growth: boolean; guided?: boolean; edition?: number; asks?: string[]; mods?: string[] } = { seed: 0, segment: 0, upgrades: [], levels: {}, growth: false };
+let simOpts: { seed: number; segment: number; upgrades: UpgradeId[]; levels: Partial<Record<AbilityId, number>>; growth: boolean; guided?: boolean; edition?: number; endless?: boolean; asks?: string[]; mods?: string[] } = { seed: 0, segment: 0, upgrades: [], levels: {}, growth: false };
 const inputLog: SimInput[] = [];
 /** Leaderboard: this broadcast's (or run's) seed, each segment's inputs and the meeting buys, for the server to re-play. */
-let lb: { mode: 'run' | 'broadcast'; seed: number; segments: string[]; buys: UpgradeId[][]; pool: UpgradeId[]; guided?: boolean; edition?: number } = { mode: 'broadcast', seed: 0, segments: [], buys: [], pool: [] };
+let lb: { mode: BoardMode; seed: number; segments: string[]; buys: UpgradeId[][]; pool: UpgradeId[]; guided?: boolean; edition?: number } = { mode: 'broadcast', seed: 0, segments: [], buys: [], pool: [] };
 /** Why this browser's scores can't go on the board (a setting that changes the sim), or null. */
 const lbBlocked = () =>
-  PROTO
-    ? 'Prototype rules: this score stays off the board.'
+  !PROTO
+    ? 'Classic rules: this score stays off the board.'
     : flags.bot || flags.seg !== null || flags.ability || flags.heat !== null || flags.nodecay || flags.god || (flags.size !== null && flags.size !== 'growth') || tuningChanged()
     ? 'Debug or tuning settings are on, so this score stays off the board.'
     : settings.gameSpeed < 1
@@ -479,7 +481,7 @@ function newRun(seed: number, segment = 0, upgrades: UpgradeId[] = [], levels: P
   const modOpts = story && profile.mods.length ? { mods: [...profile.mods] } : {};
   sim = new Sim({ seed, segment, upgrades, levels, growth, guided, edition, ...(endlessMode ? { endless: true } : {}), ...askOpts, ...modOpts });
   document.documentElement.classList.toggle('endless', endlessMode);
-  simOpts = { seed, segment, upgrades: [...upgrades], levels: { ...levels }, growth, guided, edition, ...askOpts, ...modOpts };
+  simOpts = { seed, segment, upgrades: [...upgrades], levels: { ...levels }, growth, guided, edition, ...(endlessMode ? { endless: true } : {}), ...askOpts, ...modOpts };
   // A fresh giant space for the new road: no anchor carried over, his starting size outright.
   gScale = sizeFor(0);
   gAnchor.x = gAnchor.z = 0;
@@ -1085,7 +1087,7 @@ function showRecap() {
       <div class="padhint"></div>
     </footer>
   </div>
-  <button class="playdata" id="playdata">Copy play data</button>`;
+  ${PLAYTEST ? '<button class="playdata" id="playdata">Copy play data</button>' : ''}`;
   // Bests land once storage answers (it's async): a NEW BEST tag and the lifetime line.
   void statsReady?.then((r) => {
     if (!r || recapEl.hidden) return;
@@ -1100,7 +1102,7 @@ function showRecap() {
     const blocked = lbBlocked();
     const sub: Submission | null = blocked || lb.segments.length === 0
       ? null
-      : { mode: lb.mode, seed: lb.seed, growth: simOpts.growth, segments: lb.segments, buys: lb.buys, pool: lb.pool, ...(lb.guided ? { guided: true } : {}), ...(lb.edition ? { edition: lb.edition } : {}), claimed: Math.round(run ? run.earned : sim.show.banked) };
+      : { mode: lb.mode, seed: lb.seed, growth: simOpts.growth, segments: lb.segments, buys: lb.buys, pool: lb.pool, ...(lb.guided ? { guided: true } : {}), ...(lb.edition ? { edition: lb.edition } : {}), ...(simOpts.asks ? { asks: simOpts.asks } : {}), ...(simOpts.mods ? { mods: simOpts.mods } : {}), claimed: Math.round(run ? run.earned : sim.show.banked) };
     mountBoard(boardEl, lb.mode, sub, blocked ?? undefined);
   }
   // Playtest export: log this broadcast once, then copy everything logged so far.
@@ -1926,7 +1928,7 @@ function beginBroadcast(mode = 'broadcast') {
   // The very first broadcast a player goes live in is the guided one (TUNING.guided): its first segment opens calm.
   const guided = !flags.bot && !flags.autostart && !briefingSeen();
   const edition = 0; // Editions off (2026-11-19)
-  lb = { mode: mode === 'run' ? 'run' : 'broadcast', seed, segments: [], buys: [], pool: upgradePool(profile), ...(guided ? { guided } : {}), ...(edition ? { edition } : {}) };
+  lb = { mode: endlessMode ? 'endless' : mode === 'run' ? 'run' : 'broadcast', seed, segments: [], buys: [], pool: upgradePool(profile), ...(guided ? { guided } : {}), ...(edition ? { edition } : {}) };
   if (mode === 'run') {
     run = new RunState(seed, lb.pool, edition); // Awards unlock the rest of the pool
     newRun(run.segmentSeed(), 0, [], {}, guided);
@@ -2000,7 +2002,7 @@ window.addEventListener('keydown', (e) => {
     saveSettings(settings);
     e.preventDefault();
   }
-  if (e.code === 'KeyT') tunePanel.toggle();
+  if (e.code === 'KeyT' && (PLAYTEST || flags.tune)) tunePanel.toggle();
   // Typing in a field (the leaderboard name): Enter submits that form, nothing else.
   if (e.target instanceof HTMLInputElement) return;
   if (!recapEl.hidden && (e.code === 'Enter' || e.code === 'Space')) {
@@ -2122,8 +2124,8 @@ app = await createGameApp({
           { tab: 'game', id: 'wyf-speed', label: `Game Speed: ${Math.round(settings.gameSpeed * 100)}%`, description: 'Slower gives more time to react. Below 100% scores stay off the leaderboard' },
           { tab: 'game', id: 'wyf-howto', label: 'How to Play' },
           { tab: 'game', id: 'wyf-tips', label: 'Replay Tips', description: 'Show the in-game control tips again' },
-          // Playtest (Mike, 2026-11-17: "missed copying the run data"): every broadcast's numbers, any time. Hide before release.
-          { tab: 'game', id: 'wyf-playdata', label: 'Copy Play Data', description: 'Copies every broadcast you have played (or saves a file)' },
+          // Playtest (Mike, 2026-11-17: "missed copying the run data"): every broadcast's numbers, any time. ?playtest=1 only.
+          ...(PLAYTEST ? [{ tab: 'game' as SettingsTab, id: 'wyf-playdata', label: 'Copy Play Data', description: 'Copies every broadcast you have played (or saves a file)' }] : []),
           { tab: 'controls', id: 'wyf-controls', label: 'Rebind Keys' },
           { tab: 'controls', id: 'wyf-brake', label: `Brake: ${settings.brakeToggle ? 'Toggle' : 'Hold'}`, description: 'Toggle: press once to brake, again to run' },
           { tab: 'display', id: 'wyf-hudsize', label: `HUD Size: ${Math.round(settings.hudSize * 100)}%` },

@@ -10,7 +10,8 @@ import { TUNING, type UpgradeId } from '../tuning';
  * Pure: no DOM, no network. Shared by the game (encode) and the API (decode + verify).
  */
 
-export type BoardMode = 'run' | 'broadcast';
+/** run = Story (or the classic Full Broadcast), broadcast = one segment, endless = Endless. */
+export type BoardMode = 'run' | 'broadcast' | 'endless';
 
 export interface Submission {
   mode: BoardMode;
@@ -27,6 +28,10 @@ export interface Submission {
   guided?: boolean;
   /** Edition of the news (TUNING.editions). */
   edition?: number;
+  /** Story: the producer's asks picked before going live (TUNING.proto.storyAsks ids). */
+  asks?: string[];
+  /** Story: traffic mods on (TUNING.proto.mods ids); they change the score multiplier. */
+  mods?: string[];
   /** The score the client showed; only compared, never stored. */
   claimed: number;
 }
@@ -78,11 +83,24 @@ function playSegment(sim: Sim, inputs: SimInput[]): boolean {
 
 /** Re-simulate a submission and return the score the sim gives it. */
 export function verify(sub: Submission): VerifyResult {
-  if (sub.mode !== 'run' && sub.mode !== 'broadcast') return { ok: false, error: 'mode' };
+  if (sub.mode !== 'run' && sub.mode !== 'broadcast' && sub.mode !== 'endless') return { ok: false, error: 'mode' };
   if (!Number.isSafeInteger(sub.seed)) return { ok: false, error: 'seed' };
   if (!Array.isArray(sub.segments) || !sub.segments.length || sub.segments.length > TUNING.run.segments) return { ok: false, error: 'segments' };
   const logs = sub.segments.map((s) => (typeof s === 'string' ? decodeInputs(s) : null));
   if (logs.some((l) => !l)) return { ok: false, error: 'inputs' };
+
+  const strs = (v: unknown, known: Record<string, unknown> | readonly { id: string }[]) =>
+    Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string' && (Array.isArray(known) ? known.some((k) => k.id === x) : x in known)).slice(0, 8) : [];
+  const asks = strs(sub.asks, TUNING.proto.storyAsks);
+  const mods = strs(sub.mods, TUNING.proto.mods);
+  const story = { ...(asks.length ? { asks } : {}), ...(mods.length ? { mods } : {}) };
+
+  if (sub.mode === 'endless') {
+    if (logs.length !== 1) return { ok: false, error: 'segments' };
+    const sim = new Sim({ seed: sub.seed, segment: 0, upgrades: [], growth: !!sub.growth, guided: !!sub.guided, edition: 0, endless: true });
+    if (!playSegment(sim, logs[0]!)) return { ok: false, error: 'unfinished' };
+    return { ok: true, score: Math.round(sim.show.banked), segments: 1, won: false };
+  }
 
   if (sub.mode === 'broadcast') {
     if (logs.length !== 1) return { ok: false, error: 'segments' };
@@ -97,7 +115,7 @@ export function verify(sub: Submission): VerifyResult {
   const buys = Array.isArray(sub.buys) ? sub.buys : [];
   for (let i = 0; i < logs.length; i++) {
     if (run.phase !== 'live') return { ok: false, error: 'segments' };
-    const sim = new Sim({ seed: run.segmentSeed(), segment: run.segment, upgrades: run.owned, levels: run.levels, growth: !!sub.growth, guided: !!sub.guided && i === 0, edition });
+    const sim = new Sim({ seed: run.segmentSeed(), segment: run.segment, upgrades: run.owned, levels: run.levels, growth: !!sub.growth, guided: !!sub.guided && i === 0, edition, ...story });
     if (!playSegment(sim, logs[i]!)) return { ok: false, error: 'unfinished' };
     run.finishSegment(sim.show);
     if ((run.phase as string) === 'meeting') {
