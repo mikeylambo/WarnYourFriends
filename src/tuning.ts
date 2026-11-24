@@ -118,6 +118,8 @@ export const TUNING = {
     themeWeight: 4,
     /** Lane-changers: signal when he's `at` m out (~3.5s at Stride), for `signal` s, then move a lane over in `time` s; done well before he arrives, so what he reads is what he meets. */
     shift: { at: 70, signal: 0.7, time: 1.1 },
+    /** The finale roadblock is queued this far before the course end (m): ~500m before the exit opens, so it finds a quiet moment (not over a blockade still out ahead). */
+    finaleAt: 900,
     noBrake: true,
     firstChunk: 150,
     chunkReact: 0.45,

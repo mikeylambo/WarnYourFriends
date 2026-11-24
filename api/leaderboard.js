@@ -32,6 +32,8 @@ var TUNING = {
     themeWeight: 4,
     /** Lane-changers: signal when he's `at` m out (~3.5s at Stride), for `signal` s, then move a lane over in `time` s; done well before he arrives, so what he reads is what he meets. */
     shift: { at: 70, signal: 0.7, time: 1.1 },
+    /** The finale roadblock is queued this far before the course end (m): ~500m before the exit opens, so it finds a quiet moment (not over a blockade still out ahead). */
+    finaleAt: 900,
     noBrake: true,
     firstChunk: 150,
     chunkReact: 0.45,
@@ -2813,6 +2815,7 @@ var Pursuit = class {
   allowed(k) {
     if (TUNING.proto.on && this.sim.time < this.quietUntil && (k === "net" || k === "rolling" || k === "carrier")) return false;
     const sim = this.sim;
+    if (this.finalePending && k !== "cruiser" && k !== "chopper") return false;
     if (this.units.some((u) => u.alive && u.unit === "roadblock" && u.s > sim.giant.s)) return false;
     if (k === "net" && TUNING.proto.on && TUNING.proto.noBrake) return false;
     if (k === "net") {
@@ -2880,7 +2883,8 @@ var Pursuit = class {
     if (!this.finalePending) return;
     const sim = this.sim;
     const ex = sim.exit;
-    if (!ex || ex.gore - sim.giant.s < TUNING.difficulty.finaleGiveUp) {
+    const gore = ex ? ex.gore : TUNING.proto.on && sim.track.courseEnd < Infinity ? sim.track.courseEnd - 400 : null;
+    if (gore === null || gore - sim.giant.s < TUNING.difficulty.finaleGiveUp) {
       this.finalePending = false;
       return;
     }
@@ -2889,8 +2893,8 @@ var Pursuit = class {
       return;
     }
     if (this.tellActive || this.units.some((u) => u.alive && (u.phase === "tell" || u.unit === "net" || u.unit === "rolling"))) return;
-    if (this.units.some((u) => u.alive && u.unit === "cruiser" && !u.lost && u.phase !== "leave" && u.s > sim.giant.s - 40)) return;
-    if (this.spawnRoadblock()) this.finalePending = false;
+    if (!TUNING.proto.on && this.units.some((u) => u.alive && u.unit === "cruiser" && !u.lost && u.phase !== "leave" && u.s > sim.giant.s - 40)) return;
+    if (this.spawnRoadblock(TUNING.proto.on)) this.finalePending = false;
   }
   spawn(k) {
     switch (k) {
@@ -3393,7 +3397,8 @@ var Pursuit = class {
     }
   }
   // --- Static roadblock ---------------------------------------------------------------
-  spawnRoadblock() {
+  /** `force` (the story finale): it clears its own spot and the gap lane's approach (all off camera, ≥ spawnAheadMin out). */
+  spawnRoadblock(force = false) {
     const sim = this.sim;
     const g = sim.giant;
     const B = TUNING.pursuit.roadblock;
@@ -3403,8 +3408,15 @@ var Pursuit = class {
     for (let tries = 0; tries < 30; tries++, s += 3) {
       const L = track.lanesAt(s);
       if (L < 2 || track.lanesAt(s - 12) !== L || track.lanesAt(s + 12) !== L) continue;
-      if (track.propsBetween(s - 7, s + 7).length) continue;
       const all = Array.from({ length: L }, (_, i) => i);
+      if (force) {
+        for (const p of track.propsBetween(s - 7, s + 7)) p.alive = false;
+        const tw = track.twoWay.find((w2) => s >= w2.s0 && s <= w2.s1);
+        const own = all.filter((l) => l >= (tw ? tw.split : 0));
+        const gl = own.reduce((a, b) => Math.abs(b - g.lane) < Math.abs(a - g.lane) ? b : a, own[0]);
+        for (const p of track.propsBetween(s - 40, s + 8)) if (Math.abs(p.d - track.laneCenter(gl)) < p.hw + 1.2) p.alive = false;
+      }
+      if (track.propsBetween(s - 7, s + 7).length) continue;
       const gaps = all.filter((l) => !this.propIn(l, s - 30, s + 8) && (!TUNING.proto.on || this.fairWith(s, all.filter((x) => x !== l), L)));
       if (!gaps.length) continue;
       const gap = gaps[this.rng.int(0, gaps.length - 1)];
@@ -3896,6 +3908,7 @@ var Sim = class {
   /** The traffic mods' score multiplier, applied once when the broadcast ends. */
   modMult = 1;
   modsBanked = false;
+  finaleQueued = false;
   /** Police spawn pace from the traffic mods, before any district's own pace. */
   basePace = 1;
   /** Endless mode (prototype): no exit, no fuel. */
@@ -4268,6 +4281,10 @@ var Sim = class {
     const now = this.time + this.dt;
     const story = TUNING.proto.on;
     if (story) {
+      if (!this.finaleQueued && TUNING.difficulty.finaleRoadblock && this.track.courseEnd < Infinity && g.s >= this.track.courseEnd - TUNING.proto.finaleAt) {
+        this.finaleQueued = true;
+        this.pursuit.spawnFinale();
+      }
       if (!this.exit && this.track.courseEnd < Infinity && g.s >= this.track.courseEnd - 400 && now < X.length + X.grace) this.openExit();
     } else if (!this.exitPlanned && now >= X.exitOpensAt - X.planAhead) {
       this.exitPlanned = true;

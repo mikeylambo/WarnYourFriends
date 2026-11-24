@@ -277,6 +277,8 @@ export class Pursuit {
   private allowed(k: UnitKind): boolean {
     if (TUNING.proto.on && this.sim.time < this.quietUntil && (k === 'net' || k === 'rolling' || k === 'carrier')) return false;
     const sim = this.sim;
+    // The finale roadblock is waiting its turn: no new threat ahead of him until it's placed.
+    if (this.finalePending && k !== 'cruiser' && k !== 'chopper') return false;
     // A roadblock still ahead of him (the finale's included) owns the next tell: nothing else joins until it's passed.
     if (this.units.some((u) => u.alive && u.unit === 'roadblock' && u.s > sim.giant.s)) return false;
     // No brake in the pivot loop (Mike, 2026-11-24), and braking out the back was the Net's way out: no Nets.
@@ -350,7 +352,9 @@ export class Pursuit {
     if (!this.finalePending) return;
     const sim = this.sim;
     const ex = sim.exit;
-    if (!ex || ex.gore - sim.giant.s < TUNING.difficulty.finaleGiveUp) {
+    // Story: the gore isn't placed yet when it's queued; the course end stands in for it.
+    const gore = ex ? ex.gore : TUNING.proto.on && sim.track.courseEnd < Infinity ? sim.track.courseEnd - 400 : null;
+    if (gore === null || gore - sim.giant.s < TUNING.difficulty.finaleGiveUp) {
       this.finalePending = false;
       return;
     }
@@ -361,8 +365,9 @@ export class Pursuit {
     }
     if (this.tellActive || this.units.some((u) => u.alive && (u.phase === 'tell' || u.unit === 'net' || u.unit === 'rolling'))) return;
     // Same as any threat ahead: not while a cruiser is closing in or winding up (one tell at a time).
-    if (this.units.some((u) => u.alive && u.unit === 'cruiser' && !u.lost && u.phase !== 'leave' && u.s > sim.giant.s - 40)) return;
-    if (this.spawnRoadblock()) this.finalePending = false;
+    // (The story finale doesn't wait for cruisers: it lands far up the road, and the finale is full of them.)
+    if (!TUNING.proto.on && this.units.some((u) => u.alive && u.unit === 'cruiser' && !u.lost && u.phase !== 'leave' && u.s > sim.giant.s - 40)) return;
+    if (this.spawnRoadblock(TUNING.proto.on)) this.finalePending = false;
   }
 
   private spawn(k: UnitKind): boolean {
@@ -940,7 +945,8 @@ export class Pursuit {
 
   // --- Static roadblock ---------------------------------------------------------------
 
-  private spawnRoadblock(): boolean {
+  /** `force` (the story finale): it clears its own spot and the gap lane's approach (all off camera, ≥ spawnAheadMin out). */
+  private spawnRoadblock(force = false): boolean {
     const sim = this.sim;
     const g = sim.giant;
     const B = TUNING.pursuit.roadblock;
@@ -950,9 +956,17 @@ export class Pursuit {
     for (let tries = 0; tries < 30; tries++, s += 3) {
       const L = track.lanesAt(s);
       if (L < 2 || track.lanesAt(s - 12) !== L || track.lanesAt(s + 12) !== L) continue;
+      const all = Array.from({ length: L }, (_, i) => i);
+      if (force) {
+        for (const p of track.propsBetween(s - 7, s + 7)) p.alive = false;
+        // Its gap: the lane on his side nearest his, cleared from the approach on.
+        const tw = track.twoWay.find((w) => s >= w.s0 && s <= w.s1);
+        const own = all.filter((l) => l >= (tw ? tw.split : 0));
+        const gl = own.reduce((a, b) => (Math.abs(b - g.lane) < Math.abs(a - g.lane) ? b : a), own[0]);
+        for (const p of track.propsBetween(s - 40, s + 8)) if (Math.abs(p.d - track.laneCenter(gl)) < p.hw + 1.2) p.alive = false;
+      }
       if (track.propsBetween(s - 7, s + 7).length) continue;
       // The gap must be clear from the approach on, for any tier.
-      const all = Array.from({ length: L }, (_, i) => i);
       // Prototype: only a gap he can actually reach through what's ahead of it.
       const gaps = all.filter((l) => !this.propIn(l, s - 30, s + 8) && (!TUNING.proto.on || this.fairWith(s, all.filter((x) => x !== l), L)));
       if (!gaps.length) continue;

@@ -165,6 +165,7 @@ export class Sim {
   /** The traffic mods' score multiplier, applied once when the broadcast ends. */
   modMult = 1;
   private modsBanked = false;
+  private finaleQueued = false;
   /** Police spawn pace from the traffic mods, before any district's own pace. */
   private basePace = 1;
   /** Endless mode (prototype): no exit, no fuel. */
@@ -579,6 +580,12 @@ export class Sim {
     // Story run (prototype): the exit opens by distance, at the end of the last district; fuel is the clock.
     const story = TUNING.proto.on;
     if (story) {
+      // The finale's last word (Mike, 2026-11-24): a police roadblock between him and the sign-off (Rampage it, or take
+      // the gap). Queued well before the exit opens so it lands even when a blockade is still out ahead.
+      if (!this.finaleQueued && TUNING.difficulty.finaleRoadblock && this.track.courseEnd < Infinity && g.s >= this.track.courseEnd - TUNING.proto.finaleAt) {
+        this.finaleQueued = true;
+        this.pursuit.spawnFinale();
+      }
       if (!this.exit && this.track.courseEnd < Infinity && g.s >= this.track.courseEnd - 400 && now < X.length + X.grace) this.openExit();
     } else if (!this.exitPlanned && now >= X.exitOpensAt - X.planAhead) {
       this.exitPlanned = true;
