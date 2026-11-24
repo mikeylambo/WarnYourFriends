@@ -25,6 +25,8 @@ var TUNING = {
     chunkGap: 34,
     /** First traffic this far down the road (m): he reaches ~115m as the 6s opening hero shot swoops home, so the first cars come after it, in Chase High. */
     /** No brake (Mike, 2026-11-24: "no real reason to use the slow down mechanic, scrap it"): brake input is ignored, its prompts and binds are hidden, and the Police Net (escaped by braking) is off. */
+    /** Target cars (2026-11-24): one per district at `share` of the way in; `score` points, ×`rampMult` in Rampage on top of Rampage's own double; `gain` audience. Endless: one every `endlessEvery` m. */
+    target: { share: 0.4, score: 2500, rampMult: 2, gain: 20, endlessEvery: 900 },
     noBrake: true,
     firstChunk: 150,
     chunkReact: 0.45,
@@ -117,7 +119,7 @@ var TUNING = {
     dodgeGap: 2.2,
     decayMult: 0.6,
     startRatings: 40,
-    gain: { scoop: 7, nearMiss: 6.5, rival: 10, policeCrash: 12, lostTrack: 8, collateral: 1 }
+    gain: { scoop: 7, nearMiss: 6.5, rival: 10, policeCrash: 12, lostTrack: 8, collateral: 1, target: 20 }
   },
   sim: {
     /** §29 fixed step. */
@@ -238,7 +240,7 @@ var TUNING = {
    */
   rampage: {
     /** At 15 m/s (2026-11-17) Stride meets more per second: gains ×0.8 keep Rampage about a quarter of the run. */
-    gain: { scoop: 6, rival: 25, medium: 7, heavy: 10, unit: 13, policeCrash: 16, collateral: 5, nearMiss: 8, ramDodge: 10, lostTrack: 10, chopperShaken: 12, leapLand: 8, breakawayLand: 10 },
+    gain: { scoop: 6, rival: 25, target: 30, medium: 7, heavy: 10, unit: 13, policeCrash: 16, collateral: 5, nearMiss: 8, ramDodge: 10, lostTrack: 10, chopperShaken: 12, leapLand: 8, breakawayLand: 10 },
     duration: 8,
     perSmash: 0.3,
     maxDuration: 12,
@@ -577,7 +579,7 @@ var TUNING = {
    * → it drops: the points bank at ×1, the multiplier is lost. Smash-across pays `acrossBonus`×.
    */
   spectacle: {
-    points: { scoop: 300, rival: 800, medium: 100, heavy: 250, unit: 500, policeCrash: 750, collateral: 100, nearMiss: 200, ramDodge: 200, lostTrack: 250, chopperShaken: 300, leapLand: 150, breakawayLand: 250 },
+    points: { scoop: 300, rival: 800, target: 2500, medium: 100, heavy: 250, unit: 500, policeCrash: 750, collateral: 100, nearMiss: 200, ramDodge: 200, lostTrack: 250, chopperShaken: 300, leapLand: 150, breakawayLand: 250 },
     acrossBonus: 1.5,
     audienceMult: [1, 1.25, 1.5, 2],
     window: 2.5,
@@ -829,7 +831,7 @@ var TUNING = {
     /** Police crash (a cruiser he led into something Heavy): the best TV of the chase, above lost track. Collateral: police plough through something Medium. */
     /** Rampage 0 (Mike, 2026-11-16, deviation from §12's +1/s): the trickle was invisible and half of all gains; the audience now moves only for what he does. */
     /** Difficulty pass (2026-11-17): Medium 1.5, Heavy 3.5 (were 2 / 5): at 15 m/s smashing alone held the audience at 100. */
-    gain: { rival: 4, medium: 1.5, heavy: 3.5, nearMiss: 3, lostTrack: 6, rampage: 0, policeCrash: 8, collateral: 2, scoop: 4 },
+    gain: { rival: 4, medium: 1.5, heavy: 3.5, nearMiss: 3, lostTrack: 6, rampage: 0, policeCrash: 8, collateral: 2, scoop: 4, target: 8 },
     /** HUD: viewers shown per Ratings point ("370K WATCHING" at the starting 20). */
     viewersPerPoint: 18500,
     /** §12 decay: after 3s with no gain; segment 1 rate (2.0/2.75/3.5/4.25/5.0 by segment). */
@@ -1712,6 +1714,7 @@ var Track = class {
         this.zoneName = d.name;
         this.zoneLeft = d.segments;
         if (d.oncoming) this.twoWay.push({ s0, s1: s0 + d.segments * T.segmentLength, split: d.oncoming, district: true });
+        this.districtSpans.push({ k: this.district, s0, s1: s0 + d.segments * T.segmentLength });
         if (this.district === D.length - 1) {
           this.courseEnd = s0 + d.segments * T.segmentLength;
           this.reserveExit(this.courseEnd - 420, this.courseEnd + 60);
@@ -1982,6 +1985,39 @@ var Track = class {
   /** Chunk level (1–5) at `s`: climbs with distance and the run's segment. */
   /** Heavy Load (a traffic mod): every pick one level harder, capped at 5. */
   levelBonus = 0;
+  /** Story districts as they're laid down (target cars go one per district). */
+  districtSpans = [];
+  targeted = /* @__PURE__ */ new Set();
+  nextTargetS = TUNING.proto.target.endlessEvery;
+  /**
+   * Target cars (Mike, 2026-11-24: "target cars to crush, even more points if done with Rampage"): one marked cash van
+   * per district, in the gap between two chunks (so every chunk's fairness proof stands), on his side of a two-way
+   * road. It breaks in Stride (like a rival van); Rampage doubles its bonus. Endless: one every `endlessEvery` m.
+   */
+  maybeTarget(s) {
+    const X = TUNING.proto.target;
+    let due = false;
+    if (this.districtSpans.length) {
+      const span = this.districtSpans.find((d) => s >= d.s0 && s < d.s1);
+      if (span && !this.targeted.has(span.k) && s >= span.s0 + (span.s1 - span.s0) * X.share) {
+        this.targeted.add(span.k);
+        due = true;
+      }
+    } else if (this.district < 0 && s >= this.nextTargetS) {
+      this.nextTargetS = s + X.endlessEvery;
+      due = true;
+    }
+    if (!due) return;
+    const at = s + TUNING.proto.chunkGap * 0.5;
+    const tw = this.twoWay.find((w) => at >= w.s0 && at <= w.s1);
+    const L = this.lanesAt(at);
+    const first = tw ? tw.split : 0;
+    if (L - first < 1) return;
+    const lane = this.rng.int(first, L - 1);
+    if (!this.laneUsable(lane, at)) return;
+    const p = this.drop("van", at, this.laneCenter(lane));
+    p.bounty = true;
+  }
   /** Heavy Load: every district takes only its top-level chunks (no breathers), like the finale. */
   allPeak = false;
   levelAt(s) {
@@ -2044,6 +2080,7 @@ var Track = class {
       if (++ch.row >= ch.c.rows.length) {
         this.chunk = null;
         this.nextChunkS = s + gap;
+        this.maybeTarget(s);
       }
     }
   }
@@ -4206,6 +4243,15 @@ var Sim = class {
           this.stunt("scoop");
           break;
         }
+        const bounty = e.propId < 1e6 && this.track.props.find((x) => x.id === e.propId)?.bounty;
+        if (bounty) {
+          const X = TUNING.proto.target;
+          const ramp = this.inRampage;
+          this.award("target");
+          this.emit({ type: "target", s: e.s, d: e.d, rampage: ramp });
+          this.stunt("target", X.score * (ramp ? X.rampMult : 1));
+          break;
+        }
         if (rival) {
           this.award("rival");
           this.emit({ type: "rival", s: e.s, d: e.d });
@@ -4268,7 +4314,7 @@ var Sim = class {
   }
   /** A prop's rank against his: rampOnly things (concrete, police roadblocks) count as unbreakable outside Rampage. */
   rankOf(p) {
-    if (TUNING.proto.on && (p.kind === "newsvan" || p.kind === "compact" && p.unit === "rolling" || TUNING.proto.small.includes(p.kind))) return CLASS_RANK.light;
+    if (TUNING.proto.on && (p.bounty || p.kind === "newsvan" || p.kind === "compact" && p.unit === "rolling" || TUNING.proto.small.includes(p.kind))) return CLASS_RANK.light;
     return p.rampOnly && !this.inRampage && this.giant.shoulderT <= 0 ? CLASS_RANK.immovable : CLASS_RANK[p.cls];
   }
   /** In Rampage (the burst), not just at top speed. */

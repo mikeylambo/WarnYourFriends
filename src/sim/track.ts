@@ -283,6 +283,7 @@ export class Track {
         this.zoneLeft = d.segments;
         // The last district: the course (and the sign-off) ends where it does; keep that stretch ramp-friendly.
         if (d.oncoming) this.twoWay.push({ s0, s1: s0 + d.segments * T.segmentLength, split: d.oncoming, district: true });
+        this.districtSpans.push({ k: this.district, s0, s1: s0 + d.segments * T.segmentLength });
         if (this.district === D.length - 1) {
           this.courseEnd = s0 + d.segments * T.segmentLength;
           this.reserveExit(this.courseEnd - 420, this.courseEnd + 60);
@@ -594,6 +595,40 @@ export class Track {
   /** Chunk level (1–5) at `s`: climbs with distance and the run's segment. */
   /** Heavy Load (a traffic mod): every pick one level harder, capped at 5. */
   levelBonus = 0;
+  /** Story districts as they're laid down (target cars go one per district). */
+  readonly districtSpans: { k: number; s0: number; s1: number }[] = [];
+  private targeted = new Set<number>();
+  private nextTargetS: number = TUNING.proto.target.endlessEvery;
+
+  /**
+   * Target cars (Mike, 2026-11-24: "target cars to crush, even more points if done with Rampage"): one marked cash van
+   * per district, in the gap between two chunks (so every chunk's fairness proof stands), on his side of a two-way
+   * road. It breaks in Stride (like a rival van); Rampage doubles its bonus. Endless: one every `endlessEvery` m.
+   */
+  private maybeTarget(s: number) {
+    const X = TUNING.proto.target;
+    let due = false;
+    if (this.districtSpans.length) {
+      const span = this.districtSpans.find((d) => s >= d.s0 && s < d.s1);
+      if (span && !this.targeted.has(span.k) && s >= span.s0 + (span.s1 - span.s0) * X.share) {
+        this.targeted.add(span.k);
+        due = true;
+      }
+    } else if (this.district < 0 && s >= this.nextTargetS) {
+      this.nextTargetS = s + X.endlessEvery;
+      due = true;
+    }
+    if (!due) return;
+    const at = s + TUNING.proto.chunkGap * 0.5;
+    const tw = this.twoWay.find((w) => at >= w.s0 && at <= w.s1);
+    const L = this.lanesAt(at);
+    const first = tw ? tw.split : 0;
+    if (L - first < 1) return;
+    const lane = this.rng.int(first, L - 1);
+    if (!this.laneUsable(lane, at)) return;
+    const p = this.drop('van', at, this.laneCenter(lane));
+    p.bounty = true;
+  }
   /** Heavy Load: every district takes only its top-level chunks (no breathers), like the finale. */
   allPeak = false;
 
@@ -660,6 +695,7 @@ export class Track {
       if (++ch.row >= ch.c.rows.length) {
         this.chunk = null;
         this.nextChunkS = s + gap;
+        this.maybeTarget(s);
       }
     }
   }

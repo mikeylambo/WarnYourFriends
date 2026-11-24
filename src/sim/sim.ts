@@ -657,6 +657,16 @@ export class Sim {
           this.stunt('scoop');
           break;
         }
+        const bounty = e.propId < 1_000_000 && this.track.props.find((x) => x.id === e.propId)?.bounty;
+        if (bounty) {
+          // Target car: its own bonus, Rampage doubles it (on top of Rampage's double score).
+          const X = TUNING.proto.target;
+          const ramp = this.inRampage;
+          this.award('target');
+          this.emit({ type: 'target', s: e.s, d: e.d, rampage: ramp });
+          this.stunt('target', X.score * (ramp ? X.rampMult : 1));
+          break;
+        }
         if (rival) {
           this.award('rival');
           this.emit({ type: 'rival', s: e.s, d: e.d });
@@ -697,7 +707,7 @@ export class Sim {
   rankOf(p: Prop): number {
     // Prototype: a rival station's van is the one vehicle he goes for in Stride.
     // ...and a Rolling Blockade's weak link (the compact) gives way, so a blockade across a 2-lane road is never a wall.
-    if (TUNING.proto.on && (p.kind === 'newsvan' || (p.kind === 'compact' && (p as Unit).unit === 'rolling') || (TUNING.proto.small as readonly string[]).includes(p.kind))) return CLASS_RANK.light;
+    if (TUNING.proto.on && (p.bounty || p.kind === 'newsvan' || (p.kind === 'compact' && (p as Unit).unit === 'rolling') || (TUNING.proto.small as readonly string[]).includes(p.kind))) return CLASS_RANK.light;
     return p.rampOnly && !this.inRampage && this.giant.shoulderT <= 0 ? CLASS_RANK.immovable : CLASS_RANK[p.cls];
   }
 

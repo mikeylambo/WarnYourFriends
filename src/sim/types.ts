@@ -26,6 +26,8 @@ export interface Prop {
   judged?: boolean;
   /** The closest it came to him alongside (m, edge to hit-box), for the close-call judgement. */
   closest?: number;
+  /** A target car: breaks in Stride, pays `proto.target` points (doubled in Rampage). */
+  bounty?: boolean;
   /** Segment index it belongs to (for streaming). */
   segment: number;
   /** Rampage timing (2026-11-17): breaks only in Rampage (concrete, police roadblocks); unbreakable until then. */
@@ -140,6 +142,7 @@ export type SimEvent =
   | { type: 'rampageEnd' }
   /** A rival station's news van flattened (2026-11-17: something worth aiming for, Rampage most of all). */
   | { type: 'rival'; s: number; d: number }
+  | { type: 'target'; s: number; d: number; rampage: boolean }
   /** Prototype: he ran through a Scoop (a collectible), worth audience and points. */
   | { type: 'scoop'; s: number; d: number }
   /** Ground Zero (passive): the blast when Rampage fires, and how much it flattened. */
@@ -205,9 +208,9 @@ export type SimEvent =
 
 export type UnitKind = 'cruiser' | 'rolling' | 'roadblock' | 'spike' | 'chopper' | 'net' | 'carrier';
 /** §12 gain sources. */
-export type GainType = 'medium' | 'heavy' | 'nearMiss' | 'lostTrack' | 'rampage' | 'policeCrash' | 'collateral' | 'rival' | 'scoop';
+export type GainType = 'medium' | 'heavy' | 'nearMiss' | 'lostTrack' | 'rampage' | 'policeCrash' | 'collateral' | 'rival' | 'scoop' | 'target';
 /** Spectacle stunts (score, not Ratings). */
-export type StuntType = 'medium' | 'heavy' | 'unit' | 'policeCrash' | 'collateral' | 'nearMiss' | 'ramDodge' | 'lostTrack' | 'chopperShaken' | 'leapLand' | 'breakawayLand' | 'rival' | 'scoop';
+export type StuntType = 'medium' | 'heavy' | 'unit' | 'policeCrash' | 'collateral' | 'nearMiss' | 'ramDodge' | 'lostTrack' | 'chopperShaken' | 'leapLand' | 'breakawayLand' | 'rival' | 'scoop' | 'target';
 export type BustReason = 'ratings' | 'pin' | 'missed';
 /** What filled the meter: boxed in by a Police Net, or caught crawling with police on his tail. */
 export type PinCause = 'net' | 'caught';

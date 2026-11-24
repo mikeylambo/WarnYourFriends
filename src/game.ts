@@ -131,7 +131,7 @@ const chainClock = chainEl.querySelector('.clock i') as HTMLElement;
 /** Spectacle stunt names on the combo counter (what just counted, so the player learns the menu). */
 /** Ability levels on cards and the chip. */
 const ROMAN = ['', 'I', 'II', 'III'];
-const STUNT_LABEL: Record<string, string> = { rival: 'RIVAL NEWS VAN', medium: 'SMASH', heavy: 'HEAVY SMASH', unit: 'POLICE CAR', policeCrash: 'POLICE CRASH', collateral: 'COLLATERAL', nearMiss: 'NEAR MISS', ramDodge: 'DODGED', lostTrack: 'SHOOK ONE', chopperShaken: 'LOST THE CHOPPER', leapLand: 'LANDING', breakawayLand: 'BREAKAWAY', scoop: 'SCOOP' };
+const STUNT_LABEL: Record<string, string> = { rival: 'RIVAL NEWS VAN', medium: 'SMASH', heavy: 'HEAVY SMASH', unit: 'POLICE CAR', policeCrash: 'POLICE CRASH', collateral: 'COLLATERAL', nearMiss: 'NEAR MISS', ramDodge: 'DODGED', lostTrack: 'SHOOK ONE', chopperShaken: 'LOST THE CHOPPER', leapLand: 'LANDING', breakawayLand: 'BREAKAWAY', scoop: 'SCOOP', target: 'TARGET' };
 let chainResultT = 0;
 const gearPips = [...gearsEl.querySelectorAll('i')] as HTMLElement[];
 const gearName = gearsEl.querySelector('.nm') as HTMLElement;
@@ -1385,6 +1385,16 @@ function present(e: SimEvent) {
       rig.jolt(3, 0.15);
       haptic(110, 0.6);
       break;
+    case 'target': {
+      // Target car crushed: a burst of orange rings, the chain sting twice, a solid rumble (bigger in Rampage).
+      sim.track.posAt(e.s, e.d, pos);
+      highway.ring(pos.x, pos.z, e.rampage ? 14 : 10, 0xff7a1a, 0.6, 0.95);
+      highway.ring(pos.x, pos.z, e.rampage ? 8 : 6, 0xffffff, 0.45, 0.9);
+      audio.chainTick(6);
+      setTimeout(() => audio.chainTick(8), 120);
+      haptic(e.rampage ? 260 : 180, e.rampage ? 1 : 0.8);
+      break;
+    }
     case 'scoop':
       // Prototype collectible: a bright ding (the chain tick, a step up), the smash event already threw its confetti.
       audio.chainTick(3);

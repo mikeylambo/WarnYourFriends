@@ -84,6 +84,9 @@ const TWO_WAY_LINE = new THREE.MeshBasicMaterial({ color: 0xf2b705 });
 /** Prototype: the ring under small smashables (one geometry and material for all of them). */
 export const SMASH_RING_GEO = new THREE.RingGeometry(0.78, 1, 28);
 export const SMASH_RING_MAT = new THREE.MeshBasicMaterial({ color: 0xffd23c, transparent: true, opacity: 0.85, depthWrite: false });
+/** Target car (2026-11-24): a thicker ring in hot orange that pulses, so it reads as "go for this one". */
+const TARGET_RING_GEO = new THREE.RingGeometry(0.62, 1, 32);
+const TARGET_RING_MAT = new THREE.MeshBasicMaterial({ color: 0xff7a1a, transparent: true, opacity: 0.95, depthWrite: false });
 
 /** Road paint is retroreflective: a little self-light so lanes read at night outside the pools. */
 const PAINT_GLOW = 0x303030;
@@ -1186,6 +1189,27 @@ export class HighwayView {
       const r = Math.max(p.hw, p.hl) + 0.5;
       ring.scale.set(r, r, 1);
       g.add(ring);
+    }
+    if (p.bounty) {
+      const ring = new THREE.Mesh(TARGET_RING_GEO, TARGET_RING_MAT);
+      ring.rotation.x = -Math.PI / 2;
+      ring.position.y = 0.05;
+      const r = Math.max(p.hw, p.hl) + 1.2;
+      ring.scale.set(r, r, 1);
+      ring.onBeforeRender = () => {
+        const k = 1 + 0.12 * Math.sin(performance.now() / 160);
+        ring.scale.set(r * k, r * k, 1);
+      };
+      g.add(ring);
+      // A flashing amber beacon on the roof and a gold stripe down the sides.
+      const beacon = new THREE.Sprite(GLOW.hazardHalo);
+      beacon.position.set(0, p.h + 0.5, 0);
+      beacon.onBeforeRender = () => beacon.scale.setScalar(Math.sin(performance.now() / 110) > 0 ? 2.8 : 1.4);
+      body.add(beacon);
+      const stripe = new THREE.Mesh(this.box, toon(0xf2b632));
+      stripe.scale.set(p.hl * 2 + 0.04, 0.22, p.hw * 2 + 0.04);
+      stripe.position.y = p.h * 0.55;
+      body.add(stripe);
     }
     return g;
   }

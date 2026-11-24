@@ -13,9 +13,9 @@ describe('prototype core loop', () => {
     for (let seed = 1; seed <= 6; seed++) {
       const sim = new Sim({ seed, segment: 0, upgrades: [], growth: true });
       const bot = new Bot(sim);
-      const kinds = new Map(sim.track.props.map((p) => [p.id, p.kind]));
+      const kinds = new Map(sim.track.props.map((p) => [p.id, p.bounty ? 'newsvan' : p.kind])); // a target car breaks in Stride like a rival van
       for (let i = 0; i < 60 * 170 && sim.live; i++) {
-        for (const p of sim.track.props) kinds.set(p.id, p.kind);
+        for (const p of sim.track.props) kinds.set(p.id, p.bounty ? 'newsvan' : p.kind);
         const ramp = sim.inRampage;
         const evs = sim.step(bot.input());
         for (const e of evs) {

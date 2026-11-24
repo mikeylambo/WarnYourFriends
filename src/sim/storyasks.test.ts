@@ -60,3 +60,25 @@ describe('traffic mods (2026-11-24)', () => {
     expect(all.modMult).toBeCloseTo(1.3);
   }, 60_000);
 });
+
+describe('target cars (2026-11-24)', () => {
+  it('one per district, breaks in Stride, pays its bonus (more in Rampage)', () => {
+    let placed = 0, crushed = 0;
+    for (let seed = 1; seed <= 4; seed++) {
+      const sim = new Sim({ seed, growth: true });
+      const bot = new Bot(sim);
+      const seen = new Set<number>();
+      for (let i = 0; i < 60 * 420 && sim.live; i++) {
+        for (const e of sim.step(bot.input())) if (e.type === 'target') crushed++;
+        for (const p of sim.track.props) if (p.bounty && !seen.has(p.id)) {
+          seen.add(p.id);
+          placed++;
+          expect(sim.rankOf(p)).toBeLessThanOrEqual(sim.smashRank() + 1);
+        }
+      }
+      expect(seen.size).toBeLessThanOrEqual(TUNING.proto.story.districts.length);
+    }
+    expect(placed).toBeGreaterThanOrEqual(12);
+    expect(crushed).toBeGreaterThan(0);
+  }, 120_000);
+});
