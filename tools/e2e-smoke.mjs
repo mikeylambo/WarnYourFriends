@@ -191,7 +191,7 @@ try {
     const ctx = await browser.newContext({ viewport: { width: 1280, height: 720 } });
     const page = await ctx.newPage();
     const problems = watch(page);
-    await page.goto(`${URL}?seed=3&bot=1&timescale=3&debug=1`);
+    await page.goto(`${URL}?seed=1&bot=1&timescale=3&debug=1`); // seed 1: first Rampage ~27s (the 6s opening pushes the median to ~32s)
     await page.waitForFunction(() => window.__GAME && window.__GAME.started, null, { timeout: 15000 });
     // Rampage loop: the meter needs ~25s of smashing to fill, so run 45s.
     // 240s: on a software-rendered machine the page manages ~0.6x real time, not the 3x asked for (2026-11-19).
