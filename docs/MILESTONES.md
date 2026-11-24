@@ -1,0 +1,72 @@
+# Milestones to ship
+
+The ship gap (Mike, 2026-11-24): what a reputable studio would block on. Ticked boxes are done and proven in a running build (§41). Build-time calls still go in `DECISIONS.md`.
+
+Status: `[ ]` todo · `[~]` in progress · `[x]` done
+
+## M1 — Now (ship blockers we're working)
+
+### Consistency
+- [x] One word per idea everywhere (HUD, menus, How to Play, recap, asks, awards, headlines). Glossary below is the law.
+- [x] Model vs portraits: in-game Meshy model already has no topknot and flat pauldrons, matching the painted outfits (the DECISIONS note was about the old greybox rig).
+
+### Leaderboard
+- [x] Name filter (profanity / slurs / impersonation of staff), length and charset limits, server-side.
+- [x] Rate limit per IP and per player id; reject bursts.
+- [x] Moderation path: a way to delete an entry (admin key, not in the client). `LB_ADMIN_KEY` env still to set in Vercel.
+
+### Teaching opening (first five minutes)
+- [ ] First broadcast teaches by doing: one swipe, one near miss, one Exclusive, the first Rampage forced, each prompted at the moment, no cards to read. Skippable for returning players.
+
+### Hit feel audit
+- [ ] Every interaction has sound + particles + camera + number popup: smash (light/medium/heavy), near miss, Exclusive, rival van, target car, police crash, shake-off, Rampage start/end, ask complete, unlock.
+
+### Front-screen progression
+- [ ] Main menu shows: next unlock and how far, best score, today's Daily.
+- [ ] Recap gives a "one more run" hook: distance to your best / to the next rank / the next unlock.
+
+### Platform polish
+- [x] Landscape for play on phones (rotate card + pause).
+- [ ] Installable (PWA manifest + icons), fullscreen launch.
+- [ ] Audio respects the phone: unlocks on first tap, stops on background, resumes cleanly.
+- [ ] Safe areas checked on notch / Dynamic Island / Android cutouts in landscape.
+- [ ] Haptics on/off setting.
+
+### Accessibility
+- [x] Reduce Flashes, Reduced Motion, HUD size, rebinding.
+- [ ] Colour-blind check on gold / yellow / red cues (shape or label as well as colour).
+- [ ] Tap-zone controls (tap left/right half) as an alternative to swipes.
+- [ ] Captions for any voice line.
+
+## M2 — Next
+
+### Art cohesion
+- [ ] Roads, trees and cars up to the giant's level (lighting stays). Options: Meshy (credits), GPT image → image-to-3D elsewhere, or a hand-authored stylized low-poly kit in code (no credits; consistent by construction).
+
+### Performance
+- [ ] 60 fps on a mid-range Android and an older iPhone; load < 5 s; draw-call budget (`tools/perf-draws.mjs`) held.
+
+### Telemetry
+- [ ] Funnel + crash reporting (where people quit, which district ends runs, mod usage). `src/playlog.ts` is the seed.
+
+## M3 — Release build
+- [ ] Strip debug and playtest surfaces (`?tune`, `?debug`, `?playtest`, `?classic`, "Copy play data", `window.__GAME` outside dev).
+- [ ] Privacy policy (leaderboard names), terms, credits screen, age rating.
+- [ ] Title / trademark search (DECISIONS 2026-11-09 still open).
+- [ ] Asset provenance list: Meshy, ElevenLabs, painted art, made under paid accounts (keep receipts / account tier per asset).
+- [ ] Music: a signature theme and a Rampage layer.
+
+## Glossary (one word per idea)
+
+| Idea | Say | Never |
+|---|---|---|
+| The bar you fill | **Audience** | ratings, meter (in UI text) |
+| Full bar mode | **Rampage** | rampage mode, frenzy |
+| Squeezing past a car | **Near miss** | close call, close dodge |
+| Yellow pickup | **Exclusive** | scoop |
+| One play from go-live to sign-off | **Broadcast** | run, segment (in UI text) |
+| The five-district mode | **Story** | full broadcast |
+| The producer's goals | **Asks** | challenges, missions |
+| Modifiers you switch on | **Traffic mods** | modifiers, mutators |
+| The police catching you | **Caught** | busted, arrested |
+| Getting to the exit | **Sign-off** | finish, escape |

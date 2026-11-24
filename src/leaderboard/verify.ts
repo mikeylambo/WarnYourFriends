@@ -151,8 +151,17 @@ export function cleanName(raw: unknown): string | null {
   if (typeof raw !== 'string') return null;
   const name = raw.replace(/\s+/g, ' ').trim();
   if (name.length < 2 || name.length > TUNING.leaderboard.nameMax || !/^[A-Za-z0-9 ._-]+$/.test(name)) return null;
-  const flat = name.toLowerCase().replace(/[^a-z]/g, '');
-  if (TUNING.leaderboard.blocked.some((w) => flat.includes(w))) return null;
+  // Leetspeak and padding don't get round it: digits/symbols map to letters, repeats collapse (f4gg0t → fagot).
+  const leet: Record<string, string> = { '0': 'o', '1': 'i', '3': 'e', '4': 'a', '5': 's', '7': 't', '8': 'b', '9': 'g', '$': 's', '@': 'a', '!': 'i' };
+  const lower = name.toLowerCase();
+  const flat = lower.replace(/[^a-z]/g, '');
+  const mapped = lower.replace(/./g, (c) => leet[c] ?? c).replace(/[^a-z]/g, '');
+  const squeezed = mapped.replace(/(.)\1+/g, '$1');
+  const L = TUNING.leaderboard;
+  const clear = (f: string) => L.allowed.reduce((x, w) => x.split(w).join('_'), f);
+  const forms = [flat, mapped, squeezed].map(clear);
+  const squeeze = (w: string) => { const q = w.replace(/(.)\1+/g, '$1'); return q.length >= 4 ? q : w; };
+  if ([...L.blocked, ...L.reserved].some((w) => forms.some((f) => f.includes(w) || f.includes(squeeze(w))))) return null;
   return name;
 }
 

@@ -159,7 +159,7 @@ try {
 
   // 2. Mobile: tap the start button.
   {
-    const { ctx, problems } = await bootAndStart(browser, 'mobile tap', { viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true }, async (p) => {
+    const { ctx, problems } = await bootAndStart(browser, 'mobile tap', { viewport: { width: 844, height: 390 }, isMobile: true, hasTouch: true }, async (p) => {
       for (const id of ['start', 'run']) {
         await p.tap(`[data-choice-id="${id}"]`);
         await p.waitForTimeout(150);
@@ -170,6 +170,13 @@ try {
       await p.tap('#brief-go');
     });
     if (problems.length) fail(`mobile boot problems:\n    ${problems.join('\n    ')}`);
+    // Play is landscape on phones (2026-11-24): turned upright mid-broadcast, the rotate card covers it and it pauses.
+    const page = ctx.pages()[0];
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.waitForTimeout(400);
+    const up = await page.evaluate(() => ({ card: getComputedStyle(document.getElementById('rotate')).display !== 'none', paused: window.__GAME.paused }));
+    if (up.card && up.paused) ok('phone upright: rotate card shown, broadcast paused');
+    else fail(`phone upright: rotate card ${up.card}, paused ${up.paused}`);
     await ctx.close();
   }
 
@@ -379,7 +386,7 @@ try {
     if (!parsed?.broadcasts?.length) fail('Copy play data produced no JSON');
     else ok(`Copy play data: ${parsed.broadcasts.length} broadcast(s), ${copied.length} bytes`);
     const last = heads[heads.length - 1];
-    if (!last || !['SIGN-OFF', 'BUSTED'].includes(last.kicker)) fail(`last headline isn't the ending (${JSON.stringify(last)})`);
+    if (!last || !['SIGN-OFF', 'CAUGHT'].includes(last.kicker)) fail(`last headline isn't the ending (${JSON.stringify(last)})`);
     // Run it again: Enter restarts from the recap.
     await page.waitForTimeout(400);
     await page.keyboard.press('Enter');
@@ -427,7 +434,7 @@ try {
     const r1 = await page.evaluate(() => ({ run: window.__GAME.run(), kicker: document.querySelector('#recap .kicker')?.textContent }));
     if (r1.run?.phase !== 'meeting') fail(`run: segment 1 should lead to a meeting (${JSON.stringify(r1.run)})`);
     else ok(`run: segment 1 ${r1.run.results[0].cleared ? 'cleared' : 'lost'}, budget ${r1.run.purse} · "${r1.kicker}"`);
-    if (!/SEGMENT 1 OF 5/.test(r1.kicker ?? '')) fail(`run: recap kicker lacks the segment (${r1.kicker})`);
+    if (!/BROADCAST 1 OF 5/.test(r1.kicker ?? '')) fail(`run: recap kicker lacks the segment (${r1.kicker})`);
     await page.waitForTimeout(400); // a new card ignores accept for 250ms
     await page.keyboard.press('Enter'); // focused: Producer's Meeting
     await page.waitForTimeout(400);

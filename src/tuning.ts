@@ -817,7 +817,7 @@ export const TUNING = {
     /** Frame the point this many seconds ahead of the giant (speed × time). */
     lookAheadTime: 1.6,
     /** The giant never sits lower than this fraction of the screen height (0 top, 1 bottom). Mike (2026-11-24): 0.85 put him under the chyron in landscape. */
-    giantMaxScreenY: 0.66,
+    giantMaxScreenY: 0.7,
     /** At least this much road visible ahead, in seconds at current speed. */
     minRoadAheadSeconds: 2,
     /** Distance changes between tiers ease over this long. */
@@ -1105,8 +1105,14 @@ export const TUNING = {
     ticketTtl: 6 * 3600,
     /** Roads handed out per player per minute. */
     ticketsPerMinute: 10,
+    /** Submissions per player id per minute (a broadcast takes minutes; this only stops scripted bursts). */
+    perPlayerMinute: 4,
+    /** Names that pass as staff are refused (no impersonating the station or the developer). Matched like `blocked`. */
+    /** Innocent words that contain a blocked one (the Scunthorpe problem): taken out before matching. */
+    allowed: ['grape', 'drape', 'scrape', 'trapeze', 'peacock', 'hancock', 'cockpit', 'shuttlecock', 'woodcock', 'scunthorpe', 'shitake', 'fagan'],
+    reserved: ['admin', 'moderator', 'official', 'wyfnews', 'wyf6', 'staff', 'developer', 'support', 'anthropic', 'claude'],
     /** Never on the board (rule 10: never mean). Matched inside the name's letters. */
-    blocked: ['fuck', 'shit', 'cunt', 'nigg', 'fag', 'rape', 'nazi', 'hitler', 'retard', 'whore', 'slut', 'bitch', 'cock', 'pussy', 'kike', 'chink', 'spic', 'tranny'],
+    blocked: ['fuck', 'shit', 'cunt', 'nigg', 'fag', 'rape', 'nazi', 'hitler', 'retard', 'whore', 'slut', 'bitch', 'cock', 'pussy', 'kike', 'chink', 'spic', 'tranny', 'dyke', 'wetback', 'beaner', 'gook', 'raghead', 'towelhead', 'kkk', 'jizz', 'penis', 'vagina', 'porn', 'molest', 'pedo', 'twat', 'wank'],
   },
 
   /**

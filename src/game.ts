@@ -721,7 +721,7 @@ function openBriefing(goLive: boolean): Promise<void> {
       <li><b>Smash.</b> He flattens cars, carts and police cars. Bulldozers, armored trucks and a police car swerving into you don't break: go round. Concrete and yellow-roof police lines break only in Rampage. Hitting any of them costs Rampage meter.</li>
       <li><b>Rampage.</b> Smashes, near misses and combos fill the Rampage meter. When it's full, ${settings.autoRampage ? 'Rampage fires by itself' : `press ${k('shoulder')}`}: for 8 seconds he runs through everything, at double score. Keep smashing to make it last.</li>
       <li><b>Keep them watching.</b> Smashes, near misses and combos fill the audience bar. Empty, they cut to commercial.</li>
-      <li><b>Lose the police.</b> Run a car beside you into whatever is in its lane. Slow down and they catch you: busted. Boxed in by the armored truck, brake out the back or Rampage through it.</li>
+      <li><b>Lose the police.</b> Run a car beside you into whatever is in its lane. Slow down and they catch you: caught. Boxed in by the armored truck, brake out the back or Rampage through it.</li>
       <li><b>Take the exit.</b> At ${clock} a ramp opens on the right. Be in the far-right lane when you reach it; miss it and coverage ends.</li>
     </ol>
     <div class="row"><button class="go" id="brief-go">${goLive ? 'Go live' : 'Back'}</button></div>
@@ -975,7 +975,7 @@ function showMeeting(focusId?: string) {
   const slots = TUNING.run.abilitySlots;
   // Mike (2026-11-17): the meeting stays open: buy what the budget allows (each pitch once), then go live.
   recapEl.innerHTML = `<div class="card meeting">
-    <div class="kicker">PRODUCER'S MEETING · BEFORE SEGMENT ${r.segment + 2} OF ${TUNING.run.segments}</div>
+    <div class="kicker">PRODUCER'S MEETING · BEFORE BROADCAST ${r.segment + 2} OF ${TUNING.run.segments}</div>
     <div class="purse">Budget <b>${r.purse.toLocaleString()}</b></div>
     <p class="how">Your stunts pay for these. Buy as many as you can afford; spending never lowers your score. Abilities stack: up to ${slots}, each on its own button.</p>
     <div class="pitches">${offers
@@ -1100,14 +1100,14 @@ function showRecap() {
   const won = run?.phase === 'won';
   // Three ways to lose, each its own package (review pick 1): the police, the audience, the exit.
   const lost = reason === 'pin' ? 'busted' : reason === 'ratings' ? 'commercial' : 'signal';
-  const stamp = won ? 'FULL BROADCAST' : cleared ? 'SIGNED OFF' : lost === 'busted' ? 'BUSTED' : lost === 'commercial' ? 'CUT TO COMMERCIAL' : 'SIGNAL LOST';
+  const stamp = won || cleared ? 'SIGNED OFF' : lost === 'busted' ? 'CAUGHT' : lost === 'commercial' ? 'CUT TO COMMERCIAL' : 'SIGNAL LOST';
   // A win needs no caption (Mike, 2026-11-24: no excessive copy); a loss says what ended it.
   const why = won || cleared ? '' : reason === 'pin' ? (sim.show.pinCause === 'caught' ? 'The police caught up.' : 'Boxed in by the police.') : reason === 'ratings' ? 'The viewers changed the channel.' : 'He missed the exit.';
   // Hero numbers: what this screen is about. A run segment reports the budget; a finished run, the run.
   const hero = run && run.phase === 'meeting'
     ? Math.round(sh.banked) === run.purse ? [['Budget', n(run.purse), 'score']] : [['Added to budget', `+${n(sh.banked)}`, 'score'], ['Budget', n(run.purse), '']]
     : run
-      ? [['Run score', n(run.earned), 'score'], ['Segments cleared', `${run.results.filter((x) => x.cleared).length}<small>/${N}</small>`, '']]
+      ? [['Score', n(run.earned), 'score'], ...(N > 1 ? [['Broadcasts cleared', `${run.results.filter((x) => x.cleared).length}<small>/${N}</small>`, '']] : [])]
       : [['Score', n(sh.banked), 'score'], ['Peak audience', viewers(sh.peak), '']];
   const tiles: [string, string][] = [
     // Endless: how far he got is the headline stat.
@@ -1138,7 +1138,7 @@ function showRecap() {
   rampSlam.classList.remove('in');
   document.documentElement.classList.remove('rampage');
   recapEl.innerHTML = `<div class="rc ${cleared || won ? 'cleared' : 'busted'}">
-    ${run ? `<header class="rc-top"><div class="kicker">SEGMENT ${run.segment + 1} OF ${N}</div></header>` : ''}
+    ${run && N > 1 ? `<header class="rc-top"><div class="kicker">BROADCAST ${run.segment + 1} OF ${N}</div></header>` : ''}
     <section class="rc-lead">
       <div class="rc-stamp"><span class="outcome ${cleared || won ? 'cleared' : lost}">${stamp}</span>${why ? `<span class="why">${why}</span>` : ''}</div>
       <div class="rc-hero">${hero.map(([k, v, c]) => `<div class="${c}"><small>${k}</small><b>${v}</b></div>`).join('')}</div>
@@ -1217,7 +1217,7 @@ function recapToMenu() {
 function showHeadline(h: Headline) {
   chyKicker.textContent = h.kicker;
   chyKicker.classList.toggle('breaking', h.breaking);
-  chyKicker.classList.toggle('busted', ['BUSTED', 'CUT TO COMMERCIAL', 'SIGNAL LOST'].includes(h.kicker));
+  chyKicker.classList.toggle('busted', ['CAUGHT', 'CUT TO COMMERCIAL', 'SIGNAL LOST'].includes(h.kicker));
   chyKicker.classList.toggle('signoff', h.kicker === 'SIGN-OFF');
   const span = document.createElement('span');
   span.textContent = h.text;
@@ -1721,7 +1721,7 @@ function stepSim(inp: SimInput) {
     if (moment && !moment.headline && h.sources.includes(moment.event)) moment.headline = h;
     showHeadline(h);
     // Tonight's top story: the biggest headline that wasn't the ending itself.
-    if (!['BUSTED', 'CUT TO COMMERCIAL', 'SIGNAL LOST', 'SIGN-OFF'].includes(h.kicker) && sim.show.ratings >= runStats.bestRatings) {
+    if (!['CAUGHT', 'CUT TO COMMERCIAL', 'SIGNAL LOST', 'SIGN-OFF'].includes(h.kicker) && sim.show.ratings >= runStats.bestRatings) {
       runStats.best = h;
       runStats.bestRatings = sim.show.ratings;
     }
@@ -2114,10 +2114,10 @@ const wyfAssembly = (shell: SLUWebShell<CoreSettings>): FrameAssembly => {
     label: 'Live Broadcast',
     menuFlow: [],
     modes: [
-      { id: 'run', label: 'Full Broadcast', description: 'Five segments. Spend your ratings between them.', leaderboardKey: 'runScore' },
+      { id: 'run', label: 'Story', description: 'Five districts, one broadcast. Get him to the sign-off.', leaderboardKey: 'runScore' },
       { id: 'endless', label: 'Endless', description: 'One road that never ends. How far can he get?', leaderboardKey: 'banked' },
       { id: 'daily', label: 'Daily', description: "Today's road, the same for everyone.", leaderboardKey: 'banked' },
-      { id: 'broadcast', label: 'Single Segment', description: 'Keep the ratings up. Take the exit before the chopper runs out of fuel.', leaderboardKey: 'banked' },
+      { id: 'broadcast', label: 'Single Broadcast', description: 'Keep the audience watching. Take the exit before the chopper runs out of fuel.', leaderboardKey: 'banked' },
     ],
     statKeys: ['broadcasts', 'signOffs', 'bestBanked', 'bestPeak'],
     challengeCategories: [],
@@ -2207,7 +2207,7 @@ app = await createGameApp({
       // motion, shake, vibration, fullscreen) are filed under their tabs by settingsTabsDom.
       choices: () => {
         const all: (UIChoiceLite & { tab: SettingsTab })[] = [
-          { tab: 'game', id: 'wyf-auto', label: `Auto Rampage: ${onOff(settings.autoRampage)}`, description: 'Rampage fires by itself the moment the meter is full' },
+          { tab: 'game', id: 'wyf-auto', label: `Auto Rampage: ${onOff(settings.autoRampage)}`, description: 'Rampage fires by itself the moment the audience is full' },
           { tab: 'game', id: 'wyf-speed', label: `Game Speed: ${Math.round(settings.gameSpeed * 100)}%`, description: 'Slower gives more time to react. Below 100% scores stay off the leaderboard' },
           { tab: 'game', id: 'wyf-howto', label: 'How to Play' },
           { tab: 'game', id: 'wyf-tips', label: 'Replay Tips', description: 'Show the in-game control tips again' },
@@ -2506,7 +2506,7 @@ function frame(now: number) {
       // The Local News Awards: this segment's tally (a player's, not the bot's).
       newAwards = bot
         ? []
-        : record(profile, { signedOff: sim.show.state === 'cleared', policeWrecked: runStats.crashes, objects: sim.stats.smashes + runStats.crashes, segment: run ? run.segment + 1 : 1, runWon: run?.phase === 'won' });
+        : record(profile, { signedOff: sim.show.state === 'cleared', policeWrecked: runStats.crashes, objects: sim.stats.smashes + runStats.crashes, segment: PROTO ? (sim.track.segmentAt(sim.giant.s).district ?? 0) + 1 : run ? run.segment + 1 : 1, runWon: run?.phase === 'won' });
       // Editions are off (Mike, 2026-11-19): every run is the Evening News.
       editionUnlocked = -1;
       saveProfile(profile);

@@ -106,7 +106,7 @@ describe('headlines (§21)', () => {
       for (const { h } of out) {
         // Zone names ("On Ninth Expressway") are facts about the zone itself; strip the place they came from.
         const text = h.place && /^(On|In) /.test(h.place) && !['On Highway', 'On The Interstate'].includes(h.place) ? h.text.replace(h.place, '') : h.text;
-        if (!road.test(text) || ['BUSTED', 'CUT TO COMMERCIAL', 'SIGNAL LOST', 'SIGN-OFF'].includes(h.kicker)) continue;
+        if (!road.test(text) || ['CAUGHT', 'CUT TO COMMERCIAL', 'SIGNAL LOST', 'SIGN-OFF'].includes(h.kicker)) continue;
         checked++;
         // The event is at most `staleAfter` old: he must have been on a highway then.
         const window = zones.filter((z) => z.t <= h.t && z.t >= h.t - TUNING.broadcast.staleAfter - 0.1);

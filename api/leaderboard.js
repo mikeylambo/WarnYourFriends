@@ -754,7 +754,7 @@ var TUNING = {
     /** Frame the point this many seconds ahead of the giant (speed × time). */
     lookAheadTime: 1.6,
     /** The giant never sits lower than this fraction of the screen height (0 top, 1 bottom). Mike (2026-11-24): 0.85 put him under the chyron in landscape. */
-    giantMaxScreenY: 0.66,
+    giantMaxScreenY: 0.7,
     /** At least this much road visible ahead, in seconds at current speed. */
     minRoadAheadSeconds: 2,
     /** Distance changes between tiers ease over this long. */
@@ -1080,8 +1080,14 @@ var TUNING = {
     ticketTtl: 6 * 3600,
     /** Roads handed out per player per minute. */
     ticketsPerMinute: 10,
+    /** Submissions per player id per minute (a broadcast takes minutes; this only stops scripted bursts). */
+    perPlayerMinute: 4,
+    /** Names that pass as staff are refused (no impersonating the station or the developer). Matched like `blocked`. */
+    /** Innocent words that contain a blocked one (the Scunthorpe problem): taken out before matching. */
+    allowed: ["grape", "drape", "scrape", "trapeze", "peacock", "hancock", "cockpit", "shuttlecock", "woodcock", "scunthorpe", "shitake", "fagan"],
+    reserved: ["admin", "moderator", "official", "wyfnews", "wyf6", "staff", "developer", "support", "anthropic", "claude"],
     /** Never on the board (rule 10: never mean). Matched inside the name's letters. */
-    blocked: ["fuck", "shit", "cunt", "nigg", "fag", "rape", "nazi", "hitler", "retard", "whore", "slut", "bitch", "cock", "pussy", "kike", "chink", "spic", "tranny"]
+    blocked: ["fuck", "shit", "cunt", "nigg", "fag", "rape", "nazi", "hitler", "retard", "whore", "slut", "bitch", "cock", "pussy", "kike", "chink", "spic", "tranny", "dyke", "wetback", "beaner", "gook", "raghead", "towelhead", "kkk", "jizz", "penis", "vagina", "porn", "molest", "pedo", "twat", "wank"]
   },
   /**
    * Onboarding prompts (Mike, 2026-11-17). Each once per browser, one at a time, `gap` s apart, held `hold` s.
@@ -1433,11 +1439,11 @@ var RunState = class {
 // src/awards.ts
 var AWARDS = [
   { id: "liveAtEleven", title: "Live at Eleven", how: "Sign off once", stat: "signOffs", n: 1 },
-  { id: "specialReport", title: "Special Report", how: "Reach segment 3 of a broadcast", stat: "bestSegment", n: 3, upgrade: "breakaway" },
+  { id: "specialReport", title: "Special Report", how: "Reach Downtown, the third district", stat: "bestSegment", n: 3, upgrade: "breakaway" },
   { id: "pursuitOfTheYear", title: "Pursuit of the Year", how: "Lead 10 police cars into a crash", stat: "policeWrecked", n: 10, upgrade: "slipstream" },
   { id: "regularFixture", title: "Regular Fixture", how: "Sign off 3 times", stat: "signOffs", n: 3, outfit: "midnight" },
   { id: "trafficHazard", title: "Traffic Hazard of the Year", how: "Lead 25 police cars into a crash", stat: "policeWrecked", n: 25, outfit: "parade" },
-  { id: "seasonFinale", title: "Season Finale", how: "Finish all five segments", stat: "runsWon", n: 1, outfit: "gold" },
+  { id: "seasonFinale", title: "Season Finale", how: "Finish the Story: all five districts", stat: "runsWon", n: 1, outfit: "gold" },
   { id: "lifetime", title: "Lifetime Achievement", how: "Flatten 1,000 objects", stat: "objects", n: 1e3 }
 ];
 var LOCKED_UPGRADES = AWARDS.flatMap((a) => a.upgrade ? [a.upgrade] : []);
@@ -5073,8 +5079,19 @@ function cleanName(raw) {
   if (typeof raw !== "string") return null;
   const name = raw.replace(/\s+/g, " ").trim();
   if (name.length < 2 || name.length > TUNING.leaderboard.nameMax || !/^[A-Za-z0-9 ._-]+$/.test(name)) return null;
-  const flat = name.toLowerCase().replace(/[^a-z]/g, "");
-  if (TUNING.leaderboard.blocked.some((w) => flat.includes(w))) return null;
+  const leet = { "0": "o", "1": "i", "3": "e", "4": "a", "5": "s", "7": "t", "8": "b", "9": "g", "$": "s", "@": "a", "!": "i" };
+  const lower = name.toLowerCase();
+  const flat = lower.replace(/[^a-z]/g, "");
+  const mapped = lower.replace(/./g, (c) => leet[c] ?? c).replace(/[^a-z]/g, "");
+  const squeezed = mapped.replace(/(.)\1+/g, "$1");
+  const L = TUNING.leaderboard;
+  const clear = (f) => L.allowed.reduce((x, w) => x.split(w).join("_"), f);
+  const forms = [flat, mapped, squeezed].map(clear);
+  const squeeze = (w) => {
+    const q = w.replace(/(.)\1+/g, "$1");
+    return q.length >= 4 ? q : w;
+  };
+  if ([...L.blocked, ...L.reserved].some((w) => forms.some((f) => f.includes(w) || f.includes(squeeze(w))))) return null;
   return name;
 }
 
@@ -5118,7 +5135,30 @@ async function board(store2, mode, player, day) {
   const you = player && rank !== null && rank !== void 0 ? { rank: Number(rank) + 1, score: Number(score) } : null;
   return { top, you };
 }
-async function handle(store2, method, query, body, ip, now = Date.now()) {
+var BANNED = "wyf:lb:banned";
+var ALL_MODES = ["run", "broadcast", "endless", "daily"];
+async function moderate(store2, b, adminKey, now) {
+  if (!adminKey || typeof b.admin !== "string" || sha(b.admin) !== sha(adminKey)) return { status: 403, body: { error: "admin" } };
+  if (!isPlayer(b.player)) return { status: 400, body: { error: "player" } };
+  const p = b.player;
+  if (b.action === "ban") {
+    const day = dailyDay(now);
+    await store2.run([["HSET", BANNED, p, now], ...ALL_MODES.filter((m) => m !== "daily").map((m) => ["ZREM", KEY(m), p]), ["ZREM", KEY("daily", day), p], ["ZREM", KEY("daily", day - 1), p], ["HSET", NAMES, p, "\u2014"]]);
+    return { status: 200, body: { ok: true, banned: p } };
+  }
+  if (b.action === "unban") {
+    await store2.run([["HDEL", BANNED, p]]);
+    return { status: 200, body: { ok: true } };
+  }
+  if (b.action === "rename") {
+    const name = cleanName(b.name);
+    if (!name) return { status: 400, body: { error: "name" } };
+    await store2.run([["HSET", NAMES, p, name]]);
+    return { status: 200, body: { ok: true } };
+  }
+  return { status: 400, body: { error: "action" } };
+}
+async function handle(store2, method, query, body, ip, now = Date.now(), adminKey) {
   if (!store2) return { status: 503, body: { error: "leaderboard not configured" } };
   if (method === "GET" && query.ticket !== void 0) {
     if (!isPlayer(query.player)) return { status: 400, body: { error: "player" } };
@@ -5145,7 +5185,12 @@ async function handle(store2, method, query, body, ip, now = Date.now()) {
   if (Number(total) > TUNING.leaderboard.perMinuteAll) return { status: 429, body: { error: "busy" } };
   const b = typeof body === "string" ? safeJson(body) : body;
   if (!b || typeof b !== "object") return { status: 400, body: { error: "body" } };
+  if (b.admin !== void 0) return moderate(store2, b, adminKey, now);
   if (!isPlayer(b.player)) return { status: 400, body: { error: "player" } };
+  const prl = `wyf:rl:p:${b.player}:${Math.floor(now / 6e4)}`;
+  const [pcount] = await store2.run([["INCR", prl], ["EXPIRE", prl, 120]]);
+  if (Number(pcount) > TUNING.leaderboard.perPlayerMinute) return { status: 429, body: { error: "slow down" } };
+  if ((await store2.run([["HGET", BANNED, b.player]]))[0]) return { status: 403, body: { error: "banned" } };
   const name = cleanName(b.name);
   if (!name) return { status: 400, body: { error: "name" } };
   if (!isMode(b.mode)) return { status: 400, body: { error: "mode" } };
@@ -5192,7 +5237,7 @@ async function leaderboard(req, res) {
   const fwd = req.headers["x-forwarded-for"];
   const ip = (Array.isArray(fwd) ? fwd[0] : fwd)?.split(",")[0].trim() || req.socket?.remoteAddress || "unknown";
   try {
-    const r = await handle(store, req.method ?? "GET", req.query ?? {}, req.body, ip);
+    const r = await handle(store, req.method ?? "GET", req.query ?? {}, req.body, ip, Date.now(), process.env.LB_ADMIN_KEY);
     res.setHeader("Cache-Control", req.method === "GET" ? "public, s-maxage=10, stale-while-revalidate=30" : "no-store");
     res.status(r.status).json(r.body);
   } catch (e) {

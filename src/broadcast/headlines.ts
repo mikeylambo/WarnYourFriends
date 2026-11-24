@@ -346,7 +346,7 @@ export class Newsroom {
       case 'end': {
         const e = q.events[0];
         const h = mk(e.type === 'busted' ? L.busted[e.reason] : L.signOff, null, null, true);
-        h.kicker = e.type === 'busted' ? (e.reason === 'pin' ? 'BUSTED' : e.reason === 'ratings' ? 'CUT TO COMMERCIAL' : 'SIGNAL LOST') : 'SIGN-OFF';
+        h.kicker = e.type === 'busted' ? (e.reason === 'pin' ? 'CAUGHT' : e.reason === 'ratings' ? 'CUT TO COMMERCIAL' : 'SIGNAL LOST') : 'SIGN-OFF';
         return h;
       }
       case 'tierDown': {
