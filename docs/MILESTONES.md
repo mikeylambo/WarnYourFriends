@@ -44,7 +44,9 @@ Status: `[ ]` todo · `[~]` in progress · `[x]` done
 - [~] Roads, trees and cars up to the giant's level (code pass done 2026-11-24: ink outlines on vehicles and trees, pines + round trees, textured asphalt/verge/paving; painted textures pending, prompts in `docs/TEXTURE-PROMPTS.md`) (lighting stays). Options: Meshy (credits), GPT image → image-to-3D elsewhere, or a hand-authored stylized low-poly kit in code (no credits; consistent by construction).
 
 ### Performance
-- [ ] 60 fps on a mid-range Android and an older iPhone; load < 5 s; draw-call budget (`tools/perf-draws.mjs`) held.
+- [~] 60 fps on a mid-range Android and an older iPhone; load < 5 s; draw-call budget (`tools/perf-draws.mjs`) held.
+  - Simulated Android (`tools/perf-android.mjs`, CPU 4×, Fast 4G, 2026-11-24): playable in 3.6 s (pass), 4.7 MB download (the giant GLB is 3.6 MB of it), JS heap 57 MB, sim step p95 0.9 ms but one 11.5 ms spike (likely road generation) to smooth out.
+  - GPU not simulatable here: needs one real-device check (any Android friend's phone, or BrowserStack's free trial).
 
 ### Telemetry
 - [ ] Funnel + crash reporting (where people quit, which district ends runs, mod usage). `src/playlog.ts` is the seed.
