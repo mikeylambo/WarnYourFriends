@@ -23,6 +23,8 @@ var TUNING = {
     small: ["sawhorse", "cart", "fence", "scooter", "tollgate"],
     /** Authored chunks (src/sim/chunks.ts): the gap between two chunks (m), and the reaction time the solver allows (s). */
     chunkGap: 34,
+    /** First traffic this far down the road (m): he reaches ~115m as the 6s opening hero shot swoops home, so the first cars come after it, in Chase High. */
+    firstChunk: 150,
     chunkReact: 0.45,
     /** Chunk level climbs one step every this many metres (and one per run segment). */
     levelEvery: 700,
@@ -88,14 +90,15 @@ var TUNING = {
       { id: "s-finish", tier: 2, kind: "finish", n: 1, text: "Make it to the sign-off" },
       { id: "s-tunnel", tier: 3, kind: "cleanDistrict", district: 3, n: 1, text: "Through the tunnel without a hit", requires: "s-bridge" },
       { id: "s-units", tier: 3, kind: "units", n: 4, text: "Flatten {n} police cars", requires: "s-crash", unlock: "shortLeash" },
-      { id: "s-chopper", tier: 3, kind: "chopper", n: 1, text: "Shake the police chopper", requires: "s-finish", unlock: "liveWire" },
+      // Replaces 'Shake the police chopper' (Mike, 2026-11-24: there's no real way to lose it).
+      { id: "s-scoops20", tier: 3, kind: "scoops", n: 20, text: "Grab {n} Scoops", requires: "s-scoops", unlock: "liveWire" },
       { id: "s-clean", tier: 3, kind: "cleanRun", n: 1, text: "Sign off without a single hit", requires: "s-tunnel" },
       { id: "s-modded", tier: 3, kind: "finishModded", n: 1, text: "Sign off with a traffic mod on", requires: "s-finish" }
     ],
     /** Traffic mods (unlocked by story asks): harder runs on purpose, for a score multiplier. Both keep every chunk solver-proven. */
     mods: {
       heavyLoad: { label: "Heavy Load", how: "Each district picks traffic one level harder", score: 1.3 },
-      hotPursuit: { label: "Hot Pursuit", how: "Police units come half again as often", score: 1.3, pace: 1.5 },
+      hotPursuit: { label: "Hot Pursuit", how: "50% more police on his tail", score: 1.3, pace: 1.5 },
       // More mods (Mike, 2026-11-24: "traffic mods yes"): each leans on a different pressure, none touches the solver.
       // Labels renamed by Mike (2026-11-24); ids kept so saved unlocks carry over.
       glassJaw: { label: "Fragile", how: "Hits cost twice the audience", score: 1.3, hit: 2 },
@@ -706,7 +709,8 @@ var TUNING = {
      * is exempt from the ≥2s-of-road framing rule: nothing is placed within 45m of the start or spawns before 12s.
      */
     openingAngle: 4,
-    openingHold: 3.5,
+    openingHold: 6,
+    // Mike 2026-11-24: "longer cinematic view at game start" (was 3.5)
     /** Phase 0c: at least 15s between cut-aways (tighter than v0.3's 7s). */
     cutMinInterval: 15,
     /** Phase 0c: return to Chase High after this long away (s, random in range). */
@@ -1058,7 +1062,7 @@ var TUNING = {
    */
   /** lanesAfter: the first lesson waits for the opening's head-on shot and swing home (mirrored steering) to end. */
   onboarding: {
-    lanesAfter: 5.2,
+    lanesAfter: 7.8,
     quietStart: 4,
     blockedLead: 2.2,
     audienceBelow: 12,
@@ -1952,7 +1956,7 @@ var Track = class {
   }
   /** Prototype: the chunk being laid down (its start, the next row to place), and where the next may start. */
   chunk = null;
-  nextChunkS = TUNING.props.startAt;
+  nextChunkS = TUNING.proto.on ? TUNING.proto.firstChunk : TUNING.props.startAt;
   /** Story run: the district being generated (-1 before the course), and where the course ends (m, once known). */
   district = TUNING.proto.on ? 0 : -1;
   courseEnd = Infinity;
@@ -4175,8 +4179,10 @@ var Sim = class {
       case "nearMiss":
         this.stunt("nearMiss");
         break;
+      // The chopper losing him isn't something he did (Mike, 2026-11-24): no stunt for it in the pivot loop.
       case "lostTrack":
-        this.stunt(e.kind === "chopper" ? "chopperShaken" : "lostTrack");
+        if (e.kind !== "chopper") this.stunt("lostTrack");
+        else if (!TUNING.proto.on) this.stunt("chopperShaken");
         break;
       case "policeCrash":
         if (e.onAir) this.stunt("policeCrash");

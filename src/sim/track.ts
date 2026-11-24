@@ -581,7 +581,7 @@ export class Track {
 
   /** Prototype: the chunk being laid down (its start, the next row to place), and where the next may start. */
   private chunk: { c: Chunk; s0: number; row: number; last: number } | null = null;
-  private nextChunkS: number = TUNING.props.startAt;
+  private nextChunkS: number = TUNING.proto.on ? TUNING.proto.firstChunk : TUNING.props.startAt;
   /** Story run: the district being generated (-1 before the course), and where the course ends (m, once known). */
   private district = TUNING.proto.on ? 0 : -1;
   courseEnd = Infinity;

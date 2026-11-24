@@ -100,6 +100,12 @@ export class Onboarding {
       this.queued = null;
       return;
     }
+    // Back from pause: the tip that was up comes back for the rest of its time (Mike, 2026-11-24: Start lost them).
+    if (this.held) {
+      const h = this.held;
+      this.held = null;
+      this.show(h.id, now + h.left);
+    }
     const g = sim.giant;
     // Something he can't smash at this gear in his lane, a second or two out.
     if ((!this.seen.has('blocked') || !this.seen.has('concrete')) && sim.time > O.quietStart) {
@@ -138,14 +144,26 @@ export class Onboarding {
       this.seen.add(id);
       this.save();
       // The Rampage-ready prompt stays up until he fires it (the lesson the whole loop hangs on), up to `readyHold`.
-      this.showing = { id, until: now + (id === 'ready' ? O.readyHold : O.hold) };
+      this.show(id, now + (id === 'ready' ? O.readyHold : O.hold));
       this.lastAt = now;
-      this.el.innerHTML = this.text(id);
-      this.el.hidden = false;
-      this.el.classList.remove('in');
-      void this.el.offsetWidth;
-      this.el.classList.add('in');
     }
+  }
+
+  /** Paused (not ended): the showing tip goes away and comes back on resume with the time it had left. */
+  pause(now: number) {
+    if (!this.showing) return;
+    this.held = { id: this.showing.id, left: Math.max(1, this.showing.until - now) };
+    this.hide();
+  }
+  private held: { id: PromptId; left: number } | null = null;
+
+  private show(id: PromptId, until: number) {
+    this.showing = { id, until };
+    this.el.innerHTML = this.text(id);
+    this.el.hidden = false;
+    this.el.classList.remove('in');
+    void this.el.offsetWidth;
+    this.el.classList.add('in');
   }
 
   private hide() {

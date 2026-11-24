@@ -663,7 +663,8 @@ export class Sim {
         else this.stunt('ramDodge');
         break;
       case 'nearMiss': this.stunt('nearMiss'); break;
-      case 'lostTrack': this.stunt(e.kind === 'chopper' ? 'chopperShaken' : 'lostTrack'); break;
+      // The chopper losing him isn't something he did (Mike, 2026-11-24): no stunt for it in the pivot loop.
+      case 'lostTrack': if (e.kind !== 'chopper') this.stunt('lostTrack'); else if (!TUNING.proto.on) this.stunt('chopperShaken'); break;
       case 'policeCrash': if (e.onAir) this.stunt('policeCrash'); break;
       case 'policeSmash': this.stunt('collateral'); break;
       case 'leapLand': if (e.smashed > 0) this.stunt('leapLand'); break;

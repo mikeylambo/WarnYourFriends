@@ -129,7 +129,7 @@ const chainClock = chainEl.querySelector('.clock i') as HTMLElement;
 /** Spectacle stunt names on the combo counter (what just counted, so the player learns the menu). */
 /** Ability levels on cards and the chip. */
 const ROMAN = ['', 'I', 'II', 'III'];
-const STUNT_LABEL: Record<string, string> = { rival: 'RIVAL NEWS VAN', medium: 'SMASH', heavy: 'HEAVY SMASH', unit: 'POLICE CAR', policeCrash: 'POLICE CRASH', collateral: 'COLLATERAL', nearMiss: 'NEAR MISS', ramDodge: 'DODGED', lostTrack: 'SHOOK ONE', chopperShaken: 'LOST THE CHOPPER', leapLand: 'LANDING', breakawayLand: 'BREAKAWAY' };
+const STUNT_LABEL: Record<string, string> = { rival: 'RIVAL NEWS VAN', medium: 'SMASH', heavy: 'HEAVY SMASH', unit: 'POLICE CAR', policeCrash: 'POLICE CRASH', collateral: 'COLLATERAL', nearMiss: 'NEAR MISS', ramDodge: 'DODGED', lostTrack: 'SHOOK ONE', chopperShaken: 'LOST THE CHOPPER', leapLand: 'LANDING', breakawayLand: 'BREAKAWAY', scoop: 'SCOOP' };
 let chainResultT = 0;
 const gearPips = [...gearsEl.querySelectorAll('i')] as HTMLElement[];
 const gearName = gearsEl.querySelector('.nm') as HTMLElement;
@@ -568,7 +568,8 @@ newRun(flags.seed);
 // --- Presentation of sim events ---------------------------------------------
 let hapticsOn = true;
 function haptic(ms: number, strength: number) {
-  if (ms <= 0 || !hapticsOn) return;
+  // Only his own run shakes the pad: never the attract broadcast behind the menus or a replay (Mike, 2026-11-24).
+  if (ms <= 0 || !hapticsOn || attract || replay || !started) return;
   const pads = navigator.getGamepads?.() ?? [];
   for (const p of pads) {
     const act = (p as (Gamepad & { vibrationActuator?: { playEffect?: (t: string, o: object) => Promise<unknown> } }) | null)?.vibrationActuator;
@@ -1030,7 +1031,8 @@ function showRecap() {
   // Three ways to lose, each its own package (review pick 1): the police, the audience, the exit.
   const lost = reason === 'pin' ? 'busted' : reason === 'ratings' ? 'commercial' : 'signal';
   const stamp = won ? 'FULL BROADCAST' : cleared ? 'SIGNED OFF' : lost === 'busted' ? 'BUSTED' : lost === 'commercial' ? 'CUT TO COMMERCIAL' : 'SIGNAL LOST';
-  const why = won ? (PROTO ? 'Across town, start to finish.' : 'Every segment, start to finish.') : cleared ? 'He took the exit. Coverage complete.' : reason === 'pin' ? (sim.show.pinCause === 'caught' ? 'The police caught up.' : 'Boxed in by the police.') : reason === 'ratings' ? 'The viewers changed the channel.' : 'He missed the exit.';
+  // A win needs no caption (Mike, 2026-11-24: no excessive copy); a loss says what ended it.
+  const why = won || cleared ? '' : reason === 'pin' ? (sim.show.pinCause === 'caught' ? 'The police caught up.' : 'Boxed in by the police.') : reason === 'ratings' ? 'The viewers changed the channel.' : 'He missed the exit.';
   // Hero numbers: what this screen is about. A run segment reports the budget; a finished run, the run.
   const hero = run && run.phase === 'meeting'
     ? Math.round(sh.banked) === run.purse ? [['Budget', n(run.purse), 'score']] : [['Added to budget', `+${n(sh.banked)}`, 'score'], ['Budget', n(run.purse), '']]
@@ -1068,7 +1070,7 @@ function showRecap() {
   recapEl.innerHTML = `<div class="rc ${cleared || won ? 'cleared' : 'busted'}">
     ${run ? `<header class="rc-top"><div class="kicker">SEGMENT ${run.segment + 1} OF ${N}</div></header>` : ''}
     <section class="rc-lead">
-      <div class="rc-stamp"><span class="outcome ${cleared || won ? 'cleared' : lost}">${stamp}</span><span class="why">${why}</span></div>
+      <div class="rc-stamp"><span class="outcome ${cleared || won ? 'cleared' : lost}">${stamp}</span>${why ? `<span class="why">${why}</span>` : ''}</div>
       <div class="rc-hero">${hero.map(([k, v, c]) => `<div class="${c}"><small>${k}</small><b>${v}</b></div>`).join('')}</div>
       <div class="rc-tiles">${tiles.map(([k, v]) => `<div><b>${v}</b><small>${k}</small></div>`).join('')}</div>
       ${newAwards.map((a) => `<div class="rc-award"><small>AWARD</small><b>${esc(a.title)}</b>${rewardLine(a) ? `<span>${esc(rewardLine(a))}</span>` : ''}</div>`).join('')}
@@ -1079,7 +1081,7 @@ function showRecap() {
     </section>
     <aside class="rc-side">
       ${shot}
-      ${asks.length ? `<div class="rc-asks"><div class="hd">Producer's asks <span>${asks.filter((a) => a.done).length}/${asks.length}</span></div><ul>${asks.map((a) => `<li class="${a.done ? 'done' : a.failed ? 'failed' : ''}"><i>${a.done ? '✓' : a.failed ? '✕' : ''}</i><span>${esc(a.text)}</span>${a.done ? `<b>+${n(a.reward)}</b>` : ''}</li>`).join('')}</ul></div>` : ''}
+      ${asks.length ? `<div class="rc-asks"><div class="hd">Producer's asks <span>${asks.filter((a) => a.done).length}/${asks.length}</span></div><ul>${asks.map((a) => `<li class="${a.done ? 'done' : a.failed ? 'failed' : ''}"><i>${a.done ? '✓' : a.failed ? '✕' : ''}</i><span>${esc(a.text)}</span>${a.done && a.reward ? `<b>+${n(a.reward)}</b>` : ''}</li>`).join('')}</ul></div>` : ''}
       ${over ? '<div class="rc-board" hidden></div>' : ''}
       <blockquote class="anchor">“${esc(viewer.text)}”${viewer.who ? `<cite>${esc(viewer.who)}</cite>` : ''}</blockquote>
     </aside>
@@ -2347,7 +2349,7 @@ function frame(now: number) {
       const G = TUNING.gear;
       // Rampage loop: the build-up rides the last stretch of the meter (the steps swell and tick toward READY).
       const build = sim.live && !sim.inRampage && g.meter >= G.meterBuildFrom && g.meter < 100 ? (g.meter - G.meterBuildFrom) / (100 - G.meterBuildFrom) : 0;
-      highway.ring(f.x, f.z, (1.6 + g.tier * 0.7) * gScale * (1 + build * G.buildRingScale), build > 0 ? 0xfff1d6 : PALETTE.dust, 0.5 + build * 0.3, 0.55);
+      // No ring under each step (Mike, 2026-11-24); the build-up is the tick, the dust and the meter.
       if (build > 0) audio.gearTick(build);
       if (gearShockPending) {
         gearShockPending = false;
@@ -2521,6 +2523,7 @@ function frame(now: number) {
   if ((!paused || attract) && !contextLost) pip.render(renderer, scene);
   updateHud(realDt);
   updateGlyphs();
+  if (paused && started && !attract) onboarding.pause(performance.now() / 1000);
   onboarding.update(sim, performance.now() / 1000, sim.live && started && !paused && !attract && !replay && !bot);
 }
 
@@ -2954,7 +2957,7 @@ window.__GAME = {
     const t = targetAt(sim.giant.s, sim.giant.d);
     return audio.placeOf(t.x + (r.x / n) * across + Math.cos(t.travel) * along, t.z + (r.z / n) * across + Math.sin(t.travel) * along);
   },
-  recap: () => (recapEl.hidden ? null : { title: recapEl.querySelector('.why')?.textContent, outcome: recapEl.querySelector('.outcome')?.textContent, clip: !!recapEl.querySelector('.rc-shot video') && !(recapEl.querySelector('.rc-shot video') as HTMLVideoElement).paused }),
+  recap: () => (recapEl.hidden ? null : { title: recapEl.querySelector('.why')?.textContent ?? recapEl.querySelector('.outcome')?.textContent, outcome: recapEl.querySelector('.outcome')?.textContent, clip: !!recapEl.querySelector('.rc-shot video') && !(recapEl.querySelector('.rc-shot video') as HTMLVideoElement).paused }),
   /** Recap REPLAY: playing now (sim time, end, rate), and the moment it picked. */
   replay: () => ({ playing: !!replay, t: replay?.sim.time ?? null, end: replay?.end ?? null, rate: replayRate, moment }),
   show: () => ({ ...sim.show, tier: sim.show.tier, exit: sim.exit, live: sim.live, units: sim.pursuit.units.map((u) => ({ id: u.id, unit: u.unit, phase: u.phase, gap: u.s - sim.giant.s, lane: u.lane })) }),

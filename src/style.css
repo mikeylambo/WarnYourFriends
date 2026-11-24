@@ -390,6 +390,8 @@ html.title #ui .slu-screen:not([data-screen-id="title"]) { place-items: center s
 /* How to Play: on its own, nothing of the cold open or the controls strip behind it. */
 html.briefing #hud, html.briefing #controls, html.briefing #coldopen, html.briefing #camtag, html.briefing #btn-pause, html.briefing #abil , html.briefing #abil2 { display: none !important; }
 html.briefing #recap { background: rgba(7, 5, 13, 0.92); }
+/* The Rundown: nothing from the attract broadcast behind it shows through (Mike, 2026-11-24). */
+html.briefing #recap:has(.preshow) { background: #07050d; }
 
 /* Title screen (Mike's chopper-feed direction): wordmark left, the live chase right, LIVE bug. */
 html.title #hud, html.title #abil, html.title #controls, html.title #camtag, html.title #btn-pause , html.title #abil2{ display: none !important; }
@@ -1077,11 +1079,11 @@ html.reduceflashes #live #fuel.crit { animation: none; }
 html.proto #gears .lbl:not(.proto) { display: none; }
 html.proto #gears .lbl.proto { display: inline; }
 html.proto #gears.ramp .lbl.proto::after { content: ' · RAMPAGE'; }
-html.proto #gears.sprint .lbl.proto::after { content: ' · SPRINT ×2'; color: #f2a516; }
+/* SPRINT ×2 label removed (Mike, 2026-11-24). */
 html.proto #ratingsbar, html.proto #ratings .bar, html.proto #ratings .aud, html.proto #asks { display: none !important; }
 
 /* Story run: district title card (top centre, under the HUD row; fades in, holds, fades out). */
-#district { position: absolute; left: 50%; top: 13%; transform: translateX(-50%); z-index: 4; pointer-events: none; text-align: center; opacity: 0; }
+#district { position: absolute; left: 50%; top: 27%; transform: translateX(-50%); z-index: 4; pointer-events: none; text-align: center; opacity: 0; }
 #district small { display: block; font: italic 900 14px/1 var(--f-head); letter-spacing: 0.22em; color: var(--c-text); text-shadow: 0 2px 8px rgba(0, 0, 0, 0.7); }
 #district b { display: inline-block; margin-top: 8px; padding: 6px 18px 8px; background: var(--c-red); color: var(--c-text); font: italic 900 clamp(26px, 3.6vw, 46px)/1 var(--f-head); text-transform: uppercase; }
 #district.in { animation: district 3.2s ease-out both; }
