@@ -182,6 +182,8 @@ export const TUNING = {
       { id: 's-bridge', tier: 2, kind: 'cleanDistrict', district: 1, n: 1, text: 'Cross Saltmarsh Bridge without a hit', requires: 's-scoops', unlock: 'heavyLoad' },
       { id: 's-crash', tier: 2, kind: 'crashBefore', district: 3, n: 2, text: 'Crash {n} police cars before the tunnel', requires: 's-rampage', unlock: 'hotPursuit' },
       { id: 's-chain', tier: 2, kind: 'chain', n: 15, text: 'Combo {n} stunts', requires: 's-near', unlock: 'glassJaw' },
+      { id: 's-target', tier: 1, kind: 'targets', n: 2, text: 'Crush {n} target cars' },
+      { id: 's-target-ramp', tier: 3, kind: 'rampTargets', n: 2, text: 'Crush {n} target cars in Rampage', requires: 's-target' },
       { id: 's-rampsmash', tier: 2, kind: 'rampsmash', n: 12, text: 'Smash {n} things in one Rampage', requires: 's-rivals' },
       { id: 's-finish', tier: 1, kind: 'finish', n: 1, text: 'Make it to the sign-off' }, // Easy (Mike, 2026-11-24: it was a Medium that felt easy)
       { id: 's-tunnel', tier: 3, kind: 'cleanDistrict', district: 3, n: 1, text: 'Through the tunnel without a hit', requires: 's-bridge' },

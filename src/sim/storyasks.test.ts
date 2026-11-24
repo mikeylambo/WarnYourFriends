@@ -20,9 +20,9 @@ describe('story asks', () => {
       for (const a of sim.asks.list) if (a.done) done.add(a.id);
       best = Math.max(best, sim.asks.list.find((a) => a.id === 's-units')!.progress);
     }
-    // Hit-free asks depend on the bot's luck, and it doesn't hunt police (a player chasing it does): those it
+    // Hit-free asks depend on the bot's luck, and it doesn't hunt police or targets in Rampage (a player does): those it
     // needn't finish, but it gets within one police car of the police ask. Everything else must land.
-    const missing = ids.filter((id) => !done.has(id) && !['s-clean', 's-tunnel', 's-units'].includes(id));
+    const missing = ids.filter((id) => !done.has(id) && !['s-clean', 's-tunnel', 's-units', 's-target-ramp'].includes(id));
     expect(missing).toEqual([]);
     expect(best, 'police flattened in one run').toBeGreaterThanOrEqual(TUNING.proto.storyAsks.find((a) => a.id === 's-units')!.n - 1);
   }, 120000);

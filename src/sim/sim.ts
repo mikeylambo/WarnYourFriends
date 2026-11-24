@@ -495,6 +495,8 @@ export class Sim {
 
   /** v0.3 box-in: both neighbouring lanes blocked and a unit within 8m ahead in yours. */
   boxedIn(): boolean {
+    // No brake, no box-in bust (Mike, 2026-11-24): braking out the back was the only way out of one.
+    if (TUNING.proto.on && TUNING.proto.noBrake) return false;
     const g = this.giant;
     const S = TUNING.show;
     // Units driving off (a net that's broken up) don't box anyone in.

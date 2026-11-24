@@ -97,6 +97,8 @@ var TUNING = {
       { id: "s-bridge", tier: 2, kind: "cleanDistrict", district: 1, n: 1, text: "Cross Saltmarsh Bridge without a hit", requires: "s-scoops", unlock: "heavyLoad" },
       { id: "s-crash", tier: 2, kind: "crashBefore", district: 3, n: 2, text: "Crash {n} police cars before the tunnel", requires: "s-rampage", unlock: "hotPursuit" },
       { id: "s-chain", tier: 2, kind: "chain", n: 15, text: "Combo {n} stunts", requires: "s-near", unlock: "glassJaw" },
+      { id: "s-target", tier: 1, kind: "targets", n: 2, text: "Crush {n} target cars" },
+      { id: "s-target-ramp", tier: 3, kind: "rampTargets", n: 2, text: "Crush {n} target cars in Rampage", requires: "s-target" },
       { id: "s-rampsmash", tier: 2, kind: "rampsmash", n: 12, text: "Smash {n} things in one Rampage", requires: "s-rivals" },
       { id: "s-finish", tier: 1, kind: "finish", n: 1, text: "Make it to the sign-off" },
       // Easy (Mike, 2026-11-24: it was a Medium that felt easy)
@@ -3770,6 +3772,11 @@ var Asks = class {
       case "scoop":
         done.push(this.bump("scoops", 1, out));
         break;
+      // Target cars (2026-11-24): any crush counts; a crush in Rampage counts toward the Rampage ask too.
+      case "target":
+        done.push(this.bump("targets", 1, out));
+        if (e.rampage) done.push(this.bump("rampTargets", 1, out));
+        break;
       case "nearMiss":
       case "dodge":
         done.push(this.bump("nearMiss", 1, out));
@@ -4206,6 +4213,7 @@ var Sim = class {
   }
   /** v0.3 box-in: both neighbouring lanes blocked and a unit within 8m ahead in yours. */
   boxedIn() {
+    if (TUNING.proto.on && TUNING.proto.noBrake) return false;
     const g = this.giant;
     const S = TUNING.show;
     const units = this.pursuit.solidBetween(g.s - 6, g.s + S.pinUnitAhead + 3).filter((u) => u.phase !== "leave");

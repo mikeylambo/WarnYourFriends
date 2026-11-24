@@ -126,6 +126,11 @@ export class Asks {
         }
         break;
       case 'scoop': done.push(this.bump('scoops', 1, out)); break;
+      // Target cars (2026-11-24): any crush counts; a crush in Rampage counts toward the Rampage ask too.
+      case 'target':
+        done.push(this.bump('targets', 1, out));
+        if (e.rampage) done.push(this.bump('rampTargets', 1, out));
+        break;
       case 'nearMiss':
       case 'dodge': done.push(this.bump('nearMiss', 1, out)); break;
       case 'chain': done.push(this.bump('chain', 0, out, e.count)); break;
