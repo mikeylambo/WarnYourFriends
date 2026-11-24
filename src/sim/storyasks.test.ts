@@ -34,3 +34,14 @@ describe('story asks', () => {
     expect(sim.pursuit.pace).toBeCloseTo(1.5);
   });
 });
+
+describe('Tonight\'s Rundown offer', () => {
+  it('a fresh profile gets more asks than picks, easy ones topped up', async () => {
+    const { storyAskOffer } = await import('../awards');
+    const fresh = { asksDone: [] as string[] } as unknown as Parameters<typeof storyAskOffer>[0];
+    const { open } = storyAskOffer(fresh, () => 0);
+    expect(open.length).toBeGreaterThanOrEqual(TUNING.proto.storyPick + TUNING.proto.storySpare);
+    expect(new Set(open.map((a) => a.id)).size).toBe(open.length);
+    expect(open.every((a) => !a.requires)).toBe(true);
+  });
+});

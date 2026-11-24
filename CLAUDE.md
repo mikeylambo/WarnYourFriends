@@ -71,6 +71,7 @@ tools/shots-a11y.mjs    HUD in play, a control prompt, Settings → Controls, HU
 tools/shots-bridge.mjs  Bridge furniture: a merge sign and lamps on the parapet, not over the water
 tools/shots-events.mjs  Traffic events: Police Net closing (BOXED IN meter), Rolling Blockade with the armored truck, Car Carrier dropping cars (ONLY=)
 tools/shots-story.mjs   Story: Tonight's Rundown card, the two-way tunnel, the run-end dissolve
+tools/story-balance.ts  Story balance: the bot plays N Story runs; finish rate, how runs end, hits/min per district
 ```
 
 ## Deploys

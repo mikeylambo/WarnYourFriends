@@ -155,5 +155,9 @@ export function storyAskOffer(p: Profile, pickRandom: (n: number) => number): { 
     open.push(...[...fresh, ...again].slice(0, P.storyOffer[tier - 1]));
     locked.push(...all.filter((a) => !can.includes(a)).slice(0, 1));
   }
+  // Always a real choice (release pass, 2026-11-24): a new player has few asks open, so top up with easy ones
+  // until there's at least one more on offer than he picks.
+  for (const a of P.storyAsks)
+    if (open.length < P.storyPick + P.storySpare && a.tier === 1 && !open.includes(a)) open.splice(open.filter((x) => x.tier === 1).length, 0, a);
   return { open, locked };
 }

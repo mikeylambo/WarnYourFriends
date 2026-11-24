@@ -73,6 +73,8 @@ var TUNING = {
      * district index it's about. No score: the reward is the unlock (prototype scores are off the board).
      */
     storyPick: 3,
+    /** Asks offered beyond the picks, at least: a fresh profile still gets a choice (topped up with easy asks). */
+    storySpare: 1,
     storyOffer: [2, 2, 2],
     storyAsks: [
       { id: "s-scoops", tier: 1, kind: "scoops", n: 8, text: "Grab {n} Scoops" },
