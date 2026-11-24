@@ -28,6 +28,7 @@ import { DEFAULT_KEYS, Input, KEY_ACTIONS, RESERVED_KEYS, keyLabel, type KeyActi
 import { registerGlyphs, padFamily, type GlyphAction } from './glyphs';
 import coverUrl from './assets/title-cover.webp';
 import { UPGRADE_ART } from './upgradeArt';
+import { AWARD_BADGE, MOD_ART, OUTFIT_ART } from './unlockArt';
 import { PlayLog, appendLog, exportLog, type PlayEntry } from './playlog';
 import { readFlags } from './debug';
 import { dailyDay, dailySeed, encodeInputs, type BoardMode, type Submission } from './leaderboard/verify';
@@ -762,7 +763,7 @@ function openPreShow(): Promise<boolean> {
       const open = PLAYTEST || modUnlocked(profile, id); // ?playtest=1: every mod open to try
       const on = profile.mods.includes(id);
       const by = P.storyAsks.find((a) => a.unlock === id);
-      return `<button class="go alt mod${on ? ' on' : ''}" data-m="${id}" ${open ? '' : 'disabled'}><b>${esc(m.label)}</b><small>${open ? `${esc(m.how)} · ×${m.score}` : `🔒 ${esc(by?.text.replace('{n}', String(by.n)) ?? '')}`}</small></button>`;
+      return `<button class="go alt mod${on ? ' on' : ''}" data-m="${id}" ${open ? '' : 'disabled'}>${MOD_ART[id] ? `<img class="mthumb" src="${MOD_ART[id]}" alt="">` : ''}<b>${esc(m.label)}</b><small>${open ? `${esc(m.how)} · ×${m.score}` : `🔒 ${esc(by?.text.replace('{n}', String(by.n)) ?? '')}`}</small></button>`;
     }).join('');
     const mult = profile.mods.reduce((k, m) => k * P.mods[m].score, 1);
     recapEl.innerHTML = `<div class="card briefing preshow">
@@ -813,7 +814,7 @@ function openPreShow(): Promise<boolean> {
 
 function openAwards(): Promise<void> {
   const fmt = (n: number) => Math.round(n).toLocaleString();
-  const portraits = outfitPortraits();
+  const portraits = OUTFIT_ART; // painted (2026-11-24); outfitPortraits() stays for evidence tools
   const draw = () => {
     const C = profile.counts;
     const rows = AWARDS.map((a) => {
@@ -1031,17 +1032,11 @@ function nextAwardLine(): string {
  */
 function showUnlocks(done: () => void, force = false) {
   const items: { kicker: string; title: string; sub: string; art: string }[] = [];
-  // An outfit shows as its colours (cape cloth over its plates, the hem band): a portrait render needs him in shot.
-  const hex = (c: number | null | undefined, d: number) => `#${(c ?? d).toString(16).padStart(6, '0')}`;
-  const swatch = (o: OutfitId) => {
-    const O = TUNING.outfits[o];
-    return `<span class="u-swatch" style="--cloth:${hex(O.cape ?? O.cloth ?? O.full, PALETTE.giantCape)};--plate:${hex(O.plate ?? O.full, PALETTE.giantBone)};--band:${hex(O.band, PALETTE.giantBone)}"></span>`;
-  };
   for (const a of newAwards) {
-    const art = a.outfit ? swatch(a.outfit) : a.upgrade ? `<img src="${UPGRADE_ART[a.upgrade]}" alt="" />` : '<i>★</i>';
+    const art = a.outfit ? `<img src="${OUTFIT_ART[a.outfit]}" alt="" />` : a.upgrade ? `<img src="${UPGRADE_ART[a.upgrade]}" alt="" />` : `<img src="${AWARD_BADGE}" alt="" />`;
     items.push({ kicker: a.outfit ? 'NEW OUTFIT' : a.upgrade ? 'NEW UPGRADE' : 'AWARD', title: a.outfit ? TUNING.outfits[a.outfit].label : a.title, sub: a.outfit || a.upgrade ? a.title : a.how, art });
   }
-  for (const m of newUnlocks) items.push({ kicker: 'TRAFFIC MOD', title: TUNING.proto.mods[m].label, sub: `${TUNING.proto.mods[m].how} · score ×${TUNING.proto.mods[m].score}`, art: `<i>×${TUNING.proto.mods[m].score}</i>` });
+  for (const m of newUnlocks) items.push({ kicker: 'TRAFFIC MOD', title: TUNING.proto.mods[m].label, sub: `${TUNING.proto.mods[m].how} · score ×${TUNING.proto.mods[m].score}`, art: MOD_ART[m] ? `<img src="${MOD_ART[m]}" alt="" />` : `<i>×${TUNING.proto.mods[m].score}</i>` });
   if (!items.length || (!force && (bot || flags.stepMode || attract))) return done();
   const el = document.createElement('div');
   el.id = 'unlock';
@@ -2743,7 +2738,8 @@ let lastGiantAt: { x: number; z: number; travel: number } | null = null;
  * The Awards screen's outfit portraits (Mike, 2026-11-19: "could be more visual, esp with armor unlock"): the giant
  * as he is right now, three-quarter front at chest height, once per outfit. Copied in the same task as each render.
  */
-function outfitPortraits(): Partial<Record<OutfitId, string>> {
+// In-engine portraits (before the painted art, 2026-11-24): kept for evidence tools.
+export function outfitPortraits(): Partial<Record<OutfitId, string>> {
   const out: Partial<Record<OutfitId, string>> = {};
   const t = lastGiantAt;
   if (!t || contextLost) return out;

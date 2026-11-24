@@ -1133,4 +1133,7 @@ html.endless #live #fuel, html.endless #clocklbl { display: none !important; }
 @keyframes u-slam { 0% { transform: scale(1.6) rotate(-3deg); opacity: 0; } 100% { transform: none; opacity: 1; } }
 @keyframes u-shine { to { left: 130%; } }
 @media (prefers-reduced-motion: reduce) { #unlock .u-card { animation: none; } #unlock .u-card::after { display: none; } }
-#unlock .u-swatch { width: 100%; height: 100%; background: linear-gradient(180deg, var(--plate) 0 22%, var(--cloth) 22% 80%, var(--band) 80% 88%, var(--cloth) 88%); }
+/* Painted mod art on the Rundown's buttons (2026-11-24): a thumbnail at the left; dimmed while locked. */
+#recap .preshow .mod { padding-left: 64px; min-height: 58px; }
+#recap .preshow .mod .mthumb { position: absolute; left: 8px; top: 50%; transform: translateY(-50%); width: 44px; height: 44px; object-fit: cover; border: 2px solid rgba(26, 16, 32, 0.6); }
+#recap .preshow .mod:disabled .mthumb { filter: grayscale(1) brightness(0.55); }

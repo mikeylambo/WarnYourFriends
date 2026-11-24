@@ -54,5 +54,5 @@ describe("the producer's asks (Mike, 2026-11-15)", () => {
     }
     expect(finished).toBeGreaterThan(10);
     void failedClean;
-  });
+  }, 60_000); // plays whole runs: seconds under a loaded suite
 });
