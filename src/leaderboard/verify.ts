@@ -10,8 +10,19 @@ import { TUNING, type UpgradeId } from '../tuning';
  * Pure: no DOM, no network. Shared by the game (encode) and the API (decode + verify).
  */
 
-/** run = Story (or the classic Full Broadcast), broadcast = one segment, endless = Endless. */
-export type BoardMode = 'run' | 'broadcast' | 'endless';
+/** run = Story (or the classic Full Broadcast), broadcast = one segment, endless = Endless, daily = today's Endless road. */
+export type BoardMode = 'run' | 'broadcast' | 'endless' | 'daily';
+
+/** Daily Endless (2026-11-24): the UTC day number for a time (ms). */
+export const dailyDay = (ms: number) => Math.floor(ms / 86_400_000);
+/** Daily Endless: everyone's road for that day (1..1e9), the same on every client and on the server. */
+export function dailySeed(day: number): number {
+  let h = (day ^ 0x9e3779b9) >>> 0;
+  h = Math.imul(h ^ (h >>> 16), 0x85ebca6b) >>> 0;
+  h = Math.imul(h ^ (h >>> 13), 0xc2b2ae35) >>> 0;
+  h = (h ^ (h >>> 16)) >>> 0;
+  return 1 + (h % 999_999_999);
+}
 
 export interface Submission {
   mode: BoardMode;
@@ -28,6 +39,8 @@ export interface Submission {
   guided?: boolean;
   /** Edition of the news (TUNING.editions). */
   edition?: number;
+  /** Daily: the UTC day (dailyDay) whose road this is. */
+  day?: number;
   /** Story: the producer's asks picked before going live (TUNING.proto.storyAsks ids). */
   asks?: string[];
   /** Story: traffic mods on (TUNING.proto.mods ids); they change the score multiplier. */
@@ -83,7 +96,8 @@ function playSegment(sim: Sim, inputs: SimInput[]): boolean {
 
 /** Re-simulate a submission and return the score the sim gives it. */
 export function verify(sub: Submission): VerifyResult {
-  if (sub.mode !== 'run' && sub.mode !== 'broadcast' && sub.mode !== 'endless') return { ok: false, error: 'mode' };
+  if (sub.mode !== 'run' && sub.mode !== 'broadcast' && sub.mode !== 'endless' && sub.mode !== 'daily') return { ok: false, error: 'mode' };
+  if (sub.mode === 'daily' && (!Number.isSafeInteger(sub.day) || sub.seed !== dailySeed(sub.day!))) return { ok: false, error: 'seed' };
   if (!Number.isSafeInteger(sub.seed)) return { ok: false, error: 'seed' };
   if (!Array.isArray(sub.segments) || !sub.segments.length || sub.segments.length > TUNING.run.segments) return { ok: false, error: 'segments' };
   const logs = sub.segments.map((s) => (typeof s === 'string' ? decodeInputs(s) : null));
@@ -95,7 +109,7 @@ export function verify(sub: Submission): VerifyResult {
   const mods = strs(sub.mods, TUNING.proto.mods);
   const story = { ...(asks.length ? { asks } : {}), ...(mods.length ? { mods } : {}) };
 
-  if (sub.mode === 'endless') {
+  if (sub.mode === 'endless' || sub.mode === 'daily') {
     if (logs.length !== 1) return { ok: false, error: 'segments' };
     const sim = new Sim({ seed: sub.seed, segment: 0, upgrades: [], growth: !!sub.growth, guided: !!sub.guided, edition: 0, endless: true });
     if (!playSegment(sim, logs[0]!)) return { ok: false, error: 'unfinished' };

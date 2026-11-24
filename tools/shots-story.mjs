@@ -28,6 +28,31 @@ const base = 'http://localhost:4183/?proto=1&cuts=0&debug=0&time=night';
   await page.close();
 }
 
+// 1b. The Rundown with every ask done and every mod unlocked, on phones (portrait and landscape): Go Live stays reachable.
+for (const [name, vp] of [['phone-portrait', { width: 390, height: 844 }], ['phone-landscape', { width: 844, height: 390 }]]) {
+  const page = await browser.newPage({ viewport: vp, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
+  await page.goto(base);
+  await page.evaluate(() => {
+    const k = Object.keys(localStorage).find((x) => x.includes('awards')) ?? 'wyf.awards.v1';
+    const p = JSON.parse(localStorage.getItem(k) ?? '{}');
+    p.asksDone = ['s-scoops', 's-rampage', 's-rivals', 's-near', 's-bridge', 's-crash', 's-chain', 's-rampsmash', 's-finish', 's-tunnel', 's-units', 's-chopper'];
+    p.mods = ['heavyLoad', 'glassJaw'];
+    localStorage.setItem(k, JSON.stringify(p));
+  });
+  await page.reload();
+  await page.waitForTimeout(2500);
+  await page.keyboard.press('Enter');
+  await page.waitForTimeout(800);
+  if (!(await page.$('.preshow'))) await page.keyboard.press('Enter');
+  await page.waitForSelector('.preshow', { timeout: 10000 });
+  await page.waitForTimeout(400);
+  const go = await page.$eval('#ps-go', (b) => { const r = b.getBoundingClientRect(); return r.bottom <= innerHeight && r.top >= 0; });
+  console.log(name, 'Go Live on screen:', go);
+  await page.screenshot({ path: `${OUT}/rundown-${name}.png` });
+  await page.close();
+}
+
+if (process.env.ONLY === "rundown") { await browser.close(); server.kill(); process.exit(0); }
 // 2. The tunnel: the bot drives until the giant is inside one.
 {
   const page = await ctx.newPage();

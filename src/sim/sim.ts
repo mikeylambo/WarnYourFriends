@@ -158,6 +158,13 @@ export class Sim {
   /** First broadcast ever: a calm opening (no drain or police for `guided.calmFor` s, nothing unbreakable for `guided.clearFor` m). */
   readonly guided: boolean;
 
+  /** The product of one effect over the traffic mods on (1 when none sets it). */
+  private modProduct(k: 'hit' | 'drain' | 'catch'): number {
+    return this.mods.reduce((x, m) => x * (TUNING.proto.mods[m][k] ?? 1), 1);
+  }
+  /** The traffic mods' score multiplier, applied once when the broadcast ends. */
+  modMult = 1;
+  private modsBanked = false;
   /** Police spawn pace from the traffic mods, before any district's own pace. */
   private basePace = 1;
   /** Endless mode (prototype): no exit, no fuel. */
@@ -190,7 +197,8 @@ export class Sim {
     this.abilityLevel = this.ability ? this.levelOf(this.ability) : 0;
     this.show.startSegment(opts.segment ?? 0);
     if (this.guided) this.show.decayGrace = TUNING.guided.calmFor;
-    this.show.decayMult = this.baseDecayMult = this.edition.decay * (TUNING.proto.on ? TUNING.proto.decayMult : 1);
+    this.show.decayMult = this.baseDecayMult = this.edition.decay * (TUNING.proto.on ? TUNING.proto.decayMult : 1) * this.modProduct('drain');
+    this.show.pinFillMult = this.modProduct('catch');
     if (TUNING.proto.on) this.show.ratings = this.show.peak = TUNING.proto.startRatings;
     if (this.edition.heat) this.show.heat = Math.min(5, this.show.heat + this.edition.heat);
     this.asks = new Asks(opts.seed, opts.segment ?? 0, this.track, opts.asks);
@@ -362,6 +370,12 @@ export class Sim {
     this.stats.minSpeed = Math.min(this.stats.minSpeed, g.speed);
     this.tick++;
     this.time += dt;
+    // Traffic mods multiply the score once, the step the broadcast ends (here, so the server's re-play agrees).
+    if (!this.live && !this.modsBanked) {
+      this.modsBanked = true;
+      this.modMult = this.mods.reduce((k, m) => k * TUNING.proto.mods[m].score, 1);
+      if (this.modMult !== 1) this.show.banked = Math.round(this.show.banked * this.modMult);
+    }
     return this.events;
   }
 
@@ -777,7 +791,7 @@ export class Sim {
       }
       // Prototype: one bar, so a hit costs audience (it can cut to commercial).
       const before = this.show.ratings;
-      this.show.ratings = Math.max(0, this.show.ratings - TUNING.proto.hitAudience);
+      this.show.ratings = Math.max(0, this.show.ratings - TUNING.proto.hitAudience * this.modProduct('hit'));
       g.meter = this.show.ratings;
       if (before > g.meter) this.emit({ type: 'meterLoss', amount: before - g.meter, reason });
       return;

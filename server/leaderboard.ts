@@ -2,7 +2,7 @@ import { createHash, randomInt } from 'node:crypto';
 import { TUNING } from '../src/tuning';
 import { LOCKED_UPGRADES } from '../src/awards';
 import { ALL_UPGRADES } from '../src/sim/run';
-import { cleanName, verify, type BoardMode, type Submission } from '../src/leaderboard/verify';
+import { cleanName, dailyDay, verify, type BoardMode, type Submission } from '../src/leaderboard/verify';
 
 /**
  * Leaderboard API (bundled to api/leaderboard.js by tools/build-api.mjs).
@@ -108,9 +108,10 @@ export interface Reply {
 }
 
 // Season 1 boards were the bare `wyf:lb:<mode>` keys; later seasons get their own (old scores were earned under other rules).
-const KEY = (mode: BoardMode) => (TUNING.leaderboard.season > 1 ? `wyf:lb:s${TUNING.leaderboard.season}:${mode}` : `wyf:lb:${mode}`);
+const KEY = (mode: BoardMode, day?: number) =>
+  mode === 'daily' ? `wyf:lb:s${TUNING.leaderboard.season}:daily:${day}` : TUNING.leaderboard.season > 1 ? `wyf:lb:s${TUNING.leaderboard.season}:${mode}` : `wyf:lb:${mode}`;
 const NAMES = 'wyf:lb:names';
-const isMode = (m: unknown): m is BoardMode => m === 'run' || m === 'broadcast' || m === 'endless';
+const isMode = (m: unknown): m is BoardMode => m === 'run' || m === 'broadcast' || m === 'endless' || m === 'daily';
 const isPlayer = (p: unknown): p is string => typeof p === 'string' && /^[a-z0-9]{16,32}$/.test(p);
 const isSecret = (s: unknown): s is string => typeof s === 'string' && /^[a-z0-9]{24,64}$/.test(s);
 const OWNERS = 'wyf:lb:owner';
@@ -121,11 +122,11 @@ const sha = (s: string) => createHash('sha256').update(s).digest('hex');
 /** Upgrades every pool has (the rest are Awards unlocks). */
 const BASE_POOL = ALL_UPGRADES.filter((u) => !LOCKED_UPGRADES.includes(u));
 
-async function board(store: Store, mode: BoardMode, player?: string) {
+async function board(store: Store, mode: BoardMode, player?: string, day?: number) {
   const [flat, rank, score] = await store.run([
-    ['ZRANGE', KEY(mode), 0, TUNING.leaderboard.top - 1, 'REV', 'WITHSCORES'],
-    ['ZREVRANK', KEY(mode), player ?? '-'],
-    ['ZSCORE', KEY(mode), player ?? '-'],
+    ['ZRANGE', KEY(mode, day), 0, TUNING.leaderboard.top - 1, 'REV', 'WITHSCORES'],
+    ['ZREVRANK', KEY(mode, day), player ?? '-'],
+    ['ZSCORE', KEY(mode, day), player ?? '-'],
   ]);
   const rows = flat as string[];
   const ids = rows.filter((_, i) => i % 2 === 0);
@@ -151,7 +152,8 @@ export async function handle(store: Store | null, method: string, query: Record<
     const mode = query.mode;
     if (!isMode(mode)) return { status: 400, body: { error: 'mode' } };
     const player = isPlayer(query.player) ? query.player : undefined;
-    return { status: 200, body: await board(store, mode, player) };
+    const day = mode === 'daily' ? (Number.isSafeInteger(Number(query.day)) && query.day !== undefined ? Number(query.day) : dailyDay(now)) : undefined;
+    return { status: 200, body: await board(store, mode, player, day) };
   }
   if (method !== 'POST') return { status: 405, body: { error: 'method' } };
 
@@ -175,7 +177,11 @@ export async function handle(store: Store | null, method: string, query: Record<
   const [owner] = await store.run([['HGET', OWNERS, b.player]]);
   if (owner !== sha(secret)) return { status: 403, body: { error: 'player' } };
   // Ranked rules: the road was issued to this player; the pool has every base upgrade.
-  if (!Number.isSafeInteger(b.seed) || !(await store.run([['EXISTS', ticketKey(b.player, b.seed as number)]]))[0]) return { status: 422, body: { error: 'seed' } };
+  // Daily: today's road (or yesterday's, for a run that crossed midnight UTC), the same for everyone; no ticket.
+  const today = dailyDay(now);
+  if (b.mode === 'daily') {
+    if (b.day !== today && b.day !== today - 1) return { status: 422, body: { error: 'day' } };
+  } else if (!Number.isSafeInteger(b.seed) || !(await store.run([['EXISTS', ticketKey(b.player, b.seed as number)]]))[0]) return { status: 422, body: { error: 'seed' } };
   if (Array.isArray(b.pool) && !BASE_POOL.every((u) => (b.pool as string[]).includes(u))) return { status: 422, body: { error: 'pool' } };
   // The guided (calmer) first broadcast ranks once per player (checked before the costly re-play).
   if (b.guided && (await store.run([['HGET', GUIDED, b.player]]))[0]) return { status: 422, body: { error: 'guided' } };
@@ -188,11 +194,13 @@ export async function handle(store: Store | null, method: string, query: Record<
     return { status: 422, body: { error: 'mismatch', score: res.score } };
   }
   if (b.guided) await store.run([['HSETNX', GUIDED, b.player, 1]]);
+  const day = b.mode === 'daily' ? (b.day as number) : undefined;
   await store.run([
-    ['ZADD', KEY(b.mode), 'GT', 'CH', res.score, b.player],
+    ['ZADD', KEY(b.mode, day), 'GT', 'CH', res.score, b.player],
     ['HSET', NAMES, b.player, name],
+    ...(day !== undefined ? [['EXPIRE', KEY(b.mode, day), TUNING.leaderboard.dailyKeep]] : []),
   ]);
-  const out = await board(store, b.mode, b.player);
+  const out = await board(store, b.mode, b.player, day);
   return { status: 200, body: { ok: true, score: res.score, won: res.won, best: out.you?.score ?? res.score, rank: out.you?.rank ?? null, top: out.top } };
 }
 

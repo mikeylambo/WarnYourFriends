@@ -28,6 +28,8 @@ export class Show {
   /** Phase 3 passives: Showman's fresh-type multiplier, Second Wind's Pin drain multiplier. */
   freshMult: number = TUNING.show.freshMult;
   pinDrainMult = 1;
+  /** CAUGHT fills this much faster (traffic mod Short Leash). */
+  pinFillMult = 1;
   /** Passives v2: Ratings multiplier per gain type (Slipstream: police crashes), and the drain multiplier at Rampage (Crowd Pleaser). */
   gainMult: Partial<Record<GainType, number>> = {};
   rampageDecayMult = 1;
@@ -134,7 +136,7 @@ export class Show {
       this.pin = Math.min(100, this.pin + S.pinFill * dt);
       this.pinCause = 'net';
     } else if (caught) {
-      this.pin = Math.min(100, this.pin + TUNING.pursuit.caught.fill * dt);
+      this.pin = Math.min(100, this.pin + TUNING.pursuit.caught.fill * this.pinFillMult * dt);
       this.pinCause = 'caught';
     } else if (speed > S.pinDrainAbove || (!boxed && speed >= TUNING.pursuit.caught.below)) this.pin = Math.max(0, this.pin - S.pinDrain * this.pinDrainMult * dt);
     if (this.pin >= 100) {

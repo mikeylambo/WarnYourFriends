@@ -83,19 +83,23 @@ var TUNING = {
       { id: "s-near", tier: 1, kind: "nearMiss", n: 12, text: "{n} close calls" },
       { id: "s-bridge", tier: 2, kind: "cleanDistrict", district: 1, n: 1, text: "Cross Saltmarsh Bridge without a hit", requires: "s-scoops", unlock: "heavyLoad" },
       { id: "s-crash", tier: 2, kind: "crashBefore", district: 3, n: 2, text: "Crash {n} police cars before the tunnel", requires: "s-rampage", unlock: "hotPursuit" },
-      { id: "s-chain", tier: 2, kind: "chain", n: 15, text: "Combo {n} stunts", requires: "s-near" },
+      { id: "s-chain", tier: 2, kind: "chain", n: 15, text: "Combo {n} stunts", requires: "s-near", unlock: "glassJaw" },
       { id: "s-rampsmash", tier: 2, kind: "rampsmash", n: 12, text: "Smash {n} things in one Rampage", requires: "s-rivals" },
       { id: "s-finish", tier: 2, kind: "finish", n: 1, text: "Make it to the sign-off" },
       { id: "s-tunnel", tier: 3, kind: "cleanDistrict", district: 3, n: 1, text: "Through the tunnel without a hit", requires: "s-bridge" },
-      { id: "s-units", tier: 3, kind: "units", n: 4, text: "Flatten {n} police cars", requires: "s-crash" },
-      { id: "s-chopper", tier: 3, kind: "chopper", n: 1, text: "Shake the police chopper", requires: "s-finish" },
+      { id: "s-units", tier: 3, kind: "units", n: 4, text: "Flatten {n} police cars", requires: "s-crash", unlock: "shortLeash" },
+      { id: "s-chopper", tier: 3, kind: "chopper", n: 1, text: "Shake the police chopper", requires: "s-finish", unlock: "liveWire" },
       { id: "s-clean", tier: 3, kind: "cleanRun", n: 1, text: "Sign off without a single hit", requires: "s-tunnel" },
       { id: "s-modded", tier: 3, kind: "finishModded", n: 1, text: "Sign off with a traffic mod on", requires: "s-finish" }
     ],
     /** Traffic mods (unlocked by story asks): harder runs on purpose, for a score multiplier. Both keep every chunk solver-proven. */
     mods: {
       heavyLoad: { label: "Heavy Load", how: "Each district picks traffic one level harder", score: 1.3 },
-      hotPursuit: { label: "Hot Pursuit", how: "Police units come half again as often", score: 1.3, pace: 1.5 }
+      hotPursuit: { label: "Hot Pursuit", how: "Police units come half again as often", score: 1.3, pace: 1.5 },
+      // More mods (Mike, 2026-11-24: "traffic mods yes"): each leans on a different pressure, none touches the solver.
+      glassJaw: { label: "Glass Jaw", how: "Hits cost twice the audience", score: 1.3, hit: 2 },
+      liveWire: { label: "Live Wire", how: "The audience tunes out half again as fast", score: 1.25, drain: 1.5 },
+      shortLeash: { label: "Short Leash", how: "Slow down and the police catch him half again as fast", score: 1.2, catch: 1.5 }
     },
     reachGap: 36,
     wideMinBlocked: 2,
@@ -1026,6 +1030,8 @@ var TUNING = {
     season: 3,
     /** Inputs per segment a submission may carry (60 Hz): Endless runs to ~1200s at worst (feel baseline cap), Story ~345s + outro. */
     maxTicks: 8e4,
+    /** Daily Endless boards are kept this long (s) after their last post: a week of looking back, then gone. */
+    dailyKeep: 8 * 86400,
     /** Longest name on the board (fits the recap row at phone width). */
     nameMax: 14,
     /** Rows shown on the recap board. */
@@ -2269,6 +2275,8 @@ var Show = class _Show {
   /** Phase 3 passives: Showman's fresh-type multiplier, Second Wind's Pin drain multiplier. */
   freshMult = TUNING.show.freshMult;
   pinDrainMult = 1;
+  /** CAUGHT fills this much faster (traffic mod Short Leash). */
+  pinFillMult = 1;
   /** Passives v2: Ratings multiplier per gain type (Slipstream: police crashes), and the drain multiplier at Rampage (Crowd Pleaser). */
   gainMult = {};
   rampageDecayMult = 1;
@@ -2366,7 +2374,7 @@ var Show = class _Show {
       this.pin = Math.min(100, this.pin + S.pinFill * dt);
       this.pinCause = "net";
     } else if (caught) {
-      this.pin = Math.min(100, this.pin + TUNING.pursuit.caught.fill * dt);
+      this.pin = Math.min(100, this.pin + TUNING.pursuit.caught.fill * this.pinFillMult * dt);
       this.pinCause = "caught";
     } else if (speed > S.pinDrainAbove || !boxed && speed >= TUNING.pursuit.caught.below) this.pin = Math.max(0, this.pin - S.pinDrain * this.pinDrainMult * dt);
     if (this.pin >= 100) {
@@ -3709,6 +3717,13 @@ var Sim = class {
   edition;
   /** First broadcast ever: a calm opening (no drain or police for `guided.calmFor` s, nothing unbreakable for `guided.clearFor` m). */
   guided;
+  /** The product of one effect over the traffic mods on (1 when none sets it). */
+  modProduct(k) {
+    return this.mods.reduce((x, m) => x * (TUNING.proto.mods[m][k] ?? 1), 1);
+  }
+  /** The traffic mods' score multiplier, applied once when the broadcast ends. */
+  modMult = 1;
+  modsBanked = false;
   /** Police spawn pace from the traffic mods, before any district's own pace. */
   basePace = 1;
   /** Endless mode (prototype): no exit, no fuel. */
@@ -3739,7 +3754,8 @@ var Sim = class {
     this.abilityLevel = this.ability ? this.levelOf(this.ability) : 0;
     this.show.startSegment(opts.segment ?? 0);
     if (this.guided) this.show.decayGrace = TUNING.guided.calmFor;
-    this.show.decayMult = this.baseDecayMult = this.edition.decay * (TUNING.proto.on ? TUNING.proto.decayMult : 1);
+    this.show.decayMult = this.baseDecayMult = this.edition.decay * (TUNING.proto.on ? TUNING.proto.decayMult : 1) * this.modProduct("drain");
+    this.show.pinFillMult = this.modProduct("catch");
     if (TUNING.proto.on) this.show.ratings = this.show.peak = TUNING.proto.startRatings;
     if (this.edition.heat) this.show.heat = Math.min(5, this.show.heat + this.edition.heat);
     this.asks = new Asks(opts.seed, opts.segment ?? 0, this.track, opts.asks);
@@ -3897,6 +3913,11 @@ var Sim = class {
     this.stats.minSpeed = Math.min(this.stats.minSpeed, g.speed);
     this.tick++;
     this.time += dt;
+    if (!this.live && !this.modsBanked) {
+      this.modsBanked = true;
+      this.modMult = this.mods.reduce((k, m) => k * TUNING.proto.mods[m].score, 1);
+      if (this.modMult !== 1) this.show.banked = Math.round(this.show.banked * this.modMult);
+    }
     return this.events;
   }
   runOffRamp(dt) {
@@ -4284,7 +4305,7 @@ var Sim = class {
         this.show.pinCause = "caught";
       }
       const before2 = this.show.ratings;
-      this.show.ratings = Math.max(0, this.show.ratings - TUNING.proto.hitAudience);
+      this.show.ratings = Math.max(0, this.show.ratings - TUNING.proto.hitAudience * this.modProduct("hit"));
       g.meter = this.show.ratings;
       if (before2 > g.meter) this.emit({ type: "meterLoss", amount: before2 - g.meter, reason });
       return;
@@ -4743,6 +4764,14 @@ var Sim = class {
 };
 
 // src/leaderboard/verify.ts
+var dailyDay = (ms) => Math.floor(ms / 864e5);
+function dailySeed(day) {
+  let h = (day ^ 2654435769) >>> 0;
+  h = Math.imul(h ^ h >>> 16, 2246822507) >>> 0;
+  h = Math.imul(h ^ h >>> 13, 3266489909) >>> 0;
+  h = (h ^ h >>> 16) >>> 0;
+  return 1 + h % 999999999;
+}
 var A = "a".charCodeAt(0);
 var CAP = "A".charCodeAt(0);
 function decodeInputs(str, max = TUNING.leaderboard.maxTicks) {
@@ -4766,7 +4795,8 @@ function playSegment(sim, inputs) {
   return !sim.live;
 }
 function verify(sub) {
-  if (sub.mode !== "run" && sub.mode !== "broadcast" && sub.mode !== "endless") return { ok: false, error: "mode" };
+  if (sub.mode !== "run" && sub.mode !== "broadcast" && sub.mode !== "endless" && sub.mode !== "daily") return { ok: false, error: "mode" };
+  if (sub.mode === "daily" && (!Number.isSafeInteger(sub.day) || sub.seed !== dailySeed(sub.day))) return { ok: false, error: "seed" };
   if (!Number.isSafeInteger(sub.seed)) return { ok: false, error: "seed" };
   if (!Array.isArray(sub.segments) || !sub.segments.length || sub.segments.length > TUNING.run.segments) return { ok: false, error: "segments" };
   const logs = sub.segments.map((s) => typeof s === "string" ? decodeInputs(s) : null);
@@ -4775,7 +4805,7 @@ function verify(sub) {
   const asks = strs(sub.asks, TUNING.proto.storyAsks);
   const mods = strs(sub.mods, TUNING.proto.mods);
   const story = { ...asks.length ? { asks } : {}, ...mods.length ? { mods } : {} };
-  if (sub.mode === "endless") {
+  if (sub.mode === "endless" || sub.mode === "daily") {
     if (logs.length !== 1) return { ok: false, error: "segments" };
     const sim = new Sim({ seed: sub.seed, segment: 0, upgrades: [], growth: !!sub.growth, guided: !!sub.guided, edition: 0, endless: true });
     if (!playSegment(sim, logs[0])) return { ok: false, error: "unfinished" };
@@ -4832,9 +4862,9 @@ function redisFromEnv(env) {
     }
   };
 }
-var KEY = (mode) => TUNING.leaderboard.season > 1 ? `wyf:lb:s${TUNING.leaderboard.season}:${mode}` : `wyf:lb:${mode}`;
+var KEY = (mode, day) => mode === "daily" ? `wyf:lb:s${TUNING.leaderboard.season}:daily:${day}` : TUNING.leaderboard.season > 1 ? `wyf:lb:s${TUNING.leaderboard.season}:${mode}` : `wyf:lb:${mode}`;
 var NAMES = "wyf:lb:names";
-var isMode = (m) => m === "run" || m === "broadcast" || m === "endless";
+var isMode = (m) => m === "run" || m === "broadcast" || m === "endless" || m === "daily";
 var isPlayer = (p) => typeof p === "string" && /^[a-z0-9]{16,32}$/.test(p);
 var isSecret = (s) => typeof s === "string" && /^[a-z0-9]{24,64}$/.test(s);
 var OWNERS = "wyf:lb:owner";
@@ -4842,11 +4872,11 @@ var GUIDED = "wyf:lb:guided";
 var ticketKey = (player, seed) => `wyf:lb:t:${player}:${seed}`;
 var sha = (s) => createHash("sha256").update(s).digest("hex");
 var BASE_POOL = ALL_UPGRADES.filter((u) => !LOCKED_UPGRADES.includes(u));
-async function board(store2, mode, player) {
+async function board(store2, mode, player, day) {
   const [flat, rank, score] = await store2.run([
-    ["ZRANGE", KEY(mode), 0, TUNING.leaderboard.top - 1, "REV", "WITHSCORES"],
-    ["ZREVRANK", KEY(mode), player ?? "-"],
-    ["ZSCORE", KEY(mode), player ?? "-"]
+    ["ZRANGE", KEY(mode, day), 0, TUNING.leaderboard.top - 1, "REV", "WITHSCORES"],
+    ["ZREVRANK", KEY(mode, day), player ?? "-"],
+    ["ZSCORE", KEY(mode, day), player ?? "-"]
   ]);
   const rows = flat;
   const ids = rows.filter((_, i) => i % 2 === 0);
@@ -4870,7 +4900,8 @@ async function handle(store2, method, query, body, ip, now = Date.now()) {
     const mode = query.mode;
     if (!isMode(mode)) return { status: 400, body: { error: "mode" } };
     const player = isPlayer(query.player) ? query.player : void 0;
-    return { status: 200, body: await board(store2, mode, player) };
+    const day2 = mode === "daily" ? Number.isSafeInteger(Number(query.day)) && query.day !== void 0 ? Number(query.day) : dailyDay(now) : void 0;
+    return { status: 200, body: await board(store2, mode, player, day2) };
   }
   if (method !== "POST") return { status: 405, body: { error: "method" } };
   const rl = `wyf:rl:${ip}:${Math.floor(now / 6e4)}`;
@@ -4890,7 +4921,10 @@ async function handle(store2, method, query, body, ip, now = Date.now()) {
   await store2.run([["HSETNX", OWNERS, b.player, sha(secret)]]);
   const [owner] = await store2.run([["HGET", OWNERS, b.player]]);
   if (owner !== sha(secret)) return { status: 403, body: { error: "player" } };
-  if (!Number.isSafeInteger(b.seed) || !(await store2.run([["EXISTS", ticketKey(b.player, b.seed)]]))[0]) return { status: 422, body: { error: "seed" } };
+  const today = dailyDay(now);
+  if (b.mode === "daily") {
+    if (b.day !== today && b.day !== today - 1) return { status: 422, body: { error: "day" } };
+  } else if (!Number.isSafeInteger(b.seed) || !(await store2.run([["EXISTS", ticketKey(b.player, b.seed)]]))[0]) return { status: 422, body: { error: "seed" } };
   if (Array.isArray(b.pool) && !BASE_POOL.every((u) => b.pool.includes(u))) return { status: 422, body: { error: "pool" } };
   if (b.guided && (await store2.run([["HGET", GUIDED, b.player]]))[0]) return { status: 422, body: { error: "guided" } };
   const res = verify(b);
@@ -4901,11 +4935,13 @@ async function handle(store2, method, query, body, ip, now = Date.now()) {
     return { status: 422, body: { error: "mismatch", score: res.score } };
   }
   if (b.guided) await store2.run([["HSETNX", GUIDED, b.player, 1]]);
+  const day = b.mode === "daily" ? b.day : void 0;
   await store2.run([
-    ["ZADD", KEY(b.mode), "GT", "CH", res.score, b.player],
-    ["HSET", NAMES, b.player, name]
+    ["ZADD", KEY(b.mode, day), "GT", "CH", res.score, b.player],
+    ["HSET", NAMES, b.player, name],
+    ...day !== void 0 ? [["EXPIRE", KEY(b.mode, day), TUNING.leaderboard.dailyKeep]] : []
   ]);
-  const out = await board(store2, b.mode, b.player);
+  const out = await board(store2, b.mode, b.player, day);
   return { status: 200, body: { ok: true, score: res.score, won: res.won, best: out.you?.score ?? res.score, rank: out.you?.rank ?? null, top: out.top } };
 }
 function safeJson(s) {

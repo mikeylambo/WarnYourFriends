@@ -80,8 +80,9 @@ function rows(top: Row[], you: { rank: number; score: number } | null): string {
  * Mount the panel into `el`. `sub` is the finished broadcast (null: nothing to post, e.g. debug flags on).
  * With a saved name it posts straight away; the first time, it asks for one.
  */
-export function mountBoard(el: HTMLElement, mode: BoardMode, sub: Submission | null, why?: string) {
-  const title = mode === 'run' ? 'Story board' : mode === 'endless' ? 'Endless board' : 'Single Segment board';
+export function mountBoard(el: HTMLElement, mode: BoardMode, sub: Submission | null, why?: string, day?: number) {
+  const date = day !== undefined ? new Date(day * 86_400_000).toLocaleDateString([], { month: 'short', day: 'numeric', timeZone: 'UTC' }) : '';
+  const title = mode === 'run' ? 'Story board' : mode === 'endless' ? 'Endless board' : mode === 'daily' ? `Daily board · ${date}` : 'Single Segment board';
   const head = (right = '') => `<div class="hd">${title}<span>${right}</span></div>`;
   const player = playerId();
   let posted = false;
@@ -105,7 +106,7 @@ export function mountBoard(el: HTMLElement, mode: BoardMode, sub: Submission | n
       const r = await fetch(API, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...sub, player, secret: secret(), name }) });
       const body = (await r.json().catch(() => ({}))) as { top?: Row[]; rank?: number; best?: number; score?: number; error?: string };
       if (!r.ok) {
-        const msg = body.error === 'name' ? 'That name can’t go on air. Try another.' : body.error === 'seed' ? 'This road wasn’t issued by the station (were you offline?), so it can’t be ranked.' : body.error === 'guided' ? 'The guided broadcast ranks once. Your next one counts.' : body.error === 'mismatch' || body.error === 'unfinished' ? 'The replay didn’t check out, so it wasn’t posted.' : 'Couldn’t reach the board. Try again in a moment.';
+        const msg = body.error === 'name' ? 'That name can’t go on air. Try another.' : body.error === 'seed' ? 'This road wasn’t issued by the station (were you offline?), so it can’t be ranked.' : body.error === 'guided' ? 'The guided broadcast ranks once. Your next one counts.' : body.error === 'day' ? 'That daily road has closed. Today’s is open.' : body.error === 'mismatch' || body.error === 'unfinished' ? 'The replay didn’t check out, so it wasn’t posted.' : 'Couldn’t reach the board. Try again in a moment.';
         if (body.error === 'name') store(NAME_KEY, '');
         const note = el.querySelector('.note') ?? el.appendChild(Object.assign(document.createElement('p'), { className: 'note' }));
         note.textContent = msg;
@@ -145,7 +146,7 @@ export function mountBoard(el: HTMLElement, mode: BoardMode, sub: Submission | n
   el.hidden = false;
   void (async () => {
     try {
-      const r = await fetch(`${API}?mode=${mode}&player=${player}`);
+      const r = await fetch(`${API}?mode=${mode}&player=${player}${day !== undefined ? `&day=${day}` : ''}`);
       if (!r.ok) throw new Error(String(r.status));
       const body = (await r.json()) as { top: Row[]; you: { rank: number; score: number } | null };
       const saved = cleanName(store(NAME_KEY));

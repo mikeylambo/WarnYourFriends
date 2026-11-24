@@ -168,12 +168,12 @@ export const TUNING = {
       { id: 's-near', tier: 1, kind: 'nearMiss', n: 12, text: '{n} close calls' },
       { id: 's-bridge', tier: 2, kind: 'cleanDistrict', district: 1, n: 1, text: 'Cross Saltmarsh Bridge without a hit', requires: 's-scoops', unlock: 'heavyLoad' },
       { id: 's-crash', tier: 2, kind: 'crashBefore', district: 3, n: 2, text: 'Crash {n} police cars before the tunnel', requires: 's-rampage', unlock: 'hotPursuit' },
-      { id: 's-chain', tier: 2, kind: 'chain', n: 15, text: 'Combo {n} stunts', requires: 's-near' },
+      { id: 's-chain', tier: 2, kind: 'chain', n: 15, text: 'Combo {n} stunts', requires: 's-near', unlock: 'glassJaw' },
       { id: 's-rampsmash', tier: 2, kind: 'rampsmash', n: 12, text: 'Smash {n} things in one Rampage', requires: 's-rivals' },
       { id: 's-finish', tier: 2, kind: 'finish', n: 1, text: 'Make it to the sign-off' },
       { id: 's-tunnel', tier: 3, kind: 'cleanDistrict', district: 3, n: 1, text: 'Through the tunnel without a hit', requires: 's-bridge' },
-      { id: 's-units', tier: 3, kind: 'units', n: 4, text: 'Flatten {n} police cars', requires: 's-crash' },
-      { id: 's-chopper', tier: 3, kind: 'chopper', n: 1, text: 'Shake the police chopper', requires: 's-finish' },
+      { id: 's-units', tier: 3, kind: 'units', n: 4, text: 'Flatten {n} police cars', requires: 's-crash', unlock: 'shortLeash' },
+      { id: 's-chopper', tier: 3, kind: 'chopper', n: 1, text: 'Shake the police chopper', requires: 's-finish', unlock: 'liveWire' },
       { id: 's-clean', tier: 3, kind: 'cleanRun', n: 1, text: 'Sign off without a single hit', requires: 's-tunnel' },
       { id: 's-modded', tier: 3, kind: 'finishModded', n: 1, text: 'Sign off with a traffic mod on', requires: 's-finish' },
     ] as { id: string; tier: 1 | 2 | 3; kind: string; n: number; text: string; district?: number; requires?: string; unlock?: string }[],
@@ -181,7 +181,11 @@ export const TUNING = {
     mods: {
       heavyLoad: { label: 'Heavy Load', how: 'Each district picks traffic one level harder', score: 1.3 },
       hotPursuit: { label: 'Hot Pursuit', how: 'Police units come half again as often', score: 1.3, pace: 1.5 },
-    } as Record<string, { label: string; how: string; score: number; pace?: number }>,
+      // More mods (Mike, 2026-11-24: "traffic mods yes"): each leans on a different pressure, none touches the solver.
+      glassJaw: { label: 'Glass Jaw', how: 'Hits cost twice the audience', score: 1.3, hit: 2 },
+      liveWire: { label: 'Live Wire', how: 'The audience tunes out half again as fast', score: 1.25, drain: 1.5 },
+      shortLeash: { label: 'Short Leash', how: 'Slow down and the police catch him half again as fast', score: 1.2, catch: 1.5 },
+    } as Record<string, { label: string; how: string; score: number; pace?: number; /** × audience lost per hit */ hit?: number; /** × audience drain */ drain?: number; /** × CAUGHT fill */ catch?: number }>,
     reachGap: 36,
     wideMinBlocked: 2,
     tail: 22,
@@ -1053,6 +1057,8 @@ export const TUNING = {
     season: 3,
     /** Inputs per segment a submission may carry (60 Hz): Endless runs to ~1200s at worst (feel baseline cap), Story ~345s + outro. */
     maxTicks: 80000,
+    /** Daily Endless boards are kept this long (s) after their last post: a week of looking back, then gone. */
+    dailyKeep: 8 * 86400,
     /** Longest name on the board (fits the recap row at phone width). */
     nameMax: 14,
     /** Rows shown on the recap board. */

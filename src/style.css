@@ -1104,5 +1104,14 @@ html.endless #live #fuel, html.endless #clocklbl { display: none !important; }
 #recap .preshow .ask.on, #recap .preshow .mod.on { background: #f2b632; color: #1a1020; box-shadow: inset 0 0 0 2px #1a1020; }
 #recap .preshow .ask.locked { opacity: 0.55; }
 #recap .preshow .mods { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin: 10px 0; }
-@media (max-width: 560px) { #recap .preshow .asks-pick, #recap .preshow .mods { grid-template-columns: 1fr; } }
+/* The card never outgrows the screen (release pass, 2026-11-24: five mods pushed Go Live off a phone): it scrolls, Go Live stays pinned. */
+#recap .preshow { max-height: calc(100dvh - 24px - env(safe-area-inset-top) - env(safe-area-inset-bottom)); overflow-y: auto; overscroll-behavior: contain; }
+#recap .preshow { padding-bottom: 0; }
+#recap .preshow > .row { position: sticky; bottom: 0; z-index: 1; margin: 0; padding: 10px 0 16px; background: inherit; }
+@media (max-width: 560px) {
+  #recap .preshow .asks-pick { grid-template-columns: 1fr; }
+  #recap .preshow .mods { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  #recap .preshow .mod small { display: none; }
+}
+@media (max-height: 480px) { #recap .preshow .how { display: none; } #recap .preshow .ask small, #recap .preshow .mod small { display: none; } }
 #recap .rc-asks li.failed { opacity: 0.55; text-decoration: line-through; }

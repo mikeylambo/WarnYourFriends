@@ -45,3 +45,18 @@ describe('Tonight\'s Rundown offer', () => {
     expect(open.every((a) => !a.requires)).toBe(true);
   });
 });
+
+describe('traffic mods (2026-11-24)', () => {
+  it('Glass Jaw doubles the hit cost, Live Wire speeds the drain, Short Leash the CAUGHT fill; scores multiply at the end', () => {
+    const plain = new Sim({ seed: 9, growth: true });
+    const m = new Sim({ seed: 9, growth: true, mods: ['liveWire', 'shortLeash'] });
+    expect(m.show.decayMult).toBeCloseTo(plain.show.decayMult * 1.5);
+    expect(m.show.pinFillMult).toBe(1.5);
+    const every = Object.keys(TUNING.proto.mods);
+    for (const id of every) expect(TUNING.proto.storyAsks.some((a) => a.unlock === id), id).toBe(true);
+    const all = new Sim({ seed: 9, growth: true, mods: ['glassJaw'] });
+    const bot = new Bot(all);
+    for (let i = 0; i < 60 * 600 && all.live; i++) all.step(bot.input());
+    expect(all.modMult).toBeCloseTo(1.3);
+  }, 60_000);
+});

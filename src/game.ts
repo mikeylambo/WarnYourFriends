@@ -30,7 +30,7 @@ import coverUrl from './assets/title-cover.webp';
 import { UPGRADE_ART } from './upgradeArt';
 import { PlayLog, appendLog, exportLog, type PlayEntry } from './playlog';
 import { readFlags } from './debug';
-import { encodeInputs, type BoardMode, type Submission } from './leaderboard/verify';
+import { dailyDay, dailySeed, encodeInputs, type BoardMode, type Submission } from './leaderboard/verify';
 import { mountBoard, prefetchSeed, takeSeed } from './leaderboardClient';
 import { Onboarding, type PromptId } from './onboarding';
 import { AWARDS, loadProfile, modUnlocked, storyAskOffer, outfitUnlocked, record, rewardLine, saveProfile, upgradePool, type Award } from './awards';
@@ -166,6 +166,8 @@ districtEl.addEventListener('animationend', () => districtEl.classList.remove('i
 let firstCardShown = false;
 /** Prototype endless mode for the broadcast being played. */
 let endlessMode = false;
+/** Daily Endless (2026-11-24): today's road, the same for everyone, on its own board. */
+let dailyMode = false;
 function showDistrict(d: number) {
   const D = TUNING.proto.story.districts;
   districtEl.innerHTML = `<small>${d === D.length - 1 ? 'FINAL DISTRICT' : `DISTRICT ${d + 1} OF ${D.length}`}</small><b>${esc(D[d].name)}</b>`;
@@ -394,7 +396,7 @@ let lastEntry: PlayEntry | null = null;
 let simOpts: { seed: number; segment: number; upgrades: UpgradeId[]; levels: Partial<Record<AbilityId, number>>; growth: boolean; guided?: boolean; edition?: number; endless?: boolean; asks?: string[]; mods?: string[] } = { seed: 0, segment: 0, upgrades: [], levels: {}, growth: false };
 const inputLog: SimInput[] = [];
 /** Leaderboard: this broadcast's (or run's) seed, each segment's inputs and the meeting buys, for the server to re-play. */
-let lb: { mode: BoardMode; seed: number; segments: string[]; buys: UpgradeId[][]; pool: UpgradeId[]; guided?: boolean; edition?: number } = { mode: 'broadcast', seed: 0, segments: [], buys: [], pool: [] };
+let lb: { mode: BoardMode; day?: number; seed: number; segments: string[]; buys: UpgradeId[][]; pool: UpgradeId[]; guided?: boolean; edition?: number } = { mode: 'broadcast', seed: 0, segments: [], buys: [], pool: [] };
 /** Why this browser's scores can't go on the board (a setting that changes the sim), or null. */
 const lbBlocked = () =>
   !PROTO
@@ -1102,8 +1104,8 @@ function showRecap() {
     const blocked = lbBlocked();
     const sub: Submission | null = blocked || lb.segments.length === 0
       ? null
-      : { mode: lb.mode, seed: lb.seed, growth: simOpts.growth, segments: lb.segments, buys: lb.buys, pool: lb.pool, ...(lb.guided ? { guided: true } : {}), ...(lb.edition ? { edition: lb.edition } : {}), ...(simOpts.asks ? { asks: simOpts.asks } : {}), ...(simOpts.mods ? { mods: simOpts.mods } : {}), claimed: Math.round(run ? run.earned : sim.show.banked) };
-    mountBoard(boardEl, lb.mode, sub, blocked ?? undefined);
+      : { mode: lb.mode, seed: lb.seed, growth: simOpts.growth, segments: lb.segments, buys: lb.buys, pool: lb.pool, ...(lb.guided ? { guided: true } : {}), ...(lb.edition ? { edition: lb.edition } : {}), ...(lb.day !== undefined ? { day: lb.day } : {}), ...(simOpts.asks ? { asks: simOpts.asks } : {}), ...(simOpts.mods ? { mods: simOpts.mods } : {}), claimed: Math.round(run ? run.earned : sim.show.banked) };
+    mountBoard(boardEl, lb.mode, sub, blocked ?? undefined, lb.day);
   }
   // Playtest export: log this broadcast once, then copy everything logged so far.
   if (!lastEntry || lastEntry.seed !== simOpts.seed || lastEntry.segment !== simOpts.segment || lastEntry.seconds !== Math.round(sim.time * 10) / 10) {
@@ -1921,14 +1923,16 @@ function start() {
 function beginBroadcast(mode = 'broadcast') {
   attract = false;
   document.documentElement.classList.remove('attract');
-  endlessMode = PROTO && mode === 'endless';
+  dailyMode = PROTO && mode === 'daily';
+  endlessMode = PROTO && (mode === 'endless' || dailyMode);
   if (endlessMode) mode = 'broadcast'; // one long broadcast, no run around it
-  const seed = nextSeed ?? takeSeed() ?? (Math.random() * 1e9) | 0;
+  const day = dailyDay(Date.now());
+  const seed = dailyMode ? dailySeed(day) : nextSeed ?? takeSeed() ?? (Math.random() * 1e9) | 0;
   nextSeed = null;
   // The very first broadcast a player goes live in is the guided one (TUNING.guided): its first segment opens calm.
   const guided = !flags.bot && !flags.autostart && !briefingSeen();
   const edition = 0; // Editions off (2026-11-19)
-  lb = { mode: endlessMode ? 'endless' : mode === 'run' ? 'run' : 'broadcast', seed, segments: [], buys: [], pool: upgradePool(profile), ...(guided ? { guided } : {}), ...(edition ? { edition } : {}) };
+  lb = { mode: dailyMode ? 'daily' : endlessMode ? 'endless' : mode === 'run' ? 'run' : 'broadcast', ...(dailyMode ? { day } : {}), seed, segments: [], buys: [], pool: upgradePool(profile), ...(guided ? { guided } : {}), ...(edition ? { edition } : {}) };
   if (mode === 'run') {
     run = new RunState(seed, lb.pool, edition); // Awards unlock the rest of the pool
     newRun(run.segmentSeed(), 0, [], {}, guided);
@@ -2013,11 +2017,11 @@ window.addEventListener('keydown', (e) => {
     return;
   }
   const playing = started && !paused && !attract;
-  if (e.code === 'KeyH' && playing) toggleHeadOn(); // dev: preview Head-On and the swoop home
-  if (e.code === 'KeyC' && playing) setAngle(director.current + 1, director.side); // dev: next angle (held until C comes back to Chase High)
+  if (e.code === 'KeyH' && playing && PLAYTEST) toggleHeadOn(); // dev: preview Head-On and the swoop home
+  if (e.code === 'KeyC' && playing && PLAYTEST) setAngle(director.current + 1, director.side); // dev: next angle (held until C comes back to Chase High)
   if (e.code === 'KeyR' && playing) {
     nextSeed = flags.seedFixed ? flags.seed : null;
-    beginBroadcast(run ? 'run' : endlessMode ? 'endless' : 'broadcast');
+    beginBroadcast(run ? 'run' : dailyMode ? 'daily' : endlessMode ? 'endless' : 'broadcast');
   }
 });
 
@@ -2030,6 +2034,7 @@ const wyfAssembly = (shell: SLUWebShell<CoreSettings>): FrameAssembly => {
     modes: [
       { id: 'run', label: 'Full Broadcast', description: 'Five segments. Spend your ratings between them.', leaderboardKey: 'runScore' },
       { id: 'endless', label: 'Endless', description: 'One road that never ends. How far can he get?', leaderboardKey: 'banked' },
+      { id: 'daily', label: 'Daily', description: "Today's road, the same for everyone.", leaderboardKey: 'banked' },
       { id: 'broadcast', label: 'Single Segment', description: 'Keep the ratings up. Take the exit before the chopper runs out of fuel.', leaderboardKey: 'banked' },
     ],
     statKeys: ['broadcasts', 'signOffs', 'bestBanked', 'bestPeak'],
@@ -2206,11 +2211,11 @@ function refreshMainMenu() {
   app!.ui.updateScreen('main-menu', {
     title: 'Giant\nat Large',
     choices: [
-      // One mode on the menu (Mike, 2026-11-17: Single Segment adds no challenge; 2026-11-18: no daily mode).
+      // The modes on the menu (Mike, 2026-11-17: Single Segment adds no challenge; 2026-11-24: Daily Endless is in).
       // 'broadcast' (one segment) stays reachable by ?mode=broadcast for tests and evidence tools.
       // No subcopy (Mike, 2026-11-18): the labels say it.
       { id: 'run', label: PROTO ? 'Story' : 'Go Live' },
-      ...(PROTO ? [{ id: 'endless', label: 'Endless' }] : []),
+      ...(PROTO ? [{ id: 'endless', label: 'Endless' }, { id: 'daily', label: 'Daily' }] : []),
       { id: 'awards', label: 'Awards' },
       { id: 'howto', label: 'How to Play' },
       { id: 'settings', label: 'Settings' },
@@ -2225,7 +2230,7 @@ refreshMainMenu();
     if (screen === 'main-menu' && choice === 'howto') void openBriefing(false).then(() => app!.ui.show('main-menu'));
     else if (screen === 'main-menu' && choice === 'awards') void openAwards().then(() => app!.ui.show('main-menu'));
     else if (screen === 'main-menu' && choice === 'run' && PROTO) void openPreShow().then((go) => (go ? flowActivate('mode-select', 'run') : app!.ui.show('main-menu')));
-    else if (screen === 'main-menu' && (choice === 'run' || choice === 'endless' || choice === 'broadcast')) flowActivate('mode-select', choice);
+    else if (screen === 'main-menu' && (choice === 'run' || choice === 'endless' || choice === 'daily' || choice === 'broadcast')) flowActivate('mode-select', choice);
     else flowActivate(screen, choice);
   };
 }
@@ -2403,10 +2408,9 @@ function frame(now: number) {
     if (attract) enterAttract(); // behind the menus: just roll another broadcast
     else {
       lb.segments.push(encodeInputs(inputLog));
-      // Story: traffic mods multiply the score (prototype scores are off the board); finished asks unlock things.
+      // Story: finished asks unlock things (the sim already multiplied the score for traffic mods).
       newUnlocks = [];
-      modMult = sim.mods.reduce((k, m) => k * TUNING.proto.mods[m].score, 1);
-      if (modMult !== 1) sim.show.banked = Math.round(sim.show.banked * modMult);
+      modMult = sim.modMult; // the sim banked it when the broadcast ended
       if (!bot && simOpts.asks) {
         for (const a of sim.asks.list) if (a.done && !profile.asksDone.includes(a.id)) {
           profile.asksDone.push(a.id);
