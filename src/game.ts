@@ -1168,7 +1168,10 @@ function showRecap() {
     if (!r || recapEl.hidden) return;
     if (r.newBest) recapEl.querySelector('.rc-hero .score')?.classList.add('newbest');
     const b = recapEl.querySelector('.rc-meta .bests');
-    if (b && !run) b.textContent = `Best ${n(r.best.bestBanked)} · Signed off ${r.best.signOffs} of ${r.best.broadcasts}`;
+    // The "one more run" hook: how far from the best, or that this is it.
+    const gap = r.prev - r.score;
+    const hook = r.newBest ? 'New best!' : r.prev > 0 && gap > 0 ? `${n(gap)} short of your best (${n(r.prev)})` : '';
+    if (b) b.textContent = [hook, run ? `Story finished ${r.best.runsWon ?? 0} of ${r.best.runs ?? 0}` : `Signed off ${r.best.signOffs} of ${r.best.broadcasts}`].filter(Boolean).join(' · ');
   });
   recapEl.hidden = false;
   mountClip();
@@ -2686,6 +2689,9 @@ function updateTitleShot(dt: number, t: CameraTarget): boolean {
   const onTitle = attract && !!document.querySelector('#ui [data-screen-id="title"]');
   const inMenus = attract;
   document.documentElement.classList.toggle('title', inMenus);
+  const onMain = attract && !!document.querySelector('#ui [data-screen-id="main-menu"]');
+  if (onMain && !document.documentElement.classList.contains('mainmenu')) void renderMenuCard();
+  document.documentElement.classList.toggle('mainmenu', onMain);
   if (inMenus !== wasTitle) {
     wasTitle = inMenus;
     if (inMenus) {
@@ -2773,13 +2779,35 @@ export function outfitPortraits(): Partial<Record<OutfitId, string>> {
   return out;
 }
 
+/**
+ * The main menu's progress card (2026-11-24, ship plan: progression on the front screen): your best Story score,
+ * sign-offs, and the next award with its bar, so there's always a next thing to go for.
+ */
+async function renderMenuCard() {
+  const el = document.getElementById('menucard');
+  if (!el || !app) return;
+  const best = await app.storage.get<Stats>('wyf.stats');
+  const nf = (x: number) => Math.round(x).toLocaleString();
+  const left = AWARDS.filter((a) => !profile.won.includes(a.id)).map((a) => ({ a, have: Math.min(profile.counts[a.stat], a.n) })).sort((x, y) => y.have / y.a.n - x.have / x.a.n);
+  const next = left[0];
+  const rows = [
+    best?.bestRun ? `<div class="mc-row"><small>BEST STORY</small><b>${nf(best.bestRun)}</b></div>` : '',
+    best?.runs ? `<div class="mc-row"><small>STORIES FINISHED</small><b>${best.runsWon ?? 0}<span>/${best.runs}</span></b></div>` : '',
+  ].join('');
+  const nx = next ? `<div class="mc-next"><small>NEXT AWARD</small><b>${esc(next.a.title)}</b><span>${esc(next.a.how)} · ${next.have.toLocaleString()}/${next.a.n.toLocaleString()}${rewardLine(next.a) ? ` · ${esc(rewardLine(next.a))}` : ''}</span><i style="--p:${((next.have / next.a.n) * 100).toFixed(0)}%"></i></div>` : `<div class="mc-next"><small>AWARDS</small><b>Every award won</b></div>`;
+  el.innerHTML = rows ? `<div class="mc-rows">${rows}</div>${nx}` : nx;
+}
+
 /** Persist the bests (shell storage, per game id). */
-async function recordStats(): Promise<{ best: Stats; newBest: boolean } | null> {
+async function recordStats(): Promise<{ best: Stats; newBest: boolean; prev: number; score: number } | null> {
   if (!app) return null;
   const st = app.storage;
   const sh = sim.show;
   const best = (await st.get<Stats>('wyf.stats')) ?? { broadcasts: 0, signOffs: 0, bestBanked: 0, bestPeak: 0 };
-  const newBest = !run && best.broadcasts > 0 && Math.round(sh.banked) > best.bestBanked;
+  // Story's score is the run's; one broadcast's is its banked score. Either way the recap says how far from the best.
+  const prev = run ? (best.bestRun ?? 0) : best.bestBanked;
+  const score = Math.round(run ? run.earned : sh.banked);
+  const newBest = (run ? (best.runs ?? 0) : best.broadcasts) > 0 && score > prev;
   best.broadcasts++;
   if (sh.state === 'cleared') best.signOffs++;
   best.bestBanked = Math.max(best.bestBanked, Math.round(sh.banked));
@@ -2790,12 +2818,12 @@ async function recordStats(): Promise<{ best: Stats; newBest: boolean } | null> 
     best.bestRun = Math.max(best.bestRun ?? 0, Math.round(run.earned));
   }
   await st.set('wyf.stats', best);
-  return { best, newBest };
+  return { best, newBest, prev, score };
 }
 /** Stored bests. Phase 3 fields are optional so older saves load unchanged. */
 type Stats = { broadcasts: number; signOffs: number; bestBanked: number; bestPeak: number; runs?: number; runsWon?: number; bestRun?: number };
 /** The bests as this broadcast's save lands (the recap reads them when they arrive). */
-let statsReady: Promise<{ best: Stats; newBest: boolean } | null> | null = null;
+let statsReady: Promise<{ best: Stats; newBest: boolean; prev: number; score: number } | null> | null = null;
 let lastCoverage = performance.now();
 
 /** Edge arrow to the sign-off ramp (§21), pointing at the gore from wherever it is. */

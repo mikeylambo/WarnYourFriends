@@ -1152,3 +1152,15 @@ html.endless #live #fuel, html.endless #clocklbl { display: none !important; }
 #rotate span { font-size: 14px; opacity: 0.75; }
 @keyframes rot-phone { 0%, 25% { transform: rotate(0); } 60%, 100% { transform: rotate(-90deg); } }
 @media (orientation: portrait) and (pointer: coarse) { html.playing #rotate { display: flex; } }
+
+/* --- Main menu progress card (ship plan, 2026-11-24): best, finishes, the next award. Bottom right, clear of the menu. --- */
+#menucard { display: none; position: fixed; right: calc(16px + env(safe-area-inset-right)); bottom: calc(16px + env(safe-area-inset-bottom)); width: min(320px, 42vw); z-index: 45; color: #f2e6cf; background: rgba(14, 10, 26, 0.86); border-left: 4px solid #c8253a; padding: 12px 14px; font-size: 13px; pointer-events: none; }
+html.mainmenu #menucard { display: block; animation: slidein 0.35s cubic-bezier(.2,.8,.2,1); }
+#menucard .mc-rows { display: flex; gap: 16px; margin-bottom: 10px; }
+#menucard small { display: block; font-weight: 800; letter-spacing: 0.18em; font-size: 10px; opacity: 0.7; }
+#menucard .mc-row b { font: italic 900 22px/1.1 var(--f-head); color: #f6c453; }
+#menucard .mc-row b span { font-size: 14px; opacity: 0.7; color: #f2e6cf; }
+#menucard .mc-next b { display: block; font: italic 900 16px/1.2 var(--f-head); margin: 2px 0; }
+#menucard .mc-next span { display: block; opacity: 0.85; line-height: 1.3; }
+#menucard .mc-next i { display: block; height: 4px; margin-top: 8px; background: linear-gradient(90deg, #f6c453 var(--p), rgba(255, 255, 255, 0.15) var(--p)); }
+@media (max-height: 480px) { #menucard { width: min(280px, 38vw); padding: 8px 10px; font-size: 12px; } #menucard .mc-rows { margin-bottom: 6px; } }

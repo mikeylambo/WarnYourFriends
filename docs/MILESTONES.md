@@ -22,8 +22,8 @@ Status: `[ ]` todo · `[~]` in progress · `[x]` done
 - [ ] Every interaction has sound + particles + camera + number popup: smash (light/medium/heavy), near miss, Exclusive, rival van, target car, police crash, shake-off, Rampage start/end, ask complete, unlock.
 
 ### Front-screen progression
-- [ ] Main menu shows: next unlock and how far, best score, today's Daily.
-- [ ] Recap gives a "one more run" hook: distance to your best / to the next rank / the next unlock.
+- [x] Main menu shows: best Story score, Stories finished, the next award with its bar. (Today's Daily on the card: todo.)
+- [x] Recap gives a "one more run" hook: "N short of your best" / "New best!" (Story too: it never showed a best before), plus the next award.
 
 ### Platform polish
 - [x] Landscape for play on phones (rotate card + pause).
