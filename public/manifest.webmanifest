@@ -1,6 +1,6 @@
 {
-  "name": "Warn Your Friends",
-  "short_name": "WYF 6",
+  "name": "Giant at Large: Warn Your Friends",
+  "short_name": "Giant at Large",
   "start_url": "./",
   "scope": "./",
   "display": "fullscreen",

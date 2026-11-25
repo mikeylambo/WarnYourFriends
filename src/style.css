@@ -1164,3 +1164,15 @@ html.mainmenu #menucard { display: block; animation: slidein 0.35s cubic-bezier(
 #menucard .mc-next span { display: block; opacity: 0.85; line-height: 1.3; }
 #menucard .mc-next i { display: block; height: 4px; margin-top: 8px; background: linear-gradient(90deg, #f6c453 var(--p), rgba(255, 255, 255, 0.15) var(--p)); }
 @media (max-height: 480px) { #menucard { width: min(280px, 38vw); padding: 8px 10px; font-size: 12px; } #menucard .mc-rows { margin-bottom: 6px; } }
+
+/* --- Phone landscape HUD fixes (Mike, 2026-11-24) ------------------------------------------------------------------
+   The viewer video sat 200px up and 220px tall: on a ~390px-tall phone it ran off the top, under the bug and CAM.
+   Here it's a landscape window below CAM, above the RAMP button. The chyron and ticker hug the bottom (half the
+   home-indicator inset, not all of it), and the ticker's text is centred in a box tall enough for it. */
+@media (orientation: landscape) and (max-height: 500px) {
+  html.touch #pip, #pip { top: calc(108px + env(safe-area-inset-top)); bottom: auto; right: calc(10px + env(safe-area-inset-right)); width: min(168px, 24vw); height: min(100px, 26vh); }
+  #ticker { --d-tick: 18px; display: flex; align-items: center; bottom: calc(2px + env(safe-area-inset-bottom) * 0.5); }
+  #ticker span { line-height: 1; font-size: 11px; }
+  #chyron { bottom: calc(4px + env(safe-area-inset-bottom) * 0.5); }
+  #hud.cov1 #chyron, #hud.cov2 #chyron, #hud.cov3 #chyron { bottom: calc(18px + 6px + env(safe-area-inset-bottom) * 0.5); }
+}
