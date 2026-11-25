@@ -104,6 +104,15 @@ function updateRampageFx(dt: number, now: number) {
   document.documentElement.classList.toggle('rampage', rampK > 0.5 && recapEl.hidden);
   document.documentElement.classList.toggle('reduceflashes', settings.reduceFlashes);
   // Auto Rampage on/off, for the HUD's styles.
+  // CAM sits just left of the station bug (its width changes with HUD Size), so it's placed from the bug's box.
+  {
+    const cam = document.getElementById('btn-cam');
+    const bug = document.getElementById('bug');
+    if (cam && bug && !cam.parentElement!.hidden) {
+      const r = bug.getBoundingClientRect();
+      if (r.width > 0) cam.style.left = `${Math.round(r.left - cam.offsetWidth - 10)}px`;
+    }
+  }
   document.documentElement.classList.toggle('autoramp', settings.autoRampage);
   // A broadcast is on screen (the rotate-to-landscape card only covers play, not the menus).
   document.documentElement.classList.toggle('playing', !attract && recapEl.hidden);

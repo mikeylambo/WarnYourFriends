@@ -1336,3 +1336,9 @@ html.touch #gears { pointer-events: auto; cursor: pointer; }
 #gears.ready { background: #f2b632; color: #1a1020; }
 #gears.ready .lbl, #gears.ready .nm { color: #1a1020; }
 html:not(.reduceflashes) #gears.ready { animation: ramp-ready 0.9s ease-in-out infinite; transform-origin: left center; }
+/* CAM moves into the top row, left of the station bug, centred on it (Mike, 2026-11-25: more room for the viewer
+   video, which now starts right under the bug). */
+#touch-ui #btn-cam { top: calc(var(--edge) + env(safe-area-inset-top) + (76px * var(--hs, 1) - 46px) / 2); right: auto; left: auto; }
+html.touch #pip, #pip, html.autoramp #pip { --pip-top: calc(var(--edge) + env(safe-area-inset-top) + 76px * var(--hs, 1) + 10px); }
+/* The VIEWER VIDEO tag runs the full width of the window. */
+#pip .tag { left: 0; right: 0; text-align: center; }
