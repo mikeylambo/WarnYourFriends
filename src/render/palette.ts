@@ -10,7 +10,7 @@ import type { Material, PropKind } from '../sim/types';
 export const PALETTE = {
   sky: 0xf1ebdf,
   grass: 0xd5d6ad,
-  verge: 0xe2dcc8,
+  verge: 0xd8e2b4, // soft lawn green (Mike, 2026-11-25), lighter than the trees so they stand off it
   road: 0xb4aea3,
   roadLine: 0xf8f4e8,
   edgeLineLeft: 0xf0c64a,
