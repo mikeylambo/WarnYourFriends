@@ -22,11 +22,11 @@ export interface Award {
 
 export const AWARDS: Award[] = [
   { id: 'liveAtEleven', title: 'Live at Eleven', how: 'Sign off once', stat: 'signOffs', n: 1 },
-  { id: 'specialReport', title: 'Special Report', how: 'Reach segment 3 of a broadcast', stat: 'bestSegment', n: 3, upgrade: 'breakaway' },
+  { id: 'specialReport', title: 'Special Report', how: 'Reach Downtown, the third district', stat: 'bestSegment', n: 3, upgrade: 'breakaway' },
   { id: 'pursuitOfTheYear', title: 'Pursuit of the Year', how: 'Lead 10 police cars into a crash', stat: 'policeWrecked', n: 10, upgrade: 'slipstream' },
   { id: 'regularFixture', title: 'Regular Fixture', how: 'Sign off 3 times', stat: 'signOffs', n: 3, outfit: 'midnight' },
   { id: 'trafficHazard', title: 'Traffic Hazard of the Year', how: 'Lead 25 police cars into a crash', stat: 'policeWrecked', n: 25, outfit: 'parade' },
-  { id: 'seasonFinale', title: 'Season Finale', how: 'Finish all five segments', stat: 'runsWon', n: 1, outfit: 'gold' },
+  { id: 'seasonFinale', title: 'Season Finale', how: 'Finish the Story: all five districts', stat: 'runsWon', n: 1, outfit: 'gold' },
   { id: 'lifetime', title: 'Lifetime Achievement', how: 'Flatten 1,000 objects', stat: 'objects', n: 1000 },
 ];
 

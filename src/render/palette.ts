@@ -10,7 +10,7 @@ import type { Material, PropKind } from '../sim/types';
 export const PALETTE = {
   sky: 0xf1ebdf,
   grass: 0xd5d6ad,
-  verge: 0xe2dcc8,
+  verge: 0xd8e2b4, // soft lawn green (Mike, 2026-11-25), lighter than the trees so they stand off it
   road: 0xb4aea3,
   roadLine: 0xf8f4e8,
   edgeLineLeft: 0xf0c64a,
@@ -110,7 +110,7 @@ export interface Look {
 }
 
 export const LOOKS: Record<TimeOfDay, Look> = {
-  night: { sky: 0x0a0c18, fog: 0x0a0c18, fogNear: 90, fogFar: 320, hemiSky: 0x5a6aa8, hemiGround: 0x1a1622, hemi: 0.16, sunColor: 0x8fa2ff, sun: 0.16, sunPos: [30, 100, 40], glow: 1, lamp: 38, spot: 300, siren: 32, rim: 0.55, shadow: 0.2, windows: 1 },
+  night: { sky: 0x0a0c18, fog: 0x0a0c18, fogNear: 90, fogFar: 320, hemiSky: 0x5a6aa8, hemiGround: 0x1a1622, hemi: 0.16, sunColor: 0x8fa2ff, sun: 0.16, sunPos: [30, 100, 40], glow: 1, lamp: 38, spot: 380, siren: 32, rim: 0.55, shadow: 0.2, windows: 1 },
   dusk: { sky: 0x4a3a5e, fog: 0x6a4f6a, fogNear: 110, fogFar: 380, hemiSky: 0xd89a80, hemiGround: 0x3a3040, hemi: 0.7, sunColor: 0xff9a5a, sun: 0.75, sunPos: [-90, 30, -20], glow: 0.55, lamp: 20, spot: 300, siren: 30, rim: 0.3, shadow: 0.25, windows: 0.6 },
   day: { sky: 0xf1ebdf, fog: 0xf1ebdf, fogNear: 160, fogFar: 420, hemiSky: 0xfff7e8, hemiGround: 0xb8b0a0, hemi: 1.5, sunColor: 0xffffff, sun: 1.7, sunPos: [-40, 100, -25], glow: 0, lamp: 0, spot: 0, siren: 18, rim: 0.2, shadow: 0.32, windows: 0 },
 };

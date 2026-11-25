@@ -528,7 +528,7 @@ html.cover #titlebug { display: none; }
 #replay span { background: rgba(30, 24, 33, 0.82); color: var(--wyf-cream); font: italic 800 12px/1 ui-sans-serif, system-ui, sans-serif; letter-spacing: 0.16em; text-transform: uppercase; padding: 7px 16px; clip-path: polygon(8px 0, 100% 0, calc(100% - 8px) 100%, 0 100%); }
 #replay small { color: rgba(236, 224, 200, 0.7); font: 700 11px/1 ui-sans-serif, system-ui, sans-serif; letter-spacing: 0.1em; text-transform: uppercase; }
 html.replay #hud > :not(#chyron) { visibility: hidden; }
-html.replay #abil, html.replay #touch, html.replay #controls, html.replay #camtag ,
+html.replay #abil, html.replay #touch-ui, html.replay #controls, html.replay #camtag ,
 html.replay #abil2{ visibility: hidden; }
 html.replay::before, html.replay::after { content: ''; position: fixed; left: 0; right: 0; height: 7vh; background: #000; z-index: 4; pointer-events: none; }
 html.replay::before { top: 0; }
@@ -1103,7 +1103,10 @@ html.endless #live #fuel, html.endless #clocklbl { display: none !important; }
 #recap .preshow .ask b, #recap .preshow .mod b { font: italic 900 15px/1.15 var(--f-head); }
 #recap .preshow .ask small, #recap .preshow .mod small { font-size: 11px; opacity: 0.75; font-style: normal; }
 #recap .preshow .ask i { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); font-style: normal; font-weight: 900; font-size: 18px; }
-#recap .preshow .ask.on, #recap .preshow .mod.on { background: #f2b632; color: #1a1020; box-shadow: inset 0 0 0 2px #1a1020; }
+/* Picked (Mike, 2026-11-25): a full outline that follows the slant. The button is the ink outline; the yellow is an
+   inset layer of the same shape (an inset box-shadow was cut by the slanted clip, leaving three square sides). */
+#recap .preshow .ask.on, #recap .preshow .mod.on { background: #1a1020; color: #1a1020; isolation: isolate; }
+#recap .preshow .ask.on::before, #recap .preshow .mod.on::before { content: ''; position: absolute; inset: 2.5px 3px 2.5px 2.5px; background: #f2b632; clip-path: polygon(0 0, 100% 0, calc(100% - 11px) 100%, 0 100%); z-index: -1; }
 #recap .preshow .ask.locked { opacity: 0.55; }
 #recap .preshow .mods { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin: 10px 0; }
 /* The card never outgrows the screen (release pass, 2026-11-24: five mods pushed Go Live off a phone): it scrolls, Go Live stays pinned. */
@@ -1112,10 +1115,15 @@ html.endless #live #fuel, html.endless #clocklbl { display: none !important; }
 #recap .preshow > .row { position: sticky; bottom: 0; z-index: 1; margin: 0; padding: 10px 0 16px; background: inherit; }
 @media (max-width: 560px) {
   #recap .preshow .asks-pick { grid-template-columns: 1fr; }
-  #recap .preshow .mods { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  #recap .preshow .mod small { display: none; }
+  #recap .preshow .mods { grid-template-columns: 1fr; }
 }
-@media (max-height: 480px) { #recap .preshow .how { display: none; } #recap .preshow .ask small, #recap .preshow .mod small { display: none; } }
+@media (max-height: 480px) { #recap .preshow .how { display: none; } #recap .preshow .ask small { display: none; } }
+/* Mods always say what they do (Mike, 2026-11-24); landscape phones: asks and mods side by side. */
+#recap .preshow .mod small { display: block; font-size: 11px; line-height: 1.25; }
+@media (orientation: landscape) and (max-height: 560px) {
+  #recap .preshow .mods { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  #recap .preshow .asks-pick { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
 #recap .rc-asks li.failed { opacity: 0.55; text-decoration: line-through; }
 
 /* The unlock stinger (2026-11-24): full screen, slam-in, a shine across the card. */
@@ -1135,3 +1143,215 @@ html.endless #live #fuel, html.endless #clocklbl { display: none !important; }
 #recap .preshow .mod { padding-left: 64px; min-height: 58px; }
 #recap .preshow .mod .mthumb { position: absolute; left: 8px; top: 50%; transform: translateY(-50%); width: 44px; height: 44px; object-fit: cover; border: 2px solid rgba(26, 16, 32, 0.6); }
 #recap .preshow .mod:disabled .mthumb { filter: grayscale(1) brightness(0.55); }
+
+/* --- Landscape on phones (Mike, 2026-11-24: portrait cut the chyron and tips off). Browsers can't force rotation
+   (iOS Safari), so play asks for it; the menus still work upright. --- */
+#rotate { display: none; position: fixed; inset: 0; z-index: 50; align-items: center; justify-content: center; text-align: center; background: #0a0814; color: #f2e6cf; }
+#rotate div { display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 24px; }
+#rotate i { width: 46px; height: 76px; border: 4px solid #f2e6cf; border-radius: 9px; animation: rot-phone 1.8s ease-in-out infinite; }
+#rotate b { font: italic 900 24px/1.1 var(--f-head); text-transform: uppercase; }
+#rotate span { font-size: 14px; opacity: 0.75; }
+@keyframes rot-phone { 0%, 25% { transform: rotate(0); } 60%, 100% { transform: rotate(-90deg); } }
+/* Everywhere on a phone held upright, menus included (Mike, 2026-11-25: it never prompted at launch). Tablets keep portrait. */
+@media (orientation: portrait) and (pointer: coarse) and (max-width: 600px) { #rotate { display: flex; z-index: 1000; } }
+
+/* --- Main menu progress card (ship plan, 2026-11-24): best, finishes, the next award. Bottom right, clear of the menu. --- */
+#menucard { display: none; position: fixed; right: calc(16px + env(safe-area-inset-right)); bottom: calc(16px + env(safe-area-inset-bottom)); width: min(320px, 42vw); z-index: 45; color: #f2e6cf; background: rgba(14, 10, 26, 0.86); border-left: 4px solid #c8253a; padding: 12px 14px; font-size: 13px; pointer-events: none; }
+html.mainmenu #menucard { display: block; animation: slidein 0.35s cubic-bezier(.2,.8,.2,1); }
+#menucard .mc-rows { display: flex; gap: 16px; margin-bottom: 10px; }
+#menucard small { display: block; font-weight: 800; letter-spacing: 0.18em; font-size: 10px; opacity: 0.7; }
+#menucard .mc-row b { font: italic 900 22px/1.1 var(--f-head); color: #f6c453; }
+#menucard .mc-row b span { font-size: 14px; opacity: 0.7; color: #f2e6cf; }
+#menucard .mc-next b { display: block; font: italic 900 16px/1.2 var(--f-head); margin: 2px 0; }
+#menucard .mc-next span { display: block; opacity: 0.85; line-height: 1.3; }
+#menucard .mc-next i { display: block; height: 4px; margin-top: 8px; background: linear-gradient(90deg, #f6c453 var(--p), rgba(255, 255, 255, 0.15) var(--p)); }
+@media (max-height: 480px) { #menucard { width: min(280px, 38vw); padding: 8px 10px; font-size: 12px; } #menucard .mc-rows { margin-bottom: 6px; } }
+
+/* --- Phone landscape HUD fixes (Mike, 2026-11-24) ------------------------------------------------------------------
+   The viewer video sat 200px up and 220px tall: on a ~390px-tall phone it ran off the top, under the bug and CAM.
+   Here it's a landscape window below CAM, above the RAMP button. The chyron and ticker hug the bottom (half the
+   home-indicator inset, not all of it), and the ticker's text is centred in a box tall enough for it. */
+@media (orientation: landscape) and (max-height: 500px) {
+  html.touch #pip, #pip { top: calc(108px + env(safe-area-inset-top)); bottom: auto; right: calc(10px + env(safe-area-inset-right)); width: min(168px, 24vw); height: min(100px, 26vh); }
+  /* Plain line-height centring: a flex ticker collapsed the crawling span to nothing on iOS (Mike, 2026-11-25). */
+  #ticker { --d-tick: 18px; height: 18px; bottom: calc(2px + env(safe-area-inset-bottom) * 0.5); }
+  #ticker span { font-size: 11px; line-height: 18px; }
+  #chyron { bottom: calc(4px + env(safe-area-inset-bottom) * 0.5); }
+  #hud.cov1 #chyron, #hud.cov2 #chyron, #hud.cov3 #chyron { bottom: calc(18px + 6px + env(safe-area-inset-bottom) * 0.5); }
+}
+
+/* --- 2026-11-25 polish (Mike's phone screenshots) -------------------------------------------------------------------
+   Controls hint in the HUD's type and slant, not a generic system box. The replay strip sits inside the letterbox. */
+#controls { font: italic 800 12px/1 var(--f-head); letter-spacing: 0.12em; background: var(--c-panel, rgba(10, 8, 20, 0.82)); padding: 8px 22px; clip-path: polygon(10px 0, 100% 0, calc(100% - 10px) 100%, 0 100%); }
+#controls kbd { font: inherit; font-style: normal; }
+html.replay #replay { top: calc((7vh + 10px + env(safe-area-inset-top)) / var(--hs, 1)); left: calc((env(safe-area-inset-left) + 12px) / var(--hs, 1)); }
+/* Rundown: the sticky Go Live row fades the list into it, so a half-hidden ask reads as "scroll for more", not a stray bar. */
+#recap .preshow > .row::before { content: ''; position: absolute; left: 0; right: 0; top: -22px; height: 22px; background: linear-gradient(to bottom, transparent, var(--c-paper, #ece0c8)); pointer-events: none; }
+
+
+/* --- RAMPAGE and CAM buttons (Mike, 2026-11-25: "an actual look"): station pieces in the HUD's slant. RAMPAGE fills
+   with the audience, pulses gold when ready, glows in Rampage; it's hidden under Auto Rampage (it fires itself). --- */
+#touch-ui #btn-shoulder {
+  width: 168px; height: 64px; right: calc(18px + env(safe-area-inset-right)); bottom: calc(26px + env(safe-area-inset-bottom));
+  border: 0; border-radius: 0; padding: 0; overflow: hidden;
+  background: linear-gradient(90deg, var(--c-red, #b3122a) var(--fill, 0%), rgba(26, 16, 32, 0.82) var(--fill, 0%));
+  clip-path: polygon(16px 0, 100% 0, 100% 100%, 0 100%);
+  font: italic 900 22px/64px var(--f-head); letter-spacing: 0.04em; color: var(--c-text, #f2e6cf);
+}
+#touch-ui #btn-shoulder span { position: relative; text-shadow: 0 2px 0 rgba(0, 0, 0, 0.35); }
+#touch-ui #btn-shoulder.ready { background: #f2b632; color: #1a1020; animation: ramp-ready 0.9s ease-in-out infinite; }
+#touch-ui #btn-shoulder.active { background: linear-gradient(90deg, #f6c453, #ff9a2a); color: #1a1020; }
+#touch-ui #btn-shoulder:active { transform: translateY(2px) scale(0.98); }
+@keyframes ramp-ready { 50% { filter: brightness(1.25); transform: scale(1.04); } }
+html.reduceflashes #touch-ui #btn-shoulder.ready { animation: none; }
+html.autoramp #touch-ui #btn-shoulder { display: none; }
+
+#touch-ui #btn-cam {
+  width: 64px; height: 30px; right: calc(10px + env(safe-area-inset-right)); top: calc(62px + env(safe-area-inset-top));
+  border: 0; border-radius: 0; background: rgba(26, 16, 32, 0.86); color: var(--c-text, #f2e6cf);
+  clip-path: polygon(8px 0, 100% 0, 100% 100%, 0 100%);
+  font: italic 900 13px/30px var(--f-head); letter-spacing: 0.14em;
+}
+#touch-ui #btn-cam::after { content: ' ▸'; color: var(--c-red, #d7263d); }
+#touch-ui #btn-cam:active { background: var(--c-red, #b3122a); }
+@media (orientation: landscape) and (max-height: 500px) {
+  #touch-ui #btn-shoulder { width: 140px; height: 54px; line-height: 54px; font-size: 19px; }
+}
+/* RAMPAGE sits above the lower third on the right, mirroring the audience bar on the left (Mike, 2026-11-25: beside
+   the chyron it cut the headline and ticker short, and they're half the joke). The lower third keeps its full width. */
+html.touch #chyron, html.touch #ticker { right: calc(20px + env(safe-area-inset-right)); }
+#touch-ui #btn-shoulder { width: 150px; height: 44px; line-height: 44px; font-size: 18px; right: calc(20px + env(safe-area-inset-right)); bottom: calc((var(--d-lt) + var(--d-tick) + 14px + env(safe-area-inset-bottom))); }
+@media (orientation: landscape) and (max-height: 500px) {
+  #touch-ui #btn-shoulder { width: 130px; height: 38px; line-height: 38px; font-size: 16px; bottom: calc(var(--d-lt) + 18px + 12px + env(safe-area-inset-bottom) * 0.5); }
+}
+/* The traffic-cam cold open is the camera feed only: no CAM or RAMPAGE until the broadcast cuts in. */
+html:has(#coldopen:not([hidden])) #touch-ui { display: none; }
+/* Asks and mods have exactly two looks (Mike, 2026-11-25: "Hot Pursuit" sat dark or yellow, never clearly off): pale
+   when off, yellow with the ink outline when on. The generic button hover/focus red doesn't apply (on a phone, the last
+   tap kept focus, so a mod just switched off still looked lit). Keyboard and pad focus get a ring instead. */
+#recap .preshow .ask:not(.on):not(.locked), #recap .preshow .mod:not(.on),
+#recap .preshow .ask:not(.on):not(.locked):hover, #recap .preshow .mod:not(.on):hover,
+#recap .preshow .ask:not(.on):not(.locked):focus, #recap .preshow .mod:not(.on):focus { background: rgba(30, 24, 33, 0.12); color: var(--c-on-paper, #1a1020); }
+#recap .preshow .ask.on:hover, #recap .preshow .mod.on:hover, #recap .preshow .ask.on:focus, #recap .preshow .mod.on:focus { background: #1a1020; color: #1a1020; }
+#recap .preshow .ask:focus-visible, #recap .preshow .mod:focus-visible { outline: 3px solid var(--c-red, #b3122a); outline-offset: 2px; }
+#recap .preshow .mod:disabled { opacity: 0.55; }
+
+/* === Square HUD (Mike, 2026-11-25: "square everything") ===========================================================
+   Every HUD panel is a plain rectangle, and everything shares one edge margin (--edge) on both sides. Panels that
+   scale with HUD Size (CSS zoom) divide their offsets by --hs, so the score and audience bar line up with the
+   chyron and ticker, which don't scale. Buttons centre their text. */
+:root { --edge: 20px; --edge-l: calc(var(--edge) + env(safe-area-inset-left)); --edge-r: calc(var(--edge) + env(safe-area-inset-right)); }
+#live b, #live #clock, #live #segno, #live #fuel, #live #camtag, #ratings, #chain .mult, #gears, #gears i, #asks .hd,
+#chyron .kicker, #chyron .text, #ticker, #bug .call, #bug .ch, #controls, #replay b, #replay span, #touch-ui #btn-shoulder, #touch-ui #btn-cam { clip-path: none; }
+html.prime #hud::after { clip-path: none; }
+/* Left column: one edge. */
+#live, #ratings, #chain, #gears { left: calc(var(--edge-l) / var(--hs, 1)); }
+#chyron, #ticker { left: var(--edge-l); right: var(--edge-r); }
+html.touch #chyron, html.touch #ticker { left: var(--edge-l); right: var(--edge-r); }
+#chyron .kicker { padding: 0 calc(var(--d-chy) * 0.34); }
+#chyron .text span { padding: 0 calc(var(--d-chy) * 0.34); }
+#ticker span { margin-left: 0; }
+/* Right column: pause on the edge, the station bug beside it, CAM under the bug's right edge, RAMPAGE on the edge. */
+#btn-pause { right: var(--edge-r); top: calc(var(--edge) + env(safe-area-inset-top)); border-radius: 0; }
+#bug { right: calc((var(--edge-r) + 50px) / var(--hs, 1)); top: calc((var(--edge) + env(safe-area-inset-top)) / var(--hs, 1)); }
+#touch-ui #btn-cam, #touch-ui #btn-shoulder { display: flex; align-items: center; justify-content: center; padding: 0 0 0 0.14em; font-style: normal; }
+#touch-ui #btn-cam { right: calc(var(--edge-r) + 50px); top: calc(var(--edge) + env(safe-area-inset-top) + 76px * var(--hs, 1) + 8px); width: 72px; height: 30px; line-height: 1; }
+#touch-ui #btn-cam::after { content: ''; }
+#touch-ui #btn-shoulder { right: var(--edge-r); line-height: 1; letter-spacing: 0.08em; }
+#touch-ui #btn-shoulder span { line-height: 1; }
+/* === HUD pass 3 (Mike, 2026-11-25) ==================================================================================
+   Squares stay for the score, combo, chyron and ticker; a slanted right edge on LIVE, the clock, fuel, the CAM tag,
+   the audience bar and the station bug's 6. CAM and RAMPAGE are circles again, with a real look: RAMPAGE carries the
+   audience as a ring that fills round it, goes gold when ready. Text sits centred in every box: equal padding, plus the
+   slant's width on the slanted side so the type centres on what you see. */
+#live b, #live #clock, #live #segno, #live #fuel, #live #camtag { clip-path: polygon(0 0, 100% 0, calc(100% - 12px) 100%, 0 100%); padding-left: 16px; padding-right: 28px; justify-content: center; }
+#live #camtag:not(.show) { display: none; } /* only when the camera changes, and takes no room otherwise */
+#gears { clip-path: polygon(0 0, 100% 0, calc(100% - 12px) 100%, 0 100%); padding: 8px 28px 8px 16px; align-items: center; }
+#bug .call { clip-path: none; padding: 8px 16px; align-items: center; text-align: center; }
+#bug .ch { clip-path: polygon(0 0, 100% 0, calc(100% - 12px) 100%, 0 100%); padding-right: 12px; width: 76px; }
+#ratings { padding: 6px 18px 8px 18px; align-items: center; column-gap: 14px; }
+#ratings .lbl { align-self: center; }
+
+#touch-ui #btn-shoulder, #touch-ui #btn-cam { clip-path: none; border-radius: 50%; padding: 0; display: flex; align-items: center; justify-content: center; text-align: center; font-style: normal; line-height: 1; }
+#touch-ui #btn-shoulder {
+  width: 88px; height: 88px; right: var(--edge-r); bottom: calc(var(--d-lt) + var(--d-tick) + 10px + env(safe-area-inset-bottom));
+  border: 0; color: var(--c-text, #f2e6cf); font: 900 13px/1 var(--f-head); letter-spacing: 0.06em;
+  background:
+    radial-gradient(circle closest-side, rgba(26, 16, 32, 0.92) 0 64%, transparent 65%),
+    conic-gradient(var(--c-red, #d7263d) var(--fill, 0%), rgba(255, 255, 255, 0.18) 0);
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.85), 0 6px 18px rgba(0, 0, 0, 0.45);
+}
+#touch-ui #btn-shoulder span { padding-left: 0.06em; }
+#touch-ui #btn-shoulder.ready { background: radial-gradient(circle closest-side, #f2b632 0 64%, #fff3c4 65%); color: #1a1020; }
+#touch-ui #btn-shoulder.active { background: radial-gradient(circle closest-side, #ffb43a 0 64%, #ffe39a 65%); color: #1a1020; }
+#touch-ui #btn-cam {
+  width: 46px; height: 46px; right: calc(var(--edge-r) + 50px); top: calc(var(--edge) + env(safe-area-inset-top) + 76px * var(--hs, 1) + 8px);
+  border: 2px solid rgba(255, 255, 255, 0.85); background: rgba(26, 16, 32, 0.88); font: 900 12px/1 var(--f-head); letter-spacing: 0.08em; padding-left: 0.08em;
+}
+@media (orientation: landscape) and (max-height: 500px) {
+  #touch-ui #btn-shoulder { width: 76px; height: 76px; font-size: 12px; bottom: calc(var(--d-lt) + var(--d-tick) + 10px + env(safe-area-inset-bottom)); }
+}
+#live b { padding-left: 34px; }
+/* RAMPAGE is a plain circle (Mike: no ring, the audience bar is the meter): dark, gold when ready, warm in Rampage. */
+#touch-ui #btn-shoulder { font-size: 11px; letter-spacing: 0.04em; background: rgba(26, 16, 32, 0.9); }
+#touch-ui #btn-shoulder.ready { background: #f2b632; color: #1a1020; }
+#touch-ui #btn-shoulder.active { background: #ffb43a; color: #1a1020; }
+/* No fuel bar: the clock is the one timer (counts down to sign-off at the end, red pulse in the last seconds). */
+#live #fuel { display: none !important; }
+#live #clock.crit { background: var(--c-red, #b3122a); animation: clock-crit 0.8s ease-in-out infinite; }
+@keyframes clock-crit { 50% { filter: brightness(1.35); } }
+html.reduceflashes #live #clock.crit { animation: none; }
+/* Viewer video on phones (landscape): in the right column's gap, below CAM and above RAMPAGE, as big as that gap
+   allows, landscape shaped. */
+@media (orientation: landscape) and (max-height: 500px) {
+  html.touch #pip, #pip {
+    --pip-top: calc(var(--edge) + env(safe-area-inset-top) + 76px * var(--hs, 1) + 8px + 46px + 10px);
+    --pip-bottom: calc(var(--d-lt) + var(--d-tick) + 10px + env(safe-area-inset-bottom) + 76px + 10px);
+    top: var(--pip-top); bottom: auto; right: var(--edge-r);
+    height: max(70px, min(130px, calc(100vh - var(--pip-top) - var(--pip-bottom))));
+    width: auto; aspect-ratio: 16 / 10;
+  }
+  html.autoramp #pip { --pip-bottom: calc(var(--d-lt) + var(--d-tick) + 10px + env(safe-area-inset-bottom) + 10px); }
+}
+
+/* === Right column = the viewer video (Mike, 2026-11-25) ===========================================================
+   RAMPAGE moves to the end of the audience bar (positioned from it in game.ts), so the right column holds only the
+   station bug, pause, CAM and the viewer video, which runs tall and phone-shaped (like real viewer footage) from below
+   CAM down to the lower third, with or without Auto Rampage. */
+#touch-ui #btn-shoulder, html .touch #btn-shoulder { right: auto; bottom: auto; width: 64px; height: 64px; font-size: 9.5px; }
+@media (orientation: landscape) and (max-height: 500px) { #touch-ui #btn-shoulder { right: auto; bottom: auto; width: 60px; height: 60px; font-size: 9px; } }
+html.touch #pip, #pip, html.autoramp #pip {
+  --pip-top: calc(var(--edge) + env(safe-area-inset-top) + 76px * var(--hs, 1) + 8px + 46px + 10px);
+  --pip-bottom: calc(var(--d-lt) + var(--d-tick) + 18px + env(safe-area-inset-bottom));
+  top: var(--pip-top); bottom: auto; right: var(--edge-r);
+  height: min(320px, calc(100vh - var(--pip-top) - var(--pip-bottom))); width: auto; aspect-ratio: 9 / 14;
+}
+#pip .tag { white-space: nowrap; font-size: 8px; letter-spacing: 0.12em; padding: 4px 6px; }
+/* === The audience bar is the RAMPAGE button (Mike, 2026-11-25: "the cleanest") ====================================
+   No separate button: on touch the bar takes the tap. Full, it turns gold and says TAP FOR RAMPAGE. */
+#touch-ui #btn-shoulder { display: none !important; }
+html.touch #gears { pointer-events: auto; cursor: pointer; }
+#gears.ready { background: #f2b632; color: #1a1020; }
+#gears.ready .lbl, #gears.ready .nm { color: #1a1020; }
+html:not(.reduceflashes) #gears.ready { animation: ramp-ready 0.9s ease-in-out infinite; transform-origin: left center; }
+/* CAM moves into the top row, left of the station bug, centred on it (Mike, 2026-11-25: more room for the viewer
+   video, which now starts right under the bug). */
+#touch-ui #btn-cam { top: calc(var(--edge) + env(safe-area-inset-top) + (76px * var(--hs, 1) - 46px) / 2); right: auto; left: auto; }
+html.touch #pip, #pip, html.autoramp #pip { --pip-top: calc(var(--edge) + env(safe-area-inset-top) + 76px * var(--hs, 1) + 10px); }
+/* The VIEWER VIDEO tag runs the full width of the window. */
+#pip .tag { left: 0; right: 0; text-align: center; }
+/* VIEWER VIDEO tag along the bottom of the window (Mike, 2026-11-25), like a caption bar. */
+#pip .tag { top: auto; bottom: 0; }
+/* Ticker text centred vertically (Mike, 2026-11-25: it sat low; the face's metrics put caps under the line box's
+   middle). Nudged with position, not transform: the crawl animation owns transform. */
+#ticker span { position: relative; top: calc(var(--d-tick) * -0.15); }
+@media (orientation: landscape) and (max-height: 500px) { #ticker span { line-height: 18px; } }
+/* Credits (release prep). */
+#recap .credits .cr-title { margin: 12px 0 4px; font: italic 900 30px/1 var(--f-head); }
+#recap .credits .cr-title small { display: block; margin-top: 4px; font: 700 14px/1 var(--f-head); letter-spacing: 0.18em; text-transform: uppercase; opacity: 0.7; }
+#recap .credits dl.cr { display: grid; grid-template-columns: auto 1fr; gap: 6px 18px; margin: 14px 0; font: 600 14px/1.35 var(--f-head); }
+#recap .credits dt { opacity: 0.65; text-transform: uppercase; letter-spacing: 0.08em; font-size: 11px; padding-top: 2px; }
+#recap .credits dd { margin: 0; font-weight: 800; }
+#recap .credits .cr-note { font-size: 12px; opacity: 0.75; margin: 6px 0; }
+#recap .credits .cr-note a { color: inherit; text-decoration: underline; }
+@media (max-width: 560px) { #recap .credits dl.cr { grid-template-columns: 1fr; gap: 2px; } #recap .credits dd { margin-bottom: 6px; } }

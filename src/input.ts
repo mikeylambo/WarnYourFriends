@@ -40,7 +40,8 @@ export function keyLabel(code: string): string {
  * Lane presses are edges; the sim buffers (5f) and queues (one max) them.
  */
 export class Input {
-  device: Device = 'keyboard';
+  /** Phones start as touch (Mike, 2026-11-25: PC key hints showed on a phone until the first tap). */
+  device: Device = typeof matchMedia !== 'undefined' && matchMedia('(pointer: coarse)').matches ? 'touch' : 'keyboard';
   /** id of the pad last used (for its button labels). */
   padId = '';
   private keys = new Set<string>();
@@ -48,6 +49,8 @@ export class Input {
   keymap: Record<KeyAction, string[]> = { ...DEFAULT_KEYS };
   /** Accessibility: Brake toggles on a press instead of holding (keyboard, pad, swipe). */
   brakeToggle = false;
+  /** Tap the left / right half of the screen for a lane (instead of swiping). */
+  tapZones = false;
   private brakeLatch = false;
   /** Toggle mode with the brake latched on (the HUD shows BRAKE ON). */
   get brakeLatched(): boolean {
@@ -60,7 +63,7 @@ export class Input {
   private abilityEdge = false;
   private ability2Edge = false;
   private pauseEdge = false;
-  private touch: { id: number; sx: number; sy: number; x: number; y: number; t0: number; fired: boolean } | null = null;
+  private touch: { id: number; sx: number; sy: number; x: number; y: number; t0: number; fired: boolean; lastDir?: number } | null = null;
   private pad = { flickArmed: true, left: false, right: false, rb: false, lb: false, y: false, start: false, brake: false, cam: false };
   /** Next camera angle (Mike, 2026-11-24: C on keyboard, D-pad up or R3 on a pad, the camera button on touch). */
   private cameraEdge = false;
@@ -138,6 +141,11 @@ export class Input {
     if (this.touch) return;
     const t = e.changedTouches[0];
     this.touch = { id: t.identifier, sx: t.clientX, sy: t.clientY, x: t.clientX, y: t.clientY, t0: performance.now(), fired: false };
+    if (this.tapZones) {
+      // One lane per tap, on touch-down (fastest); the touch then can't also fire as a swipe.
+      this.laneEdge = t.clientX < window.innerWidth / 2 ? -1 : 1;
+      this.touch.fired = true;
+    }
   }
 
   private onTouchMove(e: TouchEvent) {
@@ -152,14 +160,20 @@ export class Input {
       const dx = s.x - s.sx;
       const dy = s.y - s.sy;
       const fast = (performance.now() - s.t0) / 1000 <= I.swipeMaxTime;
-      if (!s.fired && fast && Math.abs(dx) >= I.swipeMinPx && Math.abs(dx) > Math.abs(dy) * 1.2) {
-        this.laneEdge = Math.sign(dx);
-        s.fired = true;
-        // A new swipe can start from here without lifting the thumb.
+      const dir = Math.sign(dx);
+      // One swipe = one lane (Mike, 2026-11-24: a single flick moved two). Without lifting the thumb, only a
+      // reversal can fire again; the same direction needs a fresh touch.
+      if (!this.tapZones && fast && dir !== s.lastDir && Math.abs(dx) >= I.swipeMinPx && Math.abs(dx) > Math.abs(dy) * 1.2) {
+        this.laneEdge = dir;
+        s.lastDir = dir;
         s.sx = s.x;
         s.sy = s.y;
         s.t0 = performance.now();
-        s.fired = false;
+      } else if (s.lastDir && dir === s.lastDir) {
+        // Keep the origin under the thumb while it carries on the same way, so a reversal is measured from the turn.
+        s.sx = s.x;
+        s.sy = s.y;
+        s.t0 = performance.now();
       }
     }
   }

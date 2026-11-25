@@ -13,6 +13,8 @@ import { Lighting, timeOfDayAt } from './render/lighting';
 import { CruiserView } from './render/cruisers';
 import { UnitViews } from './render/units';
 import { ViewerVideo } from './render/pip';
+import { RampageAura } from './render/aura';
+import { setTelemetry, track } from './telemetry';
 import { Vfx } from './render/vfx';
 import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
@@ -53,6 +55,9 @@ if (PROTO) {
 
 const flags = readFlags(location.search);
 const settings = loadSettings();
+setTelemetry(settings.telemetry);
+// One session per page load (telemetry: touch vs desktop share).
+if (!flags.bot && !flags.autostart) track({ t: 'session', touch: matchMedia('(pointer: coarse)').matches });
 /** HUD colours: one layout, two palettes (CSS variables keyed off html[data-palette]). */
 function applyHudColors() {
   document.documentElement.dataset.palette = settings.hudColors;
@@ -98,7 +103,23 @@ function updateRampageFx(dt: number, now: number) {
   // Never over the recap or the meeting (he can still be in Rampage when the broadcast ends).
   document.documentElement.classList.toggle('rampage', rampK > 0.5 && recapEl.hidden);
   document.documentElement.classList.toggle('reduceflashes', settings.reduceFlashes);
+  // Auto Rampage on/off, for the HUD's styles.
+  // CAM sits just left of the station bug (its width changes with HUD Size), so it's placed from the bug's box.
+  {
+    const cam = document.getElementById('btn-cam');
+    const bug = document.getElementById('bug');
+    if (cam && bug && !cam.parentElement!.hidden) {
+      const r = bug.getBoundingClientRect();
+      if (r.width > 0) cam.style.left = `${Math.round(r.left - cam.offsetWidth - 10)}px`;
+    }
+  }
+  document.documentElement.classList.toggle('autoramp', settings.autoRampage);
+  // A broadcast is on screen (the rotate-to-landscape card only covers play, not the menus).
+  document.documentElement.classList.toggle('playing', !attract && recapEl.hidden);
+  // Phone upright mid-broadcast: hold it paused behind the rotate card (resume from the pause menu once sideways).
+  if (portraitTouch.matches && !paused) requestPause();
 }
+const portraitTouch = matchMedia('(orientation: portrait) and (pointer: coarse) and (max-width: 600px)');
 const debugEl = $('debug');
 const tierbar = $('tierbar');
 const chyPlace = document.querySelector('#chyron .place') as HTMLElement;
@@ -132,7 +153,7 @@ const chainClock = chainEl.querySelector('.clock i') as HTMLElement;
 /** Spectacle stunt names on the combo counter (what just counted, so the player learns the menu). */
 /** Ability levels on cards and the chip. */
 const ROMAN = ['', 'I', 'II', 'III'];
-const STUNT_LABEL: Record<string, string> = { rival: 'RIVAL NEWS VAN', medium: 'SMASH', heavy: 'HEAVY SMASH', unit: 'POLICE CAR', policeCrash: 'POLICE CRASH', collateral: 'COLLATERAL', nearMiss: 'NEAR MISS', ramDodge: 'DODGED', lostTrack: 'SHOOK ONE', chopperShaken: 'LOST THE CHOPPER', leapLand: 'LANDING', breakawayLand: 'BREAKAWAY', scoop: 'SCOOP', target: 'TARGET' };
+const STUNT_LABEL: Record<string, string> = { rival: 'RIVAL NEWS VAN', medium: 'SMASH', heavy: 'HEAVY SMASH', unit: 'POLICE CAR', policeCrash: 'POLICE CRASH', collateral: 'COLLATERAL', nearMiss: 'NEAR MISS', ramDodge: 'DODGED', lostTrack: 'SHOOK ONE', chopperShaken: 'LOST THE CHOPPER', leapLand: 'LANDING', breakawayLand: 'BREAKAWAY', scoop: 'EXCLUSIVE', target: 'TARGET' };
 let chainResultT = 0;
 const gearPips = [...gearsEl.querySelectorAll('i')] as HTMLElement[];
 const gearName = gearsEl.querySelector('.nm') as HTMLElement;
@@ -330,6 +351,8 @@ const coverage = new Coverage();
 const pip = new ViewerVideo($('pip'));
 const vfx = new Vfx();
 scene.add(vfx.group);
+const aura = new RampageAura();
+scene.add(aura.root);
 vfx.reduceFlashes = settings.reduceFlashes;
 /** Run stats for the recap, counted from sim events. */
 const runStats = { heavy: 0, units: 0, crashes: 0, bestChain: 0, lost: 0, dodged: 0, nearMiss: 0, best: null as Headline | null, bestRatings: -1 };
@@ -341,7 +364,8 @@ const cutLog: { t: number; reason: CutDecision['reason']; index: number; laneBus
 const triggerLog: { t: number; kind: string }[] = [];
 let bot: Bot | null = null;
 const audio = new Audio();
-const input = new Input(canvas, $('btn-shoulder'), $('btn-pause'), $('btn-ability'), document.getElementById('btn-ability2'));
+// The audience bar is the RAMPAGE button on touch (Mike, 2026-11-25: one object, the meter and the action).
+const input = new Input(canvas, $('gears'), $('btn-pause'), $('btn-ability'), document.getElementById('btn-ability2'));
 $('btn-cam').addEventListener('pointerdown', (e) => {
   e.preventDefault();
   e.stopPropagation();
@@ -351,6 +375,7 @@ $('btn-cam').addEventListener('pointerdown', (e) => {
 function applyControls() {
   input.keymap = settings.keys ? (Object.fromEntries(KEY_ACTIONS.map((a) => [a, [settings.keys![a]]])) as Record<KeyAction, string[]>) : { ...DEFAULT_KEYS };
   input.brakeToggle = settings.brakeToggle;
+  input.tapZones = settings.tapZones;
   glyphFamily = null; // redraw the on-screen key labels
 }
 applyControls();
@@ -364,7 +389,9 @@ const onboarding = new Onboarding($('prompt'), (id: PromptId) => {
     lanes: PROTO ? `Change lanes ${k('lanes')}: weave through the traffic` : `Change lanes ${k('lanes')} and smash the traffic`,
     blocked: PROTO ? `Cars and trucks don't break until Rampage. Dodge them ${k('lanes')}` : `Bulldozers and armored trucks don't break. Change lanes ${k('lanes')}`,
     concrete: `Concrete and yellow-roof police lines only break in <b>RAMPAGE</b>. Save it, or go round`,
-    meter: PROTO ? `Close dodges and yellow <b>SCOOPS</b> win the <b>AUDIENCE</b>. Full audience: <b>RAMPAGE</b>` : `Smash and dodge to fill the <b>RAMPAGE</b> meter`,
+    meter: PROTO ? `Squeeze past cars for a <b>NEAR MISS</b>. Grab yellow <b>EXCLUSIVES</b>. Both fill the <b>AUDIENCE</b>; full audience: <b>RAMPAGE</b>` : `Smash and dodge to fill the <b>RAMPAGE</b> meter`,
+    exclusive: `<b>EXCLUSIVE!</b> Yellow pickups fill the <b>AUDIENCE</b>`,
+    nearMiss: `<b>NEAR MISS!</b> Squeezing past cars fills the <b>AUDIENCE</b>`,
     ready: `<b>RAMPAGE READY</b> ${settings.autoRampage ? 'Here it goes' : `Press ${k('shoulder')}`}`,
     hit: PROTO ? `Hits lose the audience, and the police close in` : `Hits cost Rampage meter`,
     ram: `Police swerving in: dodge ${k('lanes')}`,
@@ -447,8 +474,18 @@ function targetAt(s: number, d: number): CameraTarget {
 const where = (s: number, d: number) => sim.track.posAt(s, d, { x: 0, z: 0 });
 const sirenRight = new THREE.Vector3();
 
+/** Telemetry: sim time of this broadcast's first Rampage (−1: none yet). */
+let firstRampAt = -1;
+function telemetryQuit() {
+  track({ t: 'quit', mode: lb.mode, district: sim.track.segmentAt(sim.giant.s).district ?? 0, secs: Math.round(sim.time) });
+}
+// Closing the tab mid-broadcast is a quit too (sendBeacon gets it out as the page goes).
+window.addEventListener('pagehide', () => {
+  if (!attract && started && !bot && sim.live) telemetryQuit();
+});
 function newRun(seed: number, segment = 0, upgrades: UpgradeId[] = [], levels: Partial<Record<AbilityId, number>> = {}, guided = false) {
   firstCardShown = false;
+  firstRampAt = -1;
   forkSwap = null; // a fork wipe from the last broadcast never swaps this one's road
   forkWipe.classList.remove('in');
   if (replay) {
@@ -621,24 +658,41 @@ function gainFlash() {
 
 /** The Stare: a pale glare sweeps up his lane and the lanes either side, then fades. */
 const glares: { mesh: THREE.Mesh; t: number }[] = [];
-const glareMat = new THREE.MeshBasicMaterial({ color: 0xbfd6ff, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending });
+const glareMat = new THREE.MeshBasicMaterial({ color: 0xffffff, vertexColors: true, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending });
+/**
+ * The Stare's glare (Mike, 2026-11-25: the flat strip read as a "lane highlight" glitch): a gaze beam down the lane,
+ * narrow at him and widening, bright along its middle and fading to nothing at its edges and far end (vertex colours
+ * under additive blending: black is invisible).
+ */
 function glare(s0: number, d: number) {
   const A = TUNING.abilities.stare;
   const W = TUNING.lanes.width * (A.lanesEitherSide + 0.5);
   const N = 24;
-  const verts = new Float32Array((N + 1) * 2 * 3);
+  const verts = new Float32Array((N + 1) * 3 * 3);
+  const cols = new Float32Array((N + 1) * 3 * 3);
+  const tint = new THREE.Color(0xbfd6ff);
   const p = new THREE.Vector3();
   for (let i = 0; i <= N; i++) {
-    const s = s0 + 3 + (A.reach[Math.max(0, sim.abilityLevel - 1)] * i) / N;
-    for (let k = 0; k < 2; k++) {
-      sim.track.posAt(s, d + (k ? W : -W), p);
-      verts.set([p.x, 0.12, p.z], (i * 2 + k) * 3);
+    const f = i / N;
+    const s = s0 + 3 + A.reach[Math.max(0, sim.abilityLevel - 1)] * f;
+    const w = W * (0.35 + 0.65 * Math.min(1, f * 2.2));
+    const bright = Math.min(1, f * 8) * Math.pow(1 - f, 1.4);
+    for (let k = 0; k < 3; k++) {
+      sim.track.posAt(s, d + (k - 1) * w, p);
+      verts.set([p.x, 0.12, p.z], (i * 3 + k) * 3);
+      const c = k === 1 ? bright : 0;
+      cols.set([tint.r * c, tint.g * c, tint.b * c], (i * 3 + k) * 3);
     }
   }
   const idx: number[] = [];
-  for (let i = 0; i < N; i++) idx.push(i * 2, i * 2 + 1, i * 2 + 2, i * 2 + 1, i * 2 + 3, i * 2 + 2);
+  for (let i = 0; i < N; i++)
+    for (let k = 0; k < 2; k++) {
+      const a = i * 3 + k, b = a + 1, c = a + 3, e = a + 4;
+      idx.push(a, b, c, b, e, c);
+    }
   const geo = new THREE.BufferGeometry();
   geo.setAttribute('position', new THREE.BufferAttribute(verts, 3));
+  geo.setAttribute('color', new THREE.BufferAttribute(cols, 3));
   geo.setIndex(idx);
   const mesh = new THREE.Mesh(geo, glareMat.clone());
   mesh.renderOrder = 2;
@@ -653,8 +707,8 @@ function updateAbilityFx(dt: number) {
     const k = gl.t / A.glareTime;
     // Sweeps in from the giant (draw range grows), then fades.
     const total = gl.mesh.geometry.index!.count;
-    gl.mesh.geometry.setDrawRange(0, Math.ceil(Math.min(1, k * 3) * total / 6) * 6);
-    (gl.mesh.material as THREE.MeshBasicMaterial).opacity = (settings.reduceFlashes ? 0.18 : 0.35) * Math.max(0, 1 - k);
+    gl.mesh.geometry.setDrawRange(0, Math.ceil(Math.min(1, k * 3) * total / 12) * 12);
+    (gl.mesh.material as THREE.MeshBasicMaterial).opacity = (settings.reduceFlashes ? 0.3 : 0.6) * Math.max(0, 1 - k);
     if (k >= 1) {
       scene.remove(gl.mesh);
       gl.mesh.geometry.dispose();
@@ -698,7 +752,7 @@ function openBriefing(goLive: boolean): Promise<void> {
     <div class="kicker">YOU'RE GOING LIVE</div>
     <ol class="steps">
       <li><b>Run.</b> He never stops. ${k('lanes')} change lanes.</li>
-      ${PROTO ? `<li><b>Dodge.</b> Weave through the traffic. Close calls win the audience; hits lose it, and the police close in.</li>
+      ${PROTO ? `<li><b>Dodge.</b> Weave through the traffic. Near misses (squeezing past cars) and yellow Exclusives win the audience; hits lose it, and the police close in.</li>
       <li><b>Rampage.</b> Full audience? ${settings.autoRampage ? 'It fires by itself' : `Press ${k('shoulder')}`} and he smashes everything.</li>` : `<li><b>Smash.</b> Run through the traffic. Go round bulldozers.</li>
       <li><b>Rampage.</b> Smashing fills the meter. Full? ${settings.autoRampage ? 'It fires by itself' : `Press ${k('shoulder')}`} and he runs through everything.</li>`}
     </ol>
@@ -711,9 +765,9 @@ function openBriefing(goLive: boolean): Promise<void> {
     <ol class="steps">
       <li><b>Run.</b> He never stops. ${k('lanes')} change lanes, ${k('brake')} brake.</li>
       <li><b>Smash.</b> He flattens cars, carts and police cars. Bulldozers, armored trucks and a police car swerving into you don't break: go round. Concrete and yellow-roof police lines break only in Rampage. Hitting any of them costs Rampage meter.</li>
-      <li><b>Rampage.</b> Smashes, close calls and combos fill the Rampage meter. When it's full, ${settings.autoRampage ? 'Rampage fires by itself' : `press ${k('shoulder')}`}: for 8 seconds he runs through everything, at double score. Keep smashing to make it last.</li>
-      <li><b>Keep them watching.</b> Smashes, close calls and combos fill the audience bar. Empty, they cut to commercial.</li>
-      <li><b>Lose the police.</b> Run a car beside you into whatever is in its lane. Slow down and they catch you: busted. Boxed in by the armored truck, brake out the back or Rampage through it.</li>
+      <li><b>Rampage.</b> Smashes, near misses and combos fill the Rampage meter. When it's full, ${settings.autoRampage ? 'Rampage fires by itself' : `press ${k('shoulder')}`}: for 8 seconds he runs through everything, at double score. Keep smashing to make it last.</li>
+      <li><b>Keep them watching.</b> Smashes, near misses and combos fill the audience bar. Empty, they cut to commercial.</li>
+      <li><b>Lose the police.</b> Run a car beside you into whatever is in its lane. Slow down and they catch you: caught. Boxed in by the armored truck, brake out the back or Rampage through it.</li>
       <li><b>Take the exit.</b> At ${clock} a ramp opens on the right. Be in the far-right lane when you reach it; miss it and coverage ends.</li>
     </ol>
     <div class="row"><button class="go" id="brief-go">${goLive ? 'Go live' : 'Back'}</button></div>
@@ -871,6 +925,35 @@ function openAwards(): Promise<void> {
   });
 }
 
+/**
+ * Credits (2026-11-25, release prep). Who made it, the tools that made its assets, and the open-source parts with
+ * their licences. Links to the privacy policy.
+ */
+function openCredits(): Promise<void> {
+  app?.ui.show('gameplay-placeholder');
+  recapEl.innerHTML = `<div class="card briefing credits">
+    <div class="kicker">CREDITS</div>
+    <h2 class="cr-title">Giant at Large<small>Warn Your Friends</small></h2>
+    <dl class="cr">
+      <dt>Created, designed and directed by</dt><dd>Mikey Lambo</dd>
+    </dl>
+    <div class="row"><button class="go" id="cr-back">Back</button></div>
+  </div>`;
+  recapEl.hidden = false;
+  recapArmedAt = performance.now() + 250;
+  document.documentElement.classList.add('briefing');
+  $<HTMLButtonElement>('cr-back').focus();
+  return new Promise((resolve) => {
+    const close = (briefingClose = () => {
+      briefingClose = null;
+      document.documentElement.classList.remove('briefing');
+      hideRecap();
+      resolve();
+    });
+    $<HTMLButtonElement>('cr-back').onclick = () => close();
+  });
+}
+
 /** Settings → Controls: rebind the keyboard (accessibility, 2026-11-17). One key per action; a key taken by another action swaps. */
 function openControls(): Promise<void> {
   const NAMES: Record<KeyAction, string> = { left: 'Lane left', right: 'Lane right', brake: 'Brake', shoulder: 'Rampage', ability: 'Ability', ability2: 'Ability 2' };
@@ -967,7 +1050,7 @@ function showMeeting(focusId?: string) {
   const slots = TUNING.run.abilitySlots;
   // Mike (2026-11-17): the meeting stays open: buy what the budget allows (each pitch once), then go live.
   recapEl.innerHTML = `<div class="card meeting">
-    <div class="kicker">PRODUCER'S MEETING · BEFORE SEGMENT ${r.segment + 2} OF ${TUNING.run.segments}</div>
+    <div class="kicker">PRODUCER'S MEETING · BEFORE BROADCAST ${r.segment + 2} OF ${TUNING.run.segments}</div>
     <div class="purse">Budget <b>${r.purse.toLocaleString()}</b></div>
     <p class="how">Your stunts pay for these. Buy as many as you can afford; spending never lowers your score. Abilities stack: up to ${slots}, each on its own button.</p>
     <div class="pitches">${offers
@@ -1092,14 +1175,14 @@ function showRecap() {
   const won = run?.phase === 'won';
   // Three ways to lose, each its own package (review pick 1): the police, the audience, the exit.
   const lost = reason === 'pin' ? 'busted' : reason === 'ratings' ? 'commercial' : 'signal';
-  const stamp = won ? 'FULL BROADCAST' : cleared ? 'SIGNED OFF' : lost === 'busted' ? 'BUSTED' : lost === 'commercial' ? 'CUT TO COMMERCIAL' : 'SIGNAL LOST';
+  const stamp = won || cleared ? 'SIGNED OFF' : lost === 'busted' ? 'CAUGHT' : lost === 'commercial' ? 'CUT TO COMMERCIAL' : 'SIGNAL LOST';
   // A win needs no caption (Mike, 2026-11-24: no excessive copy); a loss says what ended it.
   const why = won || cleared ? '' : reason === 'pin' ? (sim.show.pinCause === 'caught' ? 'The police caught up.' : 'Boxed in by the police.') : reason === 'ratings' ? 'The viewers changed the channel.' : 'He missed the exit.';
   // Hero numbers: what this screen is about. A run segment reports the budget; a finished run, the run.
   const hero = run && run.phase === 'meeting'
     ? Math.round(sh.banked) === run.purse ? [['Budget', n(run.purse), 'score']] : [['Added to budget', `+${n(sh.banked)}`, 'score'], ['Budget', n(run.purse), '']]
     : run
-      ? [['Run score', n(run.earned), 'score'], ['Segments cleared', `${run.results.filter((x) => x.cleared).length}<small>/${N}</small>`, '']]
+      ? [['Score', n(run.earned), 'score'], ...(N > 1 ? [['Broadcasts cleared', `${run.results.filter((x) => x.cleared).length}<small>/${N}</small>`, '']] : [])]
       : [['Score', n(sh.banked), 'score'], ['Peak audience', viewers(sh.peak), '']];
   const tiles: [string, string][] = [
     // Endless: how far he got is the headline stat.
@@ -1130,7 +1213,7 @@ function showRecap() {
   rampSlam.classList.remove('in');
   document.documentElement.classList.remove('rampage');
   recapEl.innerHTML = `<div class="rc ${cleared || won ? 'cleared' : 'busted'}">
-    ${run ? `<header class="rc-top"><div class="kicker">SEGMENT ${run.segment + 1} OF ${N}</div></header>` : ''}
+    ${run && N > 1 ? `<header class="rc-top"><div class="kicker">BROADCAST ${run.segment + 1} OF ${N}</div></header>` : ''}
     <section class="rc-lead">
       <div class="rc-stamp"><span class="outcome ${cleared || won ? 'cleared' : lost}">${stamp}</span>${why ? `<span class="why">${why}</span>` : ''}</div>
       <div class="rc-hero">${hero.map(([k, v, c]) => `<div class="${c}"><small>${k}</small><b>${v}</b></div>`).join('')}</div>
@@ -1159,7 +1242,10 @@ function showRecap() {
     if (!r || recapEl.hidden) return;
     if (r.newBest) recapEl.querySelector('.rc-hero .score')?.classList.add('newbest');
     const b = recapEl.querySelector('.rc-meta .bests');
-    if (b && !run) b.textContent = `Best ${n(r.best.bestBanked)} · Signed off ${r.best.signOffs} of ${r.best.broadcasts}`;
+    // The "one more run" hook: how far from the best, or that this is it.
+    const gap = r.prev - r.score;
+    const hook = r.newBest ? 'New best!' : r.prev > 0 && gap > 0 ? `${n(gap)} short of your best (${n(r.prev)})` : '';
+    if (b) b.textContent = [hook, run ? `Story finished ${r.best.runsWon ?? 0} of ${r.best.runs ?? 0}` : `Signed off ${r.best.signOffs} of ${r.best.broadcasts}`].filter(Boolean).join(' · ');
   });
   recapEl.hidden = false;
   mountClip();
@@ -1205,16 +1291,31 @@ function recapToMenu() {
   app.flow.onActivate('results', 'menu');
 }
 
+/**
+ * Fit a headline to the chyron (Mike, 2026-11-25: "OLD H..." on a phone): shrink the type, down to 62%, rather than
+ * cut it with an ellipsis. The chyron never lies (§1), and half a headline is close to it.
+ */
+function fitChyron(span: HTMLElement) {
+  span.style.fontSize = '';
+  const fit = () => {
+    if (!span.isConnected || span.clientWidth === 0) return;
+    const over = span.scrollWidth / span.clientWidth;
+    if (over > 1.001) span.style.fontSize = `${Math.max(0.62, 1 / over) * 100}%`;
+  };
+  fit();
+  requestAnimationFrame(fit); // once the slam-in has laid it out
+}
 /** §21 chyron: show a headline; tier changes break in with the stinger and the cream BREAKING kicker. */
 function showHeadline(h: Headline) {
   chyKicker.textContent = h.kicker;
   chyKicker.classList.toggle('breaking', h.breaking);
-  chyKicker.classList.toggle('busted', ['BUSTED', 'CUT TO COMMERCIAL', 'SIGNAL LOST'].includes(h.kicker));
+  chyKicker.classList.toggle('busted', ['CAUGHT', 'CUT TO COMMERCIAL', 'SIGNAL LOST'].includes(h.kicker));
   chyKicker.classList.toggle('signoff', h.kicker === 'SIGN-OFF');
   const span = document.createElement('span');
   span.textContent = h.text;
   span.className = 'in';
   chyText.replaceChildren(span);
+  fitChyron(span);
   if (h.breaking) audio.breaking();
 }
 
@@ -1326,17 +1427,32 @@ function present(e: SimEvent) {
     case 'unitSpawn':
       audio.whoop();
       break;
-    case 'lostTrack':
+    case 'lostTrack': {
+      // Hit feel (2026-11-24 audit): shaking one off reads, a whoosh where it was and a white ring on it.
       runStats.lost++;
+      const u = sim.pursuit.units.find((x) => x.id === e.id);
+      audio.whoosh(u ? where(u.s, u.d) : undefined);
+      if (u) {
+        sim.track.posAt(u.s, u.d, pos);
+        highway.ring(pos.x, pos.z, 5, 0xffffff, 0.45, 0.5);
+      }
+      haptic(I.dodge.haptic, I.dodge.hapticStrength);
       break;
-    case 'nearMiss':
+    }
+    case 'nearMiss': {
+      // A police car slipped by: the same tells as a near miss on traffic (whoosh, ring, a nudge, a tick).
       runStats.nearMiss++;
       pip.trigger(sim, sim.show.tier);
-      {
-        const u = sim.pursuit.units.find((x) => x.id === e.id);
-        audio.whoosh(u ? where(u.s, u.d) : undefined);
+      const u = sim.pursuit.units.find((x) => x.id === e.id);
+      audio.whoosh(u ? where(u.s, u.d) : undefined);
+      if (u) {
+        sim.track.posAt(u.s, u.d, pos);
+        highway.ring(pos.x, pos.z, 3.5, 0xffffff, 0.35, 0.45);
       }
+      rig.jolt(I.dodge.shake, 0.1);
+      haptic(I.dodge.haptic, I.dodge.hapticStrength);
       break;
+    }
     case 'dodge': {
       runStats.nearMiss++;
       audio.whoosh(where(e.s, e.d));
@@ -1368,7 +1484,12 @@ function present(e: SimEvent) {
       break;
     }
     case 'netEscape':
+      // Out of the Police Net: a release, not just a sound.
       audio.whoosh();
+      sim.track.posAt(g.s, g.d, pos);
+      highway.ring(pos.x, pos.z, 9, 0xffffff, 0.5, 0.55);
+      rig.jolt(3, 0.12);
+      haptic(90, 0.5);
       break;
     case 'carrierDrop':
       highway.dropIn(e.propId);
@@ -1391,8 +1512,12 @@ function present(e: SimEvent) {
       break;
     }
     case 'scoop':
-      // Prototype collectible: a bright ding (the chain tick, a step up), the smash event already threw its confetti.
+      // Exclusive: a bright ding (the chain tick, a step up), a gold ring where it was, a tick in the hand. The smash
+      // event already threw its confetti.
       audio.chainTick(3);
+      sim.track.posAt(e.s, e.d, pos);
+      highway.ring(pos.x, pos.z, 4, TUNING.rampageFx.aura.color, 0.4, 0.7);
+      haptic(45, 0.35);
       break;
     case 'zone': {
       // Story run: a title card as he enters each district (never covers the road; fades on its own).
@@ -1535,6 +1660,7 @@ function present(e: SimEvent) {
         asksUntil = sim.time + TUNING.hud.asksFlash; // the panel comes back to show it landing
         audio.chainEnd(4, false);
         asksList.querySelector(`[data-id="${e.id}"]`)?.classList.add('flash');
+        haptic(140, 0.6);
       }
       break;
     }
@@ -1633,9 +1759,22 @@ function present(e: SimEvent) {
       }
       break;
     case 'meterFull':
+      // Full audience: a gold pulse off him so the moment before Rampage reads, even with Auto Rampage off.
       audio.tierUp(1);
+      sim.track.posAt(g.s, g.d, pos);
+      highway.ring(pos.x, pos.z, 8 * gScale, TUNING.rampageFx.aura.color, 0.55, 0.6);
+      haptic(120, 0.6);
+      break;
+    case 'rampageEnd':
+      // The power drains away: a fading gold ring, the gear drops, a soft nudge. Clear that it's over.
+      sim.track.posAt(g.s, g.d, pos);
+      highway.ring(pos.x, pos.z, 10 * gScale, TUNING.rampageFx.aura.color, 0.8, 0.35);
+      audio.tierDown();
+      rig.jolt(2, 0.15);
+      haptic(70, 0.4);
       break;
     case 'rampageStart': {
+      if (firstRampAt < 0 && !attract && !replay) firstRampAt = sim.time;
       // Activation (Mike, 2026-11-17: "a bit more prominence"): a beat of hit-pause, a slam across the screen, a
       // flash, a jolt and a rumble, on top of the gear-up's shockwave, punch and stinger.
       const R = TUNING.rampageFx;
@@ -1648,6 +1787,9 @@ function present(e: SimEvent) {
         haptic(R.slamHaptic, 0.9);
       }
       rig.jolt(R.slamShake, 0.25);
+      // The gold burst: shockwave rings off his feet as the aura lights.
+      sim.track.posAt(sim.giant.s, sim.giant.d, pos);
+      for (const [size, life, op] of R.aura.burst) highway.ring(pos.x, pos.z, size * gScale, R.aura.color, life, op);
       break;
     }
     case 'meterLoss':
@@ -1710,7 +1852,7 @@ function stepSim(inp: SimInput) {
     if (moment && !moment.headline && h.sources.includes(moment.event)) moment.headline = h;
     showHeadline(h);
     // Tonight's top story: the biggest headline that wasn't the ending itself.
-    if (!['BUSTED', 'CUT TO COMMERCIAL', 'SIGNAL LOST', 'SIGN-OFF'].includes(h.kicker) && sim.show.ratings >= runStats.bestRatings) {
+    if (!['CAUGHT', 'CUT TO COMMERCIAL', 'SIGNAL LOST', 'SIGN-OFF'].includes(h.kicker) && sim.show.ratings >= runStats.bestRatings) {
       runStats.best = h;
       runStats.bestRatings = sim.show.ratings;
     }
@@ -1757,26 +1899,16 @@ function startClip() {
     clipRec = null;
   }
 }
-/** The recap card alternates: the clip plays through, then the still holds a moment, then the clip again. */
+/** The recap card loops the clip continuously (Mike, 2026-11-24: the still hold between plays read as a freeze). */
 function mountClip() {
   const fig = recapEl.querySelector('.rc-shot');
   if (!fig || !recapClip || fig.querySelector('video')) return;
   const v = document.createElement('video');
-  Object.assign(v, { src: recapClip, muted: true, playsInline: true });
+  Object.assign(v, { src: recapClip, muted: true, playsInline: true, loop: true });
   fig.prepend(v);
   fig.classList.add('clip');
-  let hold = 0;
-  const play = () => {
-    fig.classList.remove('still');
-    v.currentTime = 0;
-    void v.play().catch(() => {});
-  };
-  v.addEventListener('ended', () => {
-    fig.classList.add('still');
-    clearTimeout(hold);
-    hold = window.setTimeout(() => { if (v.isConnected) play(); }, TUNING.replay.clipStillHold * 1000);
-  });
-  play();
+  fig.classList.remove('still');
+  void v.play().catch(() => {});
 }
 
 function stopClip() {
@@ -1985,8 +2117,26 @@ function setPaused(p: boolean) {
   if (!p) menuGuard = 10; // §8 10f menu guard after any screen transition
 }
 
+/**
+ * Perf (2026-11-25, simulated Android profile): the one frame spike was first-use shader compiles. Compile every
+ * material in the scene up front, once, with the usually hidden ones (the Rampage aura) switched on for it.
+ */
+let shadersWarm = false;
+function warmShaders() {
+  if (shadersWarm) return;
+  shadersWarm = true;
+  const was = aura.root.visible;
+  aura.root.visible = true;
+  try {
+    renderer.compile(scene, rig.camera);
+  } catch {
+    /* only a warm-up */
+  }
+  aura.root.visible = was;
+}
 function start() {
   started = true;
+  warmShaders();
   paused = false;
   document.documentElement.classList.add('playing');
   try {
@@ -2022,15 +2172,22 @@ function beginBroadcast(mode = 'broadcast') {
     newRun(seed, Math.max(0, Math.min(TUNING.run.segments - 1, flags.seg ?? 0)), flags.ability ? [flags.ability] : [], flags.ability ? { [flags.ability]: flags.level } : {}, guided);
   }
   bot = flags.bot ? new Bot(sim) : null;
-  // First broadcast ever: How to Play first, then the cold open.
-  if (!bot && !flags.autostart && !briefingSeen()) {
-    started = false;
-    void openBriefing(true).then(() => start());
-  } else start();
+  // First broadcast ever: no rules card (2026-11-24, teach by doing). The guided opening and the one-time prompts
+  // teach in play; How to Play stays on the menu.
+  if (guided) {
+    try {
+      localStorage.setItem(BRIEF_KEY, '1');
+    } catch {
+      /* private mode: it just shows the guided opening again */
+    }
+  }
+  start();
 }
 
 /** Back to the menus: the bot takes over a fresh broadcast behind them. */
 function enterAttract() {
+  // Left a live broadcast for the menu: that's a quit (telemetry: where people give up).
+  if (!attract && started && !bot && sim.live) telemetryQuit();
   attract = true;
   document.documentElement.classList.add('attract');
   run = null;
@@ -2113,10 +2270,10 @@ const wyfAssembly = (shell: SLUWebShell<CoreSettings>): FrameAssembly => {
     label: 'Live Broadcast',
     menuFlow: [],
     modes: [
-      { id: 'run', label: 'Full Broadcast', description: 'Five segments. Spend your ratings between them.', leaderboardKey: 'runScore' },
+      { id: 'run', label: 'Story', description: 'Five districts, one broadcast. Get him to the sign-off.', leaderboardKey: 'runScore' },
       { id: 'endless', label: 'Endless', description: 'One road that never ends. How far can he get?', leaderboardKey: 'banked' },
       { id: 'daily', label: 'Daily', description: "Today's road, the same for everyone.", leaderboardKey: 'banked' },
-      { id: 'broadcast', label: 'Single Segment', description: 'Keep the ratings up. Take the exit before the chopper runs out of fuel.', leaderboardKey: 'banked' },
+      { id: 'broadcast', label: 'Single Broadcast', description: 'Keep the audience watching. Take the exit before the chopper runs out of fuel.', leaderboardKey: 'banked' },
     ],
     statKeys: ['broadcasts', 'signOffs', 'bestBanked', 'bestPeak'],
     challengeCategories: [],
@@ -2206,13 +2363,16 @@ app = await createGameApp({
       // motion, shake, vibration, fullscreen) are filed under their tabs by settingsTabsDom.
       choices: () => {
         const all: (UIChoiceLite & { tab: SettingsTab })[] = [
-          { tab: 'game', id: 'wyf-auto', label: `Auto Rampage: ${onOff(settings.autoRampage)}`, description: 'Rampage fires by itself the moment the meter is full' },
+          { tab: 'game', id: 'wyf-privacy', label: 'Privacy Policy', description: 'What the game stores and why (opens in a new tab)' },
+          { tab: 'game', id: 'wyf-stats', label: `Share Anonymous Play Stats: ${onOff(settings.telemetry)}`, description: 'How broadcasts end and where they stop. No names, ids or scores.' },
+          { tab: 'game', id: 'wyf-auto', label: `Auto Rampage: ${onOff(settings.autoRampage)}`, description: 'Rampage fires by itself the moment the audience is full' },
           { tab: 'game', id: 'wyf-speed', label: `Game Speed: ${Math.round(settings.gameSpeed * 100)}%`, description: 'Slower gives more time to react. Below 100% scores stay off the leaderboard' },
           { tab: 'game', id: 'wyf-howto', label: 'How to Play' },
           { tab: 'game', id: 'wyf-tips', label: 'Replay Tips', description: 'Show the in-game control tips again' },
           // Playtest (Mike, 2026-11-17: "missed copying the run data"): every broadcast's numbers, any time. ?playtest=1 only.
           ...(PLAYTEST ? [{ tab: 'game' as SettingsTab, id: 'wyf-playdata', label: 'Copy Play Data', description: 'Copies every broadcast you have played (or saves a file)' }] : []),
           { tab: 'controls', id: 'wyf-controls', label: 'Rebind Keys' },
+          { tab: 'controls' as SettingsTab, id: 'wyf-tapzones', label: `Touch Lanes: ${settings.tapZones ? 'Tap Sides' : 'Swipe'}`, description: 'Tap Sides: tap the left or right half of the screen to change lanes' },
           ...(NOBRAKE ? [] : [{ tab: 'controls' as SettingsTab, id: 'wyf-brake', label: `Brake: ${settings.brakeToggle ? 'Toggle' : 'Hold'}`, description: 'Toggle: press once to brake, again to run' }]),
           { tab: 'display', id: 'wyf-hudsize', label: `HUD Size: ${Math.round(settings.hudSize * 100)}%` },
           { tab: 'display', id: 'wyf-colors', label: `HUD Colours: ${settings.hudColors === 'network' ? 'Network' : 'WYF 6'}`, description: 'The station\'s purple and cream, or network red, blue and white' },
@@ -2250,7 +2410,10 @@ app = await createGameApp({
           return true;
         }
         const next = <T,>(list: T[], v: T) => list[(list.indexOf(v) + 1) % list.length];
-        if (id === 'wyf-brake') {
+        if (id === 'wyf-tapzones') {
+          settings.tapZones = !settings.tapZones;
+          applyControls();
+        } else if (id === 'wyf-brake') {
           settings.brakeToggle = !settings.brakeToggle;
           applyControls();
         } else if (id === 'wyf-hudsize') {
@@ -2258,6 +2421,11 @@ app = await createGameApp({
           resize();
         } else if (id === 'wyf-speed') settings.gameSpeed = next(GAME_SPEEDS, settings.gameSpeed);
         else if (id === 'wyf-auto') settings.autoRampage = !settings.autoRampage;
+        else if (id === 'wyf-privacy') window.open('./privacy.html', '_blank', 'noopener');
+        else if (id === 'wyf-stats') {
+          settings.telemetry = !settings.telemetry;
+          setTelemetry(settings.telemetry);
+        }
         if (id === 'wyf-brake' || id === 'wyf-hudsize' || id === 'wyf-speed' || id === 'wyf-auto') {
           saveSettings(settings);
           return true;
@@ -2300,6 +2468,7 @@ function refreshMainMenu() {
       { id: 'awards', label: 'Awards' },
       { id: 'howto', label: 'How to Play' },
       { id: 'settings', label: 'Settings' },
+      { id: 'credits', label: 'Credits' },
     ],
   });
 }
@@ -2310,6 +2479,7 @@ refreshMainMenu();
   app.flow.onActivate = (screen: string, choice: string) => {
     if (screen === 'main-menu' && choice === 'howto') void openBriefing(false).then(() => app!.ui.show('main-menu'));
     else if (screen === 'main-menu' && choice === 'awards') void openAwards().then(() => app!.ui.show('main-menu'));
+    else if (screen === 'main-menu' && choice === 'credits') void openCredits().then(() => app!.ui.show('main-menu'));
     else if (screen === 'main-menu' && choice === 'run' && PROTO) void openPreShow().then((go) => (go ? flowActivate('mode-select', 'run') : app!.ui.show('main-menu')));
     else if (screen === 'main-menu' && (choice === 'run' || choice === 'endless' || choice === 'daily' || choice === 'broadcast')) flowActivate('mode-select', choice);
     else flowActivate(screen, choice);
@@ -2505,7 +2675,7 @@ function frame(now: number) {
       // The Local News Awards: this segment's tally (a player's, not the bot's).
       newAwards = bot
         ? []
-        : record(profile, { signedOff: sim.show.state === 'cleared', policeWrecked: runStats.crashes, objects: sim.stats.smashes + runStats.crashes, segment: run ? run.segment + 1 : 1, runWon: run?.phase === 'won' });
+        : record(profile, { signedOff: sim.show.state === 'cleared', policeWrecked: runStats.crashes, objects: sim.stats.smashes + runStats.crashes, segment: PROTO ? (sim.track.segmentAt(sim.giant.s).district ?? 0) + 1 : run ? run.segment + 1 : 1, runWon: run?.phase === 'won' });
       // Editions are off (Mike, 2026-11-19): every run is the Evening News.
       editionUnlocked = -1;
       saveProfile(profile);
@@ -2513,6 +2683,8 @@ function frame(now: number) {
         app?.shell.session.setPhase('results');
         statsReady = recordStats();
       }
+      if (!bot && !flags.stepMode)
+        track({ t: 'end', mode: lb.mode, reason: run?.phase === 'won' ? 'won' : sim.show.state === 'cleared' ? 'cleared' : sim.show.reason === 'pin' && sim.show.pinCause === 'caught' ? 'caught' : (sim.show.reason ?? 'ratings'), district: sim.track.segmentAt(sim.giant.s).district ?? 0, secs: Math.round(sim.time), firstRamp: Math.round(firstRampAt), mods: simOpts.mods?.length ?? 0, guided: !!simOpts.guided });
       if (!flags.stepMode) dissolveOut();
       // Tonight's top moment first, then the recap.
       // Unlocks get their own moment before the recap (Mike, 2026-11-24: "more lively unlocks").
@@ -2556,6 +2728,7 @@ function frame(now: number) {
   }
 
   updateRampageFx(paused ? 0 : realDt, performance.now() / 1000);
+  aura.update(paused ? 0 : realDt, attract ? 0 : rampK, t.x, t.z, gScale, rig.camera, settings.reduceFlashes);
   // Rampage aura: embers lift off him and speed lines streak past while it lasts (review #65).
   if (rampK > 0 && !paused && sim.live && !attract) {
     const V = TUNING.vfx;
@@ -2679,6 +2852,9 @@ function updateTitleShot(dt: number, t: CameraTarget): boolean {
   const onTitle = attract && !!document.querySelector('#ui [data-screen-id="title"]');
   const inMenus = attract;
   document.documentElement.classList.toggle('title', inMenus);
+  const onMain = attract && !!document.querySelector('#ui [data-screen-id="main-menu"]');
+  if (onMain && !document.documentElement.classList.contains('mainmenu')) void renderMenuCard();
+  document.documentElement.classList.toggle('mainmenu', onMain);
   if (inMenus !== wasTitle) {
     wasTitle = inMenus;
     if (inMenus) {
@@ -2766,13 +2942,35 @@ export function outfitPortraits(): Partial<Record<OutfitId, string>> {
   return out;
 }
 
+/**
+ * The main menu's progress card (2026-11-24, ship plan: progression on the front screen): your best Story score,
+ * sign-offs, and the next award with its bar, so there's always a next thing to go for.
+ */
+async function renderMenuCard() {
+  const el = document.getElementById('menucard');
+  if (!el || !app) return;
+  const best = await app.storage.get<Stats>('wyf.stats');
+  const nf = (x: number) => Math.round(x).toLocaleString();
+  const left = AWARDS.filter((a) => !profile.won.includes(a.id)).map((a) => ({ a, have: Math.min(profile.counts[a.stat], a.n) })).sort((x, y) => y.have / y.a.n - x.have / x.a.n);
+  const next = left[0];
+  const rows = [
+    best?.bestRun ? `<div class="mc-row"><small>BEST STORY</small><b>${nf(best.bestRun)}</b></div>` : '',
+    best?.runs ? `<div class="mc-row"><small>STORIES FINISHED</small><b>${best.runsWon ?? 0}<span>/${best.runs}</span></b></div>` : '',
+  ].join('');
+  const nx = next ? `<div class="mc-next"><small>NEXT AWARD</small><b>${esc(next.a.title)}</b><span>${esc(next.a.how)} · ${next.have.toLocaleString()}/${next.a.n.toLocaleString()}${rewardLine(next.a) ? ` · ${esc(rewardLine(next.a))}` : ''}</span><i style="--p:${((next.have / next.a.n) * 100).toFixed(0)}%"></i></div>` : `<div class="mc-next"><small>AWARDS</small><b>Every award won</b></div>`;
+  el.innerHTML = rows ? `<div class="mc-rows">${rows}</div>${nx}` : nx;
+}
+
 /** Persist the bests (shell storage, per game id). */
-async function recordStats(): Promise<{ best: Stats; newBest: boolean } | null> {
+async function recordStats(): Promise<{ best: Stats; newBest: boolean; prev: number; score: number } | null> {
   if (!app) return null;
   const st = app.storage;
   const sh = sim.show;
   const best = (await st.get<Stats>('wyf.stats')) ?? { broadcasts: 0, signOffs: 0, bestBanked: 0, bestPeak: 0 };
-  const newBest = !run && best.broadcasts > 0 && Math.round(sh.banked) > best.bestBanked;
+  // Story's score is the run's; one broadcast's is its banked score. Either way the recap says how far from the best.
+  const prev = run ? (best.bestRun ?? 0) : best.bestBanked;
+  const score = Math.round(run ? run.earned : sh.banked);
+  const newBest = (run ? (best.runs ?? 0) : best.broadcasts) > 0 && score > prev;
   best.broadcasts++;
   if (sh.state === 'cleared') best.signOffs++;
   best.bestBanked = Math.max(best.bestBanked, Math.round(sh.banked));
@@ -2783,12 +2981,12 @@ async function recordStats(): Promise<{ best: Stats; newBest: boolean } | null> 
     best.bestRun = Math.max(best.bestRun ?? 0, Math.round(run.earned));
   }
   await st.set('wyf.stats', best);
-  return { best, newBest };
+  return { best, newBest, prev, score };
 }
 /** Stored bests. Phase 3 fields are optional so older saves load unchanged. */
 type Stats = { broadcasts: number; signOffs: number; bestBanked: number; bestPeak: number; runs?: number; runsWon?: number; bestRun?: number };
 /** The bests as this broadcast's save lands (the recap reads them when they arrive). */
-let statsReady: Promise<{ best: Stats; newBest: boolean } | null> | null = null;
+let statsReady: Promise<{ best: Stats; newBest: boolean; prev: number; score: number } | null> | null = null;
 let lastCoverage = performance.now();
 
 /** Edge arrow to the sign-off ramp (§21), pointing at the gore from wherever it is. */
@@ -2851,6 +3049,8 @@ function updateHud(dt: number) {
   fuelBar.style.transform = `scaleX(${fuel.toFixed(4)})`;
   fuelEl.classList.toggle('low', counting);
   fuelEl.classList.toggle('crit', sim.live && total - sim.time <= TUNING.hud.fuelCritical);
+  // The fuel bar is gone (Mike, 2026-11-25: two timers said one thing); the clock carries the last seconds' red pulse.
+  clockEl.classList.toggle('crit', sim.live && !sim.endless && total - sim.time <= TUNING.hud.fuelCritical);
   const brakeShown = input.brakeLatched && sim.live;
   if (brakeOnEl.hidden === brakeShown) brakeOnEl.hidden = !brakeShown;
   // One primary number: the score (the whole run's in Full Broadcast; spending never lowers it). Ratings is the
@@ -2877,7 +3077,7 @@ function updateHud(dt: number) {
   gearsEl.classList.toggle('ready', ready);
   gearsEl.dataset.tier = String(g.tier);
   // Readability pass (Mike, 2026-11-17): the number says where it is; full, the button; in Rampage, the seconds left.
-  const nm = ramp ? `${g.rampT.toFixed(1)}s` : ready ? (settings.autoRampage ? 'READY!' : `<kbd>${esc(glyph('shoulder'))}</kbd> GO!`) : `${Math.floor(g.meter)}%`;
+  const nm = ramp ? `${g.rampT.toFixed(1)}s` : ready ? (settings.autoRampage ? 'READY!' : glyphFamily === 'touch' ? 'TAP FOR RAMPAGE' : `<kbd>${esc(glyph('shoulder'))}</kbd> GO!`) : `${Math.floor(g.meter)}%`;
   if (gearName.innerHTML !== nm) gearName.innerHTML = nm;
   gearsEl.classList.toggle('ramp', ramp);
   // Prototype: a clean run builds the sprint (it shows on the meter's label).

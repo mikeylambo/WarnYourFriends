@@ -2,7 +2,7 @@ import { TUNING, type MassClass } from '../tuning';
 import { Rng } from './rng';
 import { DEG, clamp } from './math';
 import type { LandmarkKind, Material, Prop, PropKind } from './types';
-import { CHUNKS, CHUNK_KINDS, SMALL_KINDS, chunkLength, mirror, type Chunk } from './chunks';
+import { CHUNKS, CHUNK_KINDS, SMALL_KINDS, TUTORIAL, chunkLength, mirror, type Chunk } from './chunks';
 
 /**
  * v0.3 procedural highway, built from 40m segments on gentle splines.
@@ -137,6 +137,8 @@ export class Track {
 
   /** Guided first broadcast: nothing unbreakable this close to the start (m). */
   private readonly hardFrom: number;
+  /** First broadcast ever: the next chunk is the teaching opening (once). */
+  private tutorial = false;
 
   /** Edition: × bulldozer and concrete chances. */
   private readonly hardMult: number;
@@ -146,6 +148,7 @@ export class Track {
     this.hardMult = hardMult;
     this.segmentNo = segment;
     this.hardFrom = guided ? TUNING.guided.clearFor : TUNING.props.immovableFrom;
+    this.tutorial = guided;
     const Pc = TUNING.pacing;
     this.gapScale = Pc.rowGapScale[Math.min(segment, Pc.rowGapScale.length - 1)];
     this.landmarkScale = Pc.landmarkEveryScale[Math.min(segment, Pc.landmarkEveryScale.length - 1)];
@@ -688,7 +691,9 @@ export class Track {
         if (s0 >= end) return;
         const lanes = this.lanesAt(s0);
         const span = this.twoWay.find((w) => w.district && s0 >= w.s0 && s0 < w.s1);
-        const c = this.pickChunk(lanes, this.levelAt(s0), seg.zone, span?.split ?? 0);
+        const teach = this.tutorial && !span ? TUTORIAL.find((t) => t.lanes === lanes) : undefined;
+        this.tutorial = false;
+        const c = teach ?? this.pickChunk(lanes, this.levelAt(s0), seg.zone, span?.split ?? 0);
         if (!c) {
           this.nextChunkS = s0 + 10;
           continue;

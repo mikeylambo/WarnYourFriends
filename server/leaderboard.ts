@@ -75,6 +75,17 @@ export function memoryStore(): Store {
           case 'HSET':
             hash(k).set(String(a[1]), String(a[2]));
             return 1;
+          case 'HINCRBY': {
+            const v = Number(hash(k).get(String(a[1])) ?? 0) + Number(a[2]);
+            hash(k).set(String(a[1]), String(v));
+            return v;
+          }
+          case 'HGETALL':
+            return [...hash(k)].flat();
+          case 'ZREM':
+            return zset(k).delete(String(a[1])) ? 1 : 0;
+          case 'HDEL':
+            return hash(k).delete(String(a[1])) ? 1 : 0;
           case 'HMGET':
             return a.slice(1).map((f) => hash(k).get(String(f)) ?? null);
           case 'INCR':
@@ -136,7 +147,36 @@ async function board(store: Store, mode: BoardMode, player?: string, day?: numbe
   return { top, you };
 }
 
-export async function handle(store: Store | null, method: string, query: Record<string, unknown>, body: unknown, ip: string, now = Date.now()): Promise<Reply> {
+const BANNED = 'wyf:lb:banned';
+const ALL_MODES: BoardMode[] = ['run', 'broadcast', 'endless', 'daily'];
+
+/**
+ * Moderation (2026-11-24): POST { admin, action: 'ban' | 'unban' | 'rename', player, name? } with the LB_ADMIN_KEY
+ * env secret (never in the client). Ban removes the player from every board (today's daily too) and refuses their posts.
+ */
+async function moderate(store: Store, b: Record<string, unknown>, adminKey: string | undefined, now: number): Promise<Reply> {
+  if (!adminKey || typeof b.admin !== 'string' || sha(b.admin) !== sha(adminKey)) return { status: 403, body: { error: 'admin' } };
+  if (!isPlayer(b.player)) return { status: 400, body: { error: 'player' } };
+  const p = b.player;
+  if (b.action === 'ban') {
+    const day = dailyDay(now);
+    await store.run([['HSET', BANNED, p, now], ...ALL_MODES.filter((m) => m !== 'daily').map((m) => ['ZREM', KEY(m), p]), ['ZREM', KEY('daily', day), p], ['ZREM', KEY('daily', day - 1), p], ['HSET', NAMES, p, '—']]);
+    return { status: 200, body: { ok: true, banned: p } };
+  }
+  if (b.action === 'unban') {
+    await store.run([['HDEL', BANNED, p]]);
+    return { status: 200, body: { ok: true } };
+  }
+  if (b.action === 'rename') {
+    const name = cleanName(b.name);
+    if (!name) return { status: 400, body: { error: 'name' } };
+    await store.run([['HSET', NAMES, p, name]]);
+    return { status: 200, body: { ok: true } };
+  }
+  return { status: 400, body: { error: 'action' } };
+}
+
+export async function handle(store: Store | null, method: string, query: Record<string, unknown>, body: unknown, ip: string, now = Date.now(), adminKey?: string): Promise<Reply> {
   if (!store) return { status: 503, body: { error: 'leaderboard not configured' } };
   if (method === 'GET' && query.ticket !== undefined) {
     // A road for the next broadcast, issued to this player. Run Again on it ranks; a seed chosen by hand doesn't.
@@ -166,7 +206,13 @@ export async function handle(store: Store | null, method: string, query: Record<
 
   const b = (typeof body === 'string' ? safeJson(body) : body) as Partial<Submission & { player: string; name: string }> | null;
   if (!b || typeof b !== 'object') return { status: 400, body: { error: 'body' } };
+  if ((b as Record<string, unknown>).admin !== undefined) return moderate(store, b as Record<string, unknown>, adminKey, now);
   if (!isPlayer(b.player)) return { status: 400, body: { error: 'player' } };
+  // Per player too (an IP can be shared, a player id can hop IPs).
+  const prl = `wyf:rl:p:${b.player}:${Math.floor(now / 60000)}`;
+  const [pcount] = await store.run([['INCR', prl], ['EXPIRE', prl, 120]]);
+  if (Number(pcount) > TUNING.leaderboard.perPlayerMinute) return { status: 429, body: { error: 'slow down' } };
+  if ((await store.run([['HGET', BANNED, b.player]]))[0]) return { status: 403, body: { error: 'banned' } };
   const name = cleanName(b.name);
   if (!name) return { status: 400, body: { error: 'name' } };
   if (!isMode(b.mode)) return { status: 400, body: { error: 'mode' } };

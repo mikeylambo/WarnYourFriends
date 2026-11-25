@@ -86,6 +86,16 @@ export const CHUNKS: Chunk[] = [
   { id: 'four-blockade', lanes: 4, level: 5, rows: [[0, 'bdc.'], [34, 'c.vd'], [64, '.cbd'], [94, 'cv.d'], [124, 'd.cv']] },
 ];
 
+/**
+ * The teaching opening (Mike, 2026-11-24: "teach by doing"): the first chunk of a player's very first broadcast.
+ * A car straight ahead in his starting lane (the swipe), a row of Exclusives across every lane (the pickup), then
+ * single cars spaced for easy near misses. Never picked otherwise. He starts in lane floor(lanes / 2).
+ */
+export const TUTORIAL: Chunk[] = [
+  { id: 'tutorial-4', lanes: 4, level: 0, rows: [[0, '..c.'], [50, 'ssss'], [95, '.c..'], [135, '...c'], [175, 'c...'], [210, 'ssss']] },
+  { id: 'tutorial-3', lanes: 3, level: 0, rows: [[0, '.c.'], [50, 'sss'], [95, 'c..'], [135, '..c'], [175, '.c.'], [210, 'sss']] },
+];
+
 /** The letters a chunk row may use, and what each places (`s` picks a small thing). */
 export const CHUNK_KINDS: Record<string, PropKind | 'small'> = { c: 'car', v: 'van', n: 'newsvan', d: 'dozer', b: 'barricade', f: 'foodtruck', s: 'scoop', o: 'car', t: 'foodtruck', l: 'car', r: 'car' };
 

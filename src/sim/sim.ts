@@ -157,6 +157,7 @@ export class Sim {
   readonly edition: (typeof TUNING.editions)[number];
   /** First broadcast ever: a calm opening (no drain or police for `guided.calmFor` s, nothing unbreakable for `guided.clearFor` m). */
   readonly guided: boolean;
+  private rampagedOnce = false;
 
   /** The product of one effect over the traffic mods on (1 when none sets it). */
   private modProduct(k: 'hit' | 'drain' | 'catch'): number {
@@ -355,6 +356,9 @@ export class Sim {
     // Endless: the audience gets harder to hold the longer it runs (drain × 1 + t / endlessRamp).
     if (this.endless) this.show.decayMult = this.baseDecayMult * (1 + this.time / TUNING.proto.endlessRamp);
     this.show.step(dt, this.time + dt, this.giant.tier, outnumbered, this.events);
+    // The teaching opening: the first Rampage always lands inside the first minute.
+    if (this.guided && TUNING.proto.on && !this.rampagedOnce && !this.inRampage && this.time >= TUNING.guided.rampageBy) this.show.ratings = 100;
+    if (this.inRampage) this.rampagedOnce = true;
     if (TUNING.proto.on && !this.inRampage) {
       // Prototype: one bar. The audience is the meter; full audience is Rampage ready.
       const was = this.giant.meter;
