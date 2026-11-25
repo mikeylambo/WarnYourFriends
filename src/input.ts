@@ -40,7 +40,8 @@ export function keyLabel(code: string): string {
  * Lane presses are edges; the sim buffers (5f) and queues (one max) them.
  */
 export class Input {
-  device: Device = 'keyboard';
+  /** Phones start as touch (Mike, 2026-11-25: PC key hints showed on a phone until the first tap). */
+  device: Device = typeof matchMedia !== 'undefined' && matchMedia('(pointer: coarse)').matches ? 'touch' : 'keyboard';
   /** id of the pad last used (for its button labels). */
   padId = '';
   private keys = new Set<string>();

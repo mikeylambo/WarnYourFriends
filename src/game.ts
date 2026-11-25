@@ -103,12 +103,18 @@ function updateRampageFx(dt: number, now: number) {
   // Never over the recap or the meeting (he can still be in Rampage when the broadcast ends).
   document.documentElement.classList.toggle('rampage', rampK > 0.5 && recapEl.hidden);
   document.documentElement.classList.toggle('reduceflashes', settings.reduceFlashes);
+  // The RAMPAGE button shows the meter: its fill, ready (full), active (in Rampage). Hidden under Auto Rampage.
+  rampBtn.style.setProperty('--fill', `${Math.min(100, sim.giant.meter).toFixed(1)}%`);
+  rampBtn.classList.toggle('ready', sim.giant.meter >= 100 && !sim.inRampage);
+  rampBtn.classList.toggle('active', sim.inRampage);
+  document.documentElement.classList.toggle('autoramp', settings.autoRampage);
   // A broadcast is on screen (the rotate-to-landscape card only covers play, not the menus).
   document.documentElement.classList.toggle('playing', !attract && recapEl.hidden);
   // Phone upright mid-broadcast: hold it paused behind the rotate card (resume from the pause menu once sideways).
   if (portraitTouch.matches && !paused) requestPause();
 }
-const portraitTouch = matchMedia('(orientation: portrait) and (pointer: coarse)');
+const portraitTouch = matchMedia('(orientation: portrait) and (pointer: coarse) and (max-width: 600px)');
+const rampBtn = document.getElementById('btn-shoulder') as HTMLElement;
 const debugEl = $('debug');
 const tierbar = $('tierbar');
 const chyPlace = document.querySelector('#chyron .place') as HTMLElement;
@@ -646,24 +652,41 @@ function gainFlash() {
 
 /** The Stare: a pale glare sweeps up his lane and the lanes either side, then fades. */
 const glares: { mesh: THREE.Mesh; t: number }[] = [];
-const glareMat = new THREE.MeshBasicMaterial({ color: 0xbfd6ff, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending });
+const glareMat = new THREE.MeshBasicMaterial({ color: 0xffffff, vertexColors: true, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending });
+/**
+ * The Stare's glare (Mike, 2026-11-25: the flat strip read as a "lane highlight" glitch): a gaze beam down the lane,
+ * narrow at him and widening, bright along its middle and fading to nothing at its edges and far end (vertex colours
+ * under additive blending: black is invisible).
+ */
 function glare(s0: number, d: number) {
   const A = TUNING.abilities.stare;
   const W = TUNING.lanes.width * (A.lanesEitherSide + 0.5);
   const N = 24;
-  const verts = new Float32Array((N + 1) * 2 * 3);
+  const verts = new Float32Array((N + 1) * 3 * 3);
+  const cols = new Float32Array((N + 1) * 3 * 3);
+  const tint = new THREE.Color(0xbfd6ff);
   const p = new THREE.Vector3();
   for (let i = 0; i <= N; i++) {
-    const s = s0 + 3 + (A.reach[Math.max(0, sim.abilityLevel - 1)] * i) / N;
-    for (let k = 0; k < 2; k++) {
-      sim.track.posAt(s, d + (k ? W : -W), p);
-      verts.set([p.x, 0.12, p.z], (i * 2 + k) * 3);
+    const f = i / N;
+    const s = s0 + 3 + A.reach[Math.max(0, sim.abilityLevel - 1)] * f;
+    const w = W * (0.35 + 0.65 * Math.min(1, f * 2.2));
+    const bright = Math.min(1, f * 8) * Math.pow(1 - f, 1.4);
+    for (let k = 0; k < 3; k++) {
+      sim.track.posAt(s, d + (k - 1) * w, p);
+      verts.set([p.x, 0.12, p.z], (i * 3 + k) * 3);
+      const c = k === 1 ? bright : 0;
+      cols.set([tint.r * c, tint.g * c, tint.b * c], (i * 3 + k) * 3);
     }
   }
   const idx: number[] = [];
-  for (let i = 0; i < N; i++) idx.push(i * 2, i * 2 + 1, i * 2 + 2, i * 2 + 1, i * 2 + 3, i * 2 + 2);
+  for (let i = 0; i < N; i++)
+    for (let k = 0; k < 2; k++) {
+      const a = i * 3 + k, b = a + 1, c = a + 3, e = a + 4;
+      idx.push(a, b, c, b, e, c);
+    }
   const geo = new THREE.BufferGeometry();
   geo.setAttribute('position', new THREE.BufferAttribute(verts, 3));
+  geo.setAttribute('color', new THREE.BufferAttribute(cols, 3));
   geo.setIndex(idx);
   const mesh = new THREE.Mesh(geo, glareMat.clone());
   mesh.renderOrder = 2;
@@ -678,8 +701,8 @@ function updateAbilityFx(dt: number) {
     const k = gl.t / A.glareTime;
     // Sweeps in from the giant (draw range grows), then fades.
     const total = gl.mesh.geometry.index!.count;
-    gl.mesh.geometry.setDrawRange(0, Math.ceil(Math.min(1, k * 3) * total / 6) * 6);
-    (gl.mesh.material as THREE.MeshBasicMaterial).opacity = (settings.reduceFlashes ? 0.18 : 0.35) * Math.max(0, 1 - k);
+    gl.mesh.geometry.setDrawRange(0, Math.ceil(Math.min(1, k * 3) * total / 12) * 12);
+    (gl.mesh.material as THREE.MeshBasicMaterial).opacity = (settings.reduceFlashes ? 0.3 : 0.6) * Math.max(0, 1 - k);
     if (k >= 1) {
       scene.remove(gl.mesh);
       gl.mesh.geometry.dispose();
@@ -1233,6 +1256,20 @@ function recapToMenu() {
   app.flow.onActivate('results', 'menu');
 }
 
+/**
+ * Fit a headline to the chyron (Mike, 2026-11-25: "OLD H..." on a phone): shrink the type, down to 62%, rather than
+ * cut it with an ellipsis. The chyron never lies (§1), and half a headline is close to it.
+ */
+function fitChyron(span: HTMLElement) {
+  span.style.fontSize = '';
+  const fit = () => {
+    if (!span.isConnected || span.clientWidth === 0) return;
+    const over = span.scrollWidth / span.clientWidth;
+    if (over > 1.001) span.style.fontSize = `${Math.max(0.62, 1 / over) * 100}%`;
+  };
+  fit();
+  requestAnimationFrame(fit); // once the slam-in has laid it out
+}
 /** §21 chyron: show a headline; tier changes break in with the stinger and the cream BREAKING kicker. */
 function showHeadline(h: Headline) {
   chyKicker.textContent = h.kicker;
@@ -1243,6 +1280,7 @@ function showHeadline(h: Headline) {
   span.textContent = h.text;
   span.className = 'in';
   chyText.replaceChildren(span);
+  fitChyron(span);
   if (h.breaking) audio.breaking();
 }
 
