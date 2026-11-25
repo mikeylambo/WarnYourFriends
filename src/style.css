@@ -1190,16 +1190,17 @@ html.replay #replay { top: calc((7vh + 10px + env(safe-area-inset-top)) / var(--
 /* Rundown: the sticky Go Live row fades the list into it, so a half-hidden ask reads as "scroll for more", not a stray bar. */
 #recap .preshow > .row::before { content: ''; position: absolute; left: 0; right: 0; top: -22px; height: 22px; background: linear-gradient(to bottom, transparent, var(--c-paper, #ece0c8)); pointer-events: none; }
 
-/* --- One HUD shape (Mike, 2026-11-25): every panel is the same slanted parallelogram, both ends, so nothing has a
-   square top-left corner amid the slants. Pause stays a square button; CAM and RAMP have their own buttons below.
-   The left padding grows by the slant so the content clears it. --- */
-#live b { clip-path: polygon(14px 0, 100% 0, calc(100% - 14px) 100%, 0 100%); padding-left: 38px; }
-#ratings { clip-path: polygon(14px 0, 100% 0, calc(100% - 14px) 100%, 0 100%); padding-left: 26px; }
-#chain .mult { clip-path: polygon(16px 0, 100% 0, calc(100% - 22px) 100%, 0 100%); padding-left: 28px; }
-#gears { clip-path: polygon(10px 0, 100% 0, calc(100% - 10px) 100%, 0 100%); padding-left: 22px; }
-#asks .hd { clip-path: polygon(8px 0, 100% 0, calc(100% - 8px) 100%, 0 100%); padding-left: 18px; }
-#ticker { clip-path: polygon(8px 0, 100% 0, calc(100% - 8px) 100%, 0 100%); }
-#ticker span { margin-left: 8px; }
+/* --- Anchored HUD (Mike, 2026-11-25: the all-parallelogram pass looked worse; reverted to anchored, done
+   consistently). Every panel is square on the edge that faces its screen border and slanted on the inner edge: the
+   left column (LIVE row, score, combo, audience, asks, lower third, ticker) is square-left; the right side (station
+   bug, CAM, RAMPAGE) is square-right. Like real lower thirds: pinned to the frame. --- */
+#live b, #live #clock, #live #segno, #live #fuel, #live #camtag { clip-path: polygon(0 0, 100% 0, calc(100% - 14px) 100%, 0 100%); }
+#ratings { clip-path: polygon(0 0, 100% 0, calc(100% - 14px) 100%, 0 100%); }
+#chain .mult { clip-path: polygon(0 0, 100% 0, calc(100% - 22px) 100%, 0 100%); }
+#gears { clip-path: polygon(0 0, 100% 0, calc(100% - 10px) 100%, 0 100%); }
+#asks .hd { clip-path: polygon(0 0, 100% 0, calc(100% - 8px) 100%, 0 100%); }
+#chyron .kicker { clip-path: none; padding-left: calc(var(--d-chy) * 0.34); }
+#ticker { clip-path: polygon(0 0, 100% 0, calc(100% - 8px) 100%, 0 100%); }
 
 /* --- RAMPAGE and CAM buttons (Mike, 2026-11-25: "an actual look"): station pieces in the HUD's slant. RAMPAGE fills
    with the audience, pulses gold when ready, glows in Rampage; it's hidden under Auto Rampage (it fires itself). --- */
@@ -1207,7 +1208,7 @@ html.replay #replay { top: calc((7vh + 10px + env(safe-area-inset-top)) / var(--
   width: 168px; height: 64px; right: calc(18px + env(safe-area-inset-right)); bottom: calc(26px + env(safe-area-inset-bottom));
   border: 0; border-radius: 0; padding: 0; overflow: hidden;
   background: linear-gradient(90deg, var(--c-red, #b3122a) var(--fill, 0%), rgba(26, 16, 32, 0.82) var(--fill, 0%));
-  clip-path: polygon(16px 0, 100% 0, calc(100% - 16px) 100%, 0 100%);
+  clip-path: polygon(16px 0, 100% 0, 100% 100%, 0 100%);
   font: italic 900 22px/64px var(--f-head); letter-spacing: 0.04em; color: var(--c-text, #f2e6cf);
 }
 #touch-ui #btn-shoulder span { position: relative; text-shadow: 0 2px 0 rgba(0, 0, 0, 0.35); }
@@ -1221,7 +1222,7 @@ html.autoramp #touch-ui #btn-shoulder { display: none; }
 #touch-ui #btn-cam {
   width: 64px; height: 30px; right: calc(10px + env(safe-area-inset-right)); top: calc(62px + env(safe-area-inset-top));
   border: 0; border-radius: 0; background: rgba(26, 16, 32, 0.86); color: var(--c-text, #f2e6cf);
-  clip-path: polygon(8px 0, 100% 0, calc(100% - 8px) 100%, 0 100%);
+  clip-path: polygon(8px 0, 100% 0, 100% 100%, 0 100%);
   font: italic 900 13px/30px var(--f-head); letter-spacing: 0.14em;
 }
 #touch-ui #btn-cam::after { content: ' ▸'; color: var(--c-red, #d7263d); }
@@ -1229,10 +1230,21 @@ html.autoramp #touch-ui #btn-shoulder { display: none; }
 @media (orientation: landscape) and (max-height: 500px) {
   #touch-ui #btn-shoulder { width: 140px; height: 54px; line-height: 54px; font-size: 19px; }
 }
-/* Room for the RAMPAGE badge beside the lower third; full width when Auto Rampage hides it. */
-html.touch #chyron, html.touch #ticker { right: calc(176px + env(safe-area-inset-right)); }
-html.touch.autoramp #chyron, html.touch.autoramp #ticker { right: calc(20px + env(safe-area-inset-right)); }
+/* RAMPAGE sits above the lower third on the right, mirroring the audience bar on the left (Mike, 2026-11-25: beside
+   the chyron it cut the headline and ticker short, and they're half the joke). The lower third keeps its full width. */
+html.touch #chyron, html.touch #ticker { right: calc(20px + env(safe-area-inset-right)); }
+#touch-ui #btn-shoulder { width: 150px; height: 44px; line-height: 44px; font-size: 18px; right: calc(20px + env(safe-area-inset-right)); bottom: calc((var(--d-lt) + var(--d-tick) + 14px + env(safe-area-inset-bottom))); }
 @media (orientation: landscape) and (max-height: 500px) {
-  html.touch #chyron, html.touch #ticker { right: calc(170px + env(safe-area-inset-right)); }
-  html.touch.autoramp #chyron, html.touch.autoramp #ticker { right: calc(20px + env(safe-area-inset-right)); }
+  #touch-ui #btn-shoulder { width: 130px; height: 38px; line-height: 38px; font-size: 16px; bottom: calc(var(--d-lt) + 18px + 12px + env(safe-area-inset-bottom) * 0.5); }
 }
+/* The traffic-cam cold open is the camera feed only: no CAM or RAMPAGE until the broadcast cuts in. */
+html:has(#coldopen:not([hidden])) #touch-ui { display: none; }
+/* Asks and mods have exactly two looks (Mike, 2026-11-25: "Hot Pursuit" sat dark or yellow, never clearly off): pale
+   when off, yellow with the ink outline when on. The generic button hover/focus red doesn't apply (on a phone, the last
+   tap kept focus, so a mod just switched off still looked lit). Keyboard and pad focus get a ring instead. */
+#recap .preshow .ask:not(.on):not(.locked), #recap .preshow .mod:not(.on),
+#recap .preshow .ask:not(.on):not(.locked):hover, #recap .preshow .mod:not(.on):hover,
+#recap .preshow .ask:not(.on):not(.locked):focus, #recap .preshow .mod:not(.on):focus { background: rgba(30, 24, 33, 0.12); color: var(--c-on-paper, #1a1020); }
+#recap .preshow .ask.on:hover, #recap .preshow .mod.on:hover, #recap .preshow .ask.on:focus, #recap .preshow .mod.on:focus { background: #1a1020; color: #1a1020; }
+#recap .preshow .ask:focus-visible, #recap .preshow .mod:focus-visible { outline: 3px solid var(--c-red, #b3122a); outline-offset: 2px; }
+#recap .preshow .mod:disabled { opacity: 0.55; }
