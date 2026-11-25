@@ -1261,8 +1261,39 @@ html.touch #chyron, html.touch #ticker { left: var(--edge-l); right: var(--edge-
 #touch-ui #btn-cam::after { content: ''; }
 #touch-ui #btn-shoulder { right: var(--edge-r); line-height: 1; letter-spacing: 0.08em; }
 #touch-ui #btn-shoulder span { line-height: 1; }
-/* RAMPAGE mirrors the audience bar: the same bottom edge; at least a thumb tall (44px) whatever the HUD Size. */
-#touch-ui #btn-shoulder { bottom: calc(var(--d-lt) + var(--d-tick) + 10px + env(safe-area-inset-bottom)); height: max(44px, calc(40px * var(--hs, 1))); width: max(150px, calc(220px * var(--hs, 1))); font-size: 18px; line-height: 1; }
-@media (orientation: landscape) and (max-height: 500px) {
-  #touch-ui #btn-shoulder { bottom: calc(var(--d-lt) + var(--d-tick) + 10px + env(safe-area-inset-bottom)); height: 44px; width: 150px; font-size: 18px; line-height: 1; }
+/* === HUD pass 3 (Mike, 2026-11-25) ==================================================================================
+   Squares stay for the score, combo, chyron and ticker; a slanted right edge on LIVE, the clock, fuel, the CAM tag,
+   the audience bar and the station bug's 6. CAM and RAMPAGE are circles again, with a real look: RAMPAGE carries the
+   audience as a ring that fills round it, goes gold when ready. Text sits centred in every box: equal padding, plus the
+   slant's width on the slanted side so the type centres on what you see. */
+#live b, #live #clock, #live #segno, #live #fuel, #live #camtag { clip-path: polygon(0 0, 100% 0, calc(100% - 12px) 100%, 0 100%); padding-left: 16px; padding-right: 28px; justify-content: center; }
+#live #camtag:not(.show) { display: none; } /* only when the camera changes, and takes no room otherwise */
+#gears { clip-path: polygon(0 0, 100% 0, calc(100% - 12px) 100%, 0 100%); padding: 8px 28px 8px 16px; align-items: center; }
+#bug .call { clip-path: none; padding: 8px 16px; align-items: center; text-align: center; }
+#bug .ch { clip-path: polygon(0 0, 100% 0, calc(100% - 12px) 100%, 0 100%); padding-right: 12px; width: 76px; }
+#ratings { padding: 6px 18px 8px 18px; align-items: center; column-gap: 14px; }
+#ratings .lbl { align-self: center; }
+
+#touch-ui #btn-shoulder, #touch-ui #btn-cam { clip-path: none; border-radius: 50%; padding: 0; display: flex; align-items: center; justify-content: center; text-align: center; font-style: normal; line-height: 1; }
+#touch-ui #btn-shoulder {
+  width: 88px; height: 88px; right: var(--edge-r); bottom: calc(var(--d-lt) + var(--d-tick) + 10px + env(safe-area-inset-bottom));
+  border: 0; color: var(--c-text, #f2e6cf); font: 900 13px/1 var(--f-head); letter-spacing: 0.06em;
+  background:
+    radial-gradient(circle closest-side, rgba(26, 16, 32, 0.92) 0 64%, transparent 65%),
+    conic-gradient(var(--c-red, #d7263d) var(--fill, 0%), rgba(255, 255, 255, 0.18) 0);
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.85), 0 6px 18px rgba(0, 0, 0, 0.45);
 }
+#touch-ui #btn-shoulder span { padding-left: 0.06em; }
+#touch-ui #btn-shoulder.ready { background: radial-gradient(circle closest-side, #f2b632 0 64%, #fff3c4 65%); color: #1a1020; }
+#touch-ui #btn-shoulder.active { background: radial-gradient(circle closest-side, #ffb43a 0 64%, #ffe39a 65%); color: #1a1020; }
+#touch-ui #btn-cam {
+  width: 46px; height: 46px; right: calc(var(--edge-r) + 50px); top: calc(var(--edge) + env(safe-area-inset-top) + 76px * var(--hs, 1) + 8px);
+  border: 2px solid rgba(255, 255, 255, 0.85); background: rgba(26, 16, 32, 0.88); font: 900 12px/1 var(--f-head); letter-spacing: 0.08em; padding-left: 0.08em;
+}
+@media (orientation: landscape) and (max-height: 500px) {
+  #touch-ui #btn-shoulder { width: 76px; height: 76px; font-size: 12px; bottom: calc(var(--d-lt) + var(--d-tick) + 10px + env(safe-area-inset-bottom)); }
+}
+#live b { padding-left: 34px; }
+#touch-ui #btn-shoulder { font-size: 11px; letter-spacing: 0.04em; background: radial-gradient(circle closest-side, rgba(26, 16, 32, 0.92) 0 71%, transparent 72%), conic-gradient(var(--c-red, #d7263d) var(--fill, 0%), rgba(255, 255, 255, 0.18) 0); }
+#touch-ui #btn-shoulder.ready { background: radial-gradient(circle closest-side, #f2b632 0 71%, #fff3c4 72%); }
+#touch-ui #btn-shoulder.active { background: radial-gradient(circle closest-side, #ffb43a 0 71%, #ffe39a 72%); }
