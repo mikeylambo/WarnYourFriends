@@ -1190,17 +1190,6 @@ html.replay #replay { top: calc((7vh + 10px + env(safe-area-inset-top)) / var(--
 /* Rundown: the sticky Go Live row fades the list into it, so a half-hidden ask reads as "scroll for more", not a stray bar. */
 #recap .preshow > .row::before { content: ''; position: absolute; left: 0; right: 0; top: -22px; height: 22px; background: linear-gradient(to bottom, transparent, var(--c-paper, #ece0c8)); pointer-events: none; }
 
-/* --- Anchored HUD (Mike, 2026-11-25: the all-parallelogram pass looked worse; reverted to anchored, done
-   consistently). Every panel is square on the edge that faces its screen border and slanted on the inner edge: the
-   left column (LIVE row, score, combo, audience, asks, lower third, ticker) is square-left; the right side (station
-   bug, CAM, RAMPAGE) is square-right. Like real lower thirds: pinned to the frame. --- */
-#live b, #live #clock, #live #segno, #live #fuel, #live #camtag { clip-path: polygon(0 0, 100% 0, calc(100% - 14px) 100%, 0 100%); }
-#ratings { clip-path: polygon(0 0, 100% 0, calc(100% - 14px) 100%, 0 100%); }
-#chain .mult { clip-path: polygon(0 0, 100% 0, calc(100% - 22px) 100%, 0 100%); }
-#gears { clip-path: polygon(0 0, 100% 0, calc(100% - 10px) 100%, 0 100%); }
-#asks .hd { clip-path: polygon(0 0, 100% 0, calc(100% - 8px) 100%, 0 100%); }
-#chyron .kicker { clip-path: none; padding-left: calc(var(--d-chy) * 0.34); }
-#ticker { clip-path: polygon(0 0, 100% 0, calc(100% - 8px) 100%, 0 100%); }
 
 /* --- RAMPAGE and CAM buttons (Mike, 2026-11-25: "an actual look"): station pieces in the HUD's slant. RAMPAGE fills
    with the audience, pulses gold when ready, glows in Rampage; it's hidden under Auto Rampage (it fires itself). --- */
@@ -1248,3 +1237,32 @@ html:has(#coldopen:not([hidden])) #touch-ui { display: none; }
 #recap .preshow .ask.on:hover, #recap .preshow .mod.on:hover, #recap .preshow .ask.on:focus, #recap .preshow .mod.on:focus { background: #1a1020; color: #1a1020; }
 #recap .preshow .ask:focus-visible, #recap .preshow .mod:focus-visible { outline: 3px solid var(--c-red, #b3122a); outline-offset: 2px; }
 #recap .preshow .mod:disabled { opacity: 0.55; }
+
+/* === Square HUD (Mike, 2026-11-25: "square everything") ===========================================================
+   Every HUD panel is a plain rectangle, and everything shares one edge margin (--edge) on both sides. Panels that
+   scale with HUD Size (CSS zoom) divide their offsets by --hs, so the score and audience bar line up with the
+   chyron and ticker, which don't scale. Buttons centre their text. */
+:root { --edge: 20px; --edge-l: calc(var(--edge) + env(safe-area-inset-left)); --edge-r: calc(var(--edge) + env(safe-area-inset-right)); }
+#live b, #live #clock, #live #segno, #live #fuel, #live #camtag, #ratings, #chain .mult, #gears, #gears i, #asks .hd,
+#chyron .kicker, #chyron .text, #ticker, #bug .call, #bug .ch, #controls, #replay b, #replay span, #touch-ui #btn-shoulder, #touch-ui #btn-cam { clip-path: none; }
+html.prime #hud::after { clip-path: none; }
+/* Left column: one edge. */
+#live, #ratings, #chain, #gears { left: calc(var(--edge-l) / var(--hs, 1)); }
+#chyron, #ticker { left: var(--edge-l); right: var(--edge-r); }
+html.touch #chyron, html.touch #ticker { left: var(--edge-l); right: var(--edge-r); }
+#chyron .kicker { padding: 0 calc(var(--d-chy) * 0.34); }
+#chyron .text span { padding: 0 calc(var(--d-chy) * 0.34); }
+#ticker span { margin-left: 0; }
+/* Right column: pause on the edge, the station bug beside it, CAM under the bug's right edge, RAMPAGE on the edge. */
+#btn-pause { right: var(--edge-r); top: calc(var(--edge) + env(safe-area-inset-top)); border-radius: 0; }
+#bug { right: calc((var(--edge-r) + 50px) / var(--hs, 1)); top: calc((var(--edge) + env(safe-area-inset-top)) / var(--hs, 1)); }
+#touch-ui #btn-cam, #touch-ui #btn-shoulder { display: flex; align-items: center; justify-content: center; padding: 0 0 0 0.14em; font-style: normal; }
+#touch-ui #btn-cam { right: calc(var(--edge-r) + 50px); top: calc(var(--edge) + env(safe-area-inset-top) + 76px * var(--hs, 1) + 8px); width: 72px; height: 30px; line-height: 1; }
+#touch-ui #btn-cam::after { content: ''; }
+#touch-ui #btn-shoulder { right: var(--edge-r); line-height: 1; letter-spacing: 0.08em; }
+#touch-ui #btn-shoulder span { line-height: 1; }
+/* RAMPAGE mirrors the audience bar: the same bottom edge; at least a thumb tall (44px) whatever the HUD Size. */
+#touch-ui #btn-shoulder { bottom: calc(var(--d-lt) + var(--d-tick) + 10px + env(safe-area-inset-bottom)); height: max(44px, calc(40px * var(--hs, 1))); width: max(150px, calc(220px * var(--hs, 1))); font-size: 18px; line-height: 1; }
+@media (orientation: landscape) and (max-height: 500px) {
+  #touch-ui #btn-shoulder { bottom: calc(var(--d-lt) + var(--d-tick) + 10px + env(safe-area-inset-bottom)); height: 44px; width: 150px; font-size: 18px; line-height: 1; }
+}
