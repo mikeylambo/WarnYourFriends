@@ -1294,6 +1294,45 @@ html.touch #chyron, html.touch #ticker { left: var(--edge-l); right: var(--edge-
   #touch-ui #btn-shoulder { width: 76px; height: 76px; font-size: 12px; bottom: calc(var(--d-lt) + var(--d-tick) + 10px + env(safe-area-inset-bottom)); }
 }
 #live b { padding-left: 34px; }
-#touch-ui #btn-shoulder { font-size: 11px; letter-spacing: 0.04em; background: radial-gradient(circle closest-side, rgba(26, 16, 32, 0.92) 0 71%, transparent 72%), conic-gradient(var(--c-red, #d7263d) var(--fill, 0%), rgba(255, 255, 255, 0.18) 0); }
-#touch-ui #btn-shoulder.ready { background: radial-gradient(circle closest-side, #f2b632 0 71%, #fff3c4 72%); }
-#touch-ui #btn-shoulder.active { background: radial-gradient(circle closest-side, #ffb43a 0 71%, #ffe39a 72%); }
+/* RAMPAGE is a plain circle (Mike: no ring, the audience bar is the meter): dark, gold when ready, warm in Rampage. */
+#touch-ui #btn-shoulder { font-size: 11px; letter-spacing: 0.04em; background: rgba(26, 16, 32, 0.9); }
+#touch-ui #btn-shoulder.ready { background: #f2b632; color: #1a1020; }
+#touch-ui #btn-shoulder.active { background: #ffb43a; color: #1a1020; }
+/* No fuel bar: the clock is the one timer (counts down to sign-off at the end, red pulse in the last seconds). */
+#live #fuel { display: none !important; }
+#live #clock.crit { background: var(--c-red, #b3122a); animation: clock-crit 0.8s ease-in-out infinite; }
+@keyframes clock-crit { 50% { filter: brightness(1.35); } }
+html.reduceflashes #live #clock.crit { animation: none; }
+/* Viewer video on phones (landscape): in the right column's gap, below CAM and above RAMPAGE, as big as that gap
+   allows, landscape shaped. */
+@media (orientation: landscape) and (max-height: 500px) {
+  html.touch #pip, #pip {
+    --pip-top: calc(var(--edge) + env(safe-area-inset-top) + 76px * var(--hs, 1) + 8px + 46px + 10px);
+    --pip-bottom: calc(var(--d-lt) + var(--d-tick) + 10px + env(safe-area-inset-bottom) + 76px + 10px);
+    top: var(--pip-top); bottom: auto; right: var(--edge-r);
+    height: max(70px, min(130px, calc(100vh - var(--pip-top) - var(--pip-bottom))));
+    width: auto; aspect-ratio: 16 / 10;
+  }
+  html.autoramp #pip { --pip-bottom: calc(var(--d-lt) + var(--d-tick) + 10px + env(safe-area-inset-bottom) + 10px); }
+}
+
+/* === Right column = the viewer video (Mike, 2026-11-25) ===========================================================
+   RAMPAGE moves to the end of the audience bar (positioned from it in game.ts), so the right column holds only the
+   station bug, pause, CAM and the viewer video, which runs tall and phone-shaped (like real viewer footage) from below
+   CAM down to the lower third, with or without Auto Rampage. */
+#touch-ui #btn-shoulder, html .touch #btn-shoulder { right: auto; bottom: auto; width: 64px; height: 64px; font-size: 9.5px; }
+@media (orientation: landscape) and (max-height: 500px) { #touch-ui #btn-shoulder { right: auto; bottom: auto; width: 60px; height: 60px; font-size: 9px; } }
+html.touch #pip, #pip, html.autoramp #pip {
+  --pip-top: calc(var(--edge) + env(safe-area-inset-top) + 76px * var(--hs, 1) + 8px + 46px + 10px);
+  --pip-bottom: calc(var(--d-lt) + var(--d-tick) + 18px + env(safe-area-inset-bottom));
+  top: var(--pip-top); bottom: auto; right: var(--edge-r);
+  height: min(320px, calc(100vh - var(--pip-top) - var(--pip-bottom))); width: auto; aspect-ratio: 9 / 14;
+}
+#pip .tag { white-space: nowrap; font-size: 8px; letter-spacing: 0.12em; padding: 4px 6px; }
+/* === The audience bar is the RAMPAGE button (Mike, 2026-11-25: "the cleanest") ====================================
+   No separate button: on touch the bar takes the tap. Full, it turns gold and says TAP FOR RAMPAGE. */
+#touch-ui #btn-shoulder { display: none !important; }
+html.touch #gears { pointer-events: auto; cursor: pointer; }
+#gears.ready { background: #f2b632; color: #1a1020; }
+#gears.ready .lbl, #gears.ready .nm { color: #1a1020; }
+html:not(.reduceflashes) #gears.ready { animation: ramp-ready 0.9s ease-in-out infinite; transform-origin: left center; }

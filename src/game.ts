@@ -103,10 +103,7 @@ function updateRampageFx(dt: number, now: number) {
   // Never over the recap or the meeting (he can still be in Rampage when the broadcast ends).
   document.documentElement.classList.toggle('rampage', rampK > 0.5 && recapEl.hidden);
   document.documentElement.classList.toggle('reduceflashes', settings.reduceFlashes);
-  // The RAMPAGE button shows the meter: its fill, ready (full), active (in Rampage). Hidden under Auto Rampage.
-  rampBtn.style.setProperty('--fill', `${Math.min(100, sim.giant.meter).toFixed(1)}%`);
-  rampBtn.classList.toggle('ready', sim.giant.meter >= 100 && !sim.inRampage);
-  rampBtn.classList.toggle('active', sim.inRampage);
+  // Auto Rampage on/off, for the HUD's styles.
   document.documentElement.classList.toggle('autoramp', settings.autoRampage);
   // A broadcast is on screen (the rotate-to-landscape card only covers play, not the menus).
   document.documentElement.classList.toggle('playing', !attract && recapEl.hidden);
@@ -114,7 +111,6 @@ function updateRampageFx(dt: number, now: number) {
   if (portraitTouch.matches && !paused) requestPause();
 }
 const portraitTouch = matchMedia('(orientation: portrait) and (pointer: coarse) and (max-width: 600px)');
-const rampBtn = document.getElementById('btn-shoulder') as HTMLElement;
 const debugEl = $('debug');
 const tierbar = $('tierbar');
 const chyPlace = document.querySelector('#chyron .place') as HTMLElement;
@@ -359,7 +355,8 @@ const cutLog: { t: number; reason: CutDecision['reason']; index: number; laneBus
 const triggerLog: { t: number; kind: string }[] = [];
 let bot: Bot | null = null;
 const audio = new Audio();
-const input = new Input(canvas, $('btn-shoulder'), $('btn-pause'), $('btn-ability'), document.getElementById('btn-ability2'));
+// The audience bar is the RAMPAGE button on touch (Mike, 2026-11-25: one object, the meter and the action).
+const input = new Input(canvas, $('gears'), $('btn-pause'), $('btn-ability'), document.getElementById('btn-ability2'));
 $('btn-cam').addEventListener('pointerdown', (e) => {
   e.preventDefault();
   e.stopPropagation();
@@ -3010,6 +3007,8 @@ function updateHud(dt: number) {
   fuelBar.style.transform = `scaleX(${fuel.toFixed(4)})`;
   fuelEl.classList.toggle('low', counting);
   fuelEl.classList.toggle('crit', sim.live && total - sim.time <= TUNING.hud.fuelCritical);
+  // The fuel bar is gone (Mike, 2026-11-25: two timers said one thing); the clock carries the last seconds' red pulse.
+  clockEl.classList.toggle('crit', sim.live && !sim.endless && total - sim.time <= TUNING.hud.fuelCritical);
   const brakeShown = input.brakeLatched && sim.live;
   if (brakeOnEl.hidden === brakeShown) brakeOnEl.hidden = !brakeShown;
   // One primary number: the score (the whole run's in Full Broadcast; spending never lowers it). Ratings is the
@@ -3036,7 +3035,7 @@ function updateHud(dt: number) {
   gearsEl.classList.toggle('ready', ready);
   gearsEl.dataset.tier = String(g.tier);
   // Readability pass (Mike, 2026-11-17): the number says where it is; full, the button; in Rampage, the seconds left.
-  const nm = ramp ? `${g.rampT.toFixed(1)}s` : ready ? (settings.autoRampage ? 'READY!' : `<kbd>${esc(glyph('shoulder'))}</kbd> GO!`) : `${Math.floor(g.meter)}%`;
+  const nm = ramp ? `${g.rampT.toFixed(1)}s` : ready ? (settings.autoRampage ? 'READY!' : glyphFamily === 'touch' ? 'TAP FOR RAMPAGE' : `<kbd>${esc(glyph('shoulder'))}</kbd> GO!`) : `${Math.floor(g.meter)}%`;
   if (gearName.innerHTML !== nm) gearName.innerHTML = nm;
   gearsEl.classList.toggle('ramp', ramp);
   // Prototype: a clean run builds the sprint (it shows on the meter's label).
