@@ -1098,10 +1098,14 @@ export class HighwayView {
       const h = track.headingAt(s);
       const left = Math.round(s / sp) % 2 === 0;
       if (!left && (this.exitFor(seg) || this.nearRamp(seg))) continue; // the ramp peels off on the right
-      const out = seg.zone === 'bridge' ? TUNING.look.bridgeMount : 1.6; // bridge lamps stand on the parapet, not the water
+      // Downtown (Mike, 2026-11-25: "random lines through the middle" of buildings): a 9m pole on the sidewalk is
+      // drawn across the facade behind it from the chopper. There the lamps hang off the building fronts instead:
+      // no pole, the arm reaching out from the wall (storefronts start 6m out and are 8m+ tall).
+      const wall = seg.zone === 'avenue';
+      const out = wall ? 6 : seg.zone === 'bridge' ? TUNING.look.bridgeMount : 1.6; // bridge lamps stand on the parapet, not the water
       const baseD = left ? -out : w + out;
       const headD = left ? 2.0 : w - 2.0;
-      const H = 9;
+      const H = wall ? 6.5 : 9;
       const base = track.posAt(s, baseD, { x: 0, z: 0 });
       const head = track.posAt(s, headD, { x: 0, z: 0 });
       const pole = new THREE.Mesh(this.box, toon(PALETTE.pole));
@@ -1129,7 +1133,8 @@ export class HighwayView {
       p.rotation.y = -h;
       p.scale.set(17, 1, 14);
       p.renderOrder = 1;
-      group.add(pole, arm, housing, lens, halo, p);
+      group.add(arm, housing, lens, halo, p);
+      if (!wall) group.add(pole);
       lamps.push({ x: head.x, y: H, z: head.z });
     }
     return lamps;

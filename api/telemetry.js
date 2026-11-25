@@ -1258,7 +1258,8 @@ var TUNING = {
     /** Real point lights reused on the nearest lamps (the rest are glow decals). Each light costs every lit pixel. */
     lampLights: 2,
     /** Chopper spotlight: ground pool radius (m), lag following the giant (s), wander (m). */
-    spotRadius: 7.5,
+    spotRadius: 8.5,
+    // 7.5 → 8.5 (2026-11-25): more lit road around him at night, so his silhouette holds in the head-on angles
     spotLag: 0.25,
     spotWander: 1.2,
     /** Chopper shadow crosses the road every this many seconds (random in range). */
