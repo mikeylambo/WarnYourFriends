@@ -935,16 +935,8 @@ function openCredits(): Promise<void> {
     <div class="kicker">CREDITS</div>
     <h2 class="cr-title">Giant at Large<small>Warn Your Friends</small></h2>
     <dl class="cr">
-      <dt>Created, designed and directed by</dt><dd>Mike</dd>
-      <dt>Development assistance</dt><dd>Claude (Anthropic)</dd>
-      <dt>Giant model</dt><dd>Made with Meshy</dd>
-      <dt>Sound effects</dt><dd>Made with ElevenLabs</dd>
-      <dt>Ground textures</dt><dd>Made with OpenAI image generation</dd>
-      <dt>3D engine</dt><dd>three.js (MIT licence)</dd>
-      <dt>Type</dt><dd>Inter Tight and Big Shoulders Display (SIL Open Font Licence)</dd>
+      <dt>Created, designed and directed by</dt><dd>Mikey Lambo</dd>
     </dl>
-    <p class="cr-note">WYF 6 News is a fictional station. Any resemblance to a real broadcaster is a coincidence. No one is ever hurt.</p>
-    <p class="cr-note"><a href="./privacy.html" target="_blank" rel="noopener">Privacy policy</a></p>
     <div class="row"><button class="go" id="cr-back">Back</button></div>
   </div>`;
   recapEl.hidden = false;
@@ -2371,6 +2363,7 @@ app = await createGameApp({
       // motion, shake, vibration, fullscreen) are filed under their tabs by settingsTabsDom.
       choices: () => {
         const all: (UIChoiceLite & { tab: SettingsTab })[] = [
+          { tab: 'game', id: 'wyf-privacy', label: 'Privacy Policy', description: 'What the game stores and why (opens in a new tab)' },
           { tab: 'game', id: 'wyf-stats', label: `Share Anonymous Play Stats: ${onOff(settings.telemetry)}`, description: 'How broadcasts end and where they stop. No names, ids or scores.' },
           { tab: 'game', id: 'wyf-auto', label: `Auto Rampage: ${onOff(settings.autoRampage)}`, description: 'Rampage fires by itself the moment the audience is full' },
           { tab: 'game', id: 'wyf-speed', label: `Game Speed: ${Math.round(settings.gameSpeed * 100)}%`, description: 'Slower gives more time to react. Below 100% scores stay off the leaderboard' },
@@ -2428,6 +2421,7 @@ app = await createGameApp({
           resize();
         } else if (id === 'wyf-speed') settings.gameSpeed = next(GAME_SPEEDS, settings.gameSpeed);
         else if (id === 'wyf-auto') settings.autoRampage = !settings.autoRampage;
+        else if (id === 'wyf-privacy') window.open('./privacy.html', '_blank', 'noopener');
         else if (id === 'wyf-stats') {
           settings.telemetry = !settings.telemetry;
           setTelemetry(settings.telemetry);
