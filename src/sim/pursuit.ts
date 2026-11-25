@@ -897,6 +897,14 @@ export class Pursuit {
         break;
     }
     u.s += u.speed * dt;
+    // It drives through whatever is parked in its lane (Mike, 2026-11-25: cruisers sliding through cars): ploughs it
+    // aside like a chasing cruiser does. A blockade is a battering ram; no award, it's the police's mess.
+    for (const p of sim.track.propsBetween(u.s - u.hl - 3, u.s + u.hl + 3)) {
+      if (!p.alive || p.mover || Math.abs(p.s - u.s) >= p.hl + u.hl || Math.abs(p.d - u.d) >= p.hw + u.hw - 0.15) continue;
+      if (p.cls !== 'medium' && p.cls !== 'light' && p.cls !== 'heavy') continue;
+      p.alive = false;
+      sim.emitPublic({ type: 'policeSmash', id: u.id, propId: p.id, cls: p.cls, mat: p.mat, s: p.s, d: p.d, speed: Math.max(u.speed, 6) });
+    }
     // A blockade car sliding across into the gap (blinker on in the view).
     if (Math.abs(u.toD - u.d) > 1e-3) {
       const step = (TUNING.lanes.width / TUNING.pursuit.blockade.shiftTime) * dt;

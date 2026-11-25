@@ -784,6 +784,8 @@ var TUNING = {
    * never catch up and never attack (pursuit AI is Phase 2); they sell the chase.
    */
   escort: {
+    /** Oncoming cars count as in the way from this far ahead (m): they close at both speeds. */
+    oncomingLook: 60,
     count: 3,
     /** LOCKED (§1): pursuers never spawn within 40m. Spawning 100m back also keeps them behind every camera angle. */
     spawnBehind: 100,
@@ -2329,13 +2331,19 @@ var Escort = class {
     for (const p of this.solid(s - 4, s + 10)) {
       if (p.alive && Math.abs(p.d - d) < p.hw + 1.1) return true;
     }
+    return this.oncomingIn(s, d);
+  }
+  oncomingIn(s, d) {
+    for (const p of this.track.propsBetween(s - 4, s + TUNING.escort.oncomingLook)) {
+      if (p.alive && p.oncoming && Math.abs(p.d - d) < p.hw + 1.1) return true;
+    }
     return false;
   }
   /** Something solid in the lane right in front of its nose (within `convoyGap` + a car)? */
   blockedAhead(s, d) {
     const E = TUNING.escort;
     const near = [...this.track.propsBetween(s, s + E.hl + 6), ...this.solid(s, s + E.hl + 6)];
-    return near.some((p) => p.alive && Math.abs(p.d - d) < p.hw + E.hw && p.s - p.hl > s && p.s - p.hl < s + E.hl * 2 + E.convoyGap);
+    return near.some((p) => p.alive && Math.abs(p.d - d) < p.hw + E.hw && p.s - p.hl > s && p.s - p.hl < s + E.hl * 2 + E.convoyGap) || this.oncomingIn(s, d);
   }
   /** Returns ids of cruisers that joined this tick. */
   /**
@@ -3386,6 +3394,12 @@ var Pursuit = class {
         break;
     }
     u.s += u.speed * dt;
+    for (const p of sim.track.propsBetween(u.s - u.hl - 3, u.s + u.hl + 3)) {
+      if (!p.alive || p.mover || Math.abs(p.s - u.s) >= p.hl + u.hl || Math.abs(p.d - u.d) >= p.hw + u.hw - 0.15) continue;
+      if (p.cls !== "medium" && p.cls !== "light" && p.cls !== "heavy") continue;
+      p.alive = false;
+      sim.emitPublic({ type: "policeSmash", id: u.id, propId: p.id, cls: p.cls, mat: p.mat, s: p.s, d: p.d, speed: Math.max(u.speed, 6) });
+    }
     if (Math.abs(u.toD - u.d) > 1e-3) {
       const step = TUNING.lanes.width / TUNING.pursuit.blockade.shiftTime * dt;
       u.d += Math.max(-step, Math.min(step, u.toD - u.d));

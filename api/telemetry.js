@@ -784,6 +784,8 @@ var TUNING = {
    * never catch up and never attack (pursuit AI is Phase 2); they sell the chase.
    */
   escort: {
+    /** Oncoming cars count as in the way from this far ahead (m): they close at both speeds. */
+    oncomingLook: 60,
     count: 3,
     /** LOCKED (§1): pursuers never spawn within 40m. Spawning 100m back also keeps them behind every camera angle. */
     spawnBehind: 100,
