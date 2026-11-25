@@ -1348,3 +1348,12 @@ html.touch #pip, #pip, html.autoramp #pip { --pip-top: calc(var(--edge) + env(sa
    middle). Nudged with position, not transform: the crawl animation owns transform. */
 #ticker span { position: relative; top: calc(var(--d-tick) * -0.15); }
 @media (orientation: landscape) and (max-height: 500px) { #ticker span { line-height: 18px; } }
+/* Credits (release prep). */
+#recap .credits .cr-title { margin: 12px 0 4px; font: italic 900 30px/1 var(--f-head); }
+#recap .credits .cr-title small { display: block; margin-top: 4px; font: 700 14px/1 var(--f-head); letter-spacing: 0.18em; text-transform: uppercase; opacity: 0.7; }
+#recap .credits dl.cr { display: grid; grid-template-columns: auto 1fr; gap: 6px 18px; margin: 14px 0; font: 600 14px/1.35 var(--f-head); }
+#recap .credits dt { opacity: 0.65; text-transform: uppercase; letter-spacing: 0.08em; font-size: 11px; padding-top: 2px; }
+#recap .credits dd { margin: 0; font-weight: 800; }
+#recap .credits .cr-note { font-size: 12px; opacity: 0.75; margin: 6px 0; }
+#recap .credits .cr-note a { color: inherit; text-decoration: underline; }
+@media (max-width: 560px) { #recap .credits dl.cr { grid-template-columns: 1fr; gap: 2px; } #recap .credits dd { margin-bottom: 6px; } }

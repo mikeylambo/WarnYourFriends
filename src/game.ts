@@ -925,6 +925,43 @@ function openAwards(): Promise<void> {
   });
 }
 
+/**
+ * Credits (2026-11-25, release prep). Who made it, the tools that made its assets, and the open-source parts with
+ * their licences. Links to the privacy policy.
+ */
+function openCredits(): Promise<void> {
+  app?.ui.show('gameplay-placeholder');
+  recapEl.innerHTML = `<div class="card briefing credits">
+    <div class="kicker">CREDITS</div>
+    <h2 class="cr-title">Giant at Large<small>Warn Your Friends</small></h2>
+    <dl class="cr">
+      <dt>Created, designed and directed by</dt><dd>Mike</dd>
+      <dt>Development assistance</dt><dd>Claude (Anthropic)</dd>
+      <dt>Giant model</dt><dd>Made with Meshy</dd>
+      <dt>Sound effects</dt><dd>Made with ElevenLabs</dd>
+      <dt>Ground textures</dt><dd>Made with OpenAI image generation</dd>
+      <dt>3D engine</dt><dd>three.js (MIT licence)</dd>
+      <dt>Type</dt><dd>Inter Tight and Big Shoulders Display (SIL Open Font Licence)</dd>
+    </dl>
+    <p class="cr-note">WYF 6 News is a fictional station. Any resemblance to a real broadcaster is a coincidence. No one is ever hurt.</p>
+    <p class="cr-note"><a href="./privacy.html" target="_blank" rel="noopener">Privacy policy</a></p>
+    <div class="row"><button class="go" id="cr-back">Back</button></div>
+  </div>`;
+  recapEl.hidden = false;
+  recapArmedAt = performance.now() + 250;
+  document.documentElement.classList.add('briefing');
+  $<HTMLButtonElement>('cr-back').focus();
+  return new Promise((resolve) => {
+    const close = (briefingClose = () => {
+      briefingClose = null;
+      document.documentElement.classList.remove('briefing');
+      hideRecap();
+      resolve();
+    });
+    $<HTMLButtonElement>('cr-back').onclick = () => close();
+  });
+}
+
 /** Settings → Controls: rebind the keyboard (accessibility, 2026-11-17). One key per action; a key taken by another action swaps. */
 function openControls(): Promise<void> {
   const NAMES: Record<KeyAction, string> = { left: 'Lane left', right: 'Lane right', brake: 'Brake', shoulder: 'Rampage', ability: 'Ability', ability2: 'Ability 2' };
@@ -2437,6 +2474,7 @@ function refreshMainMenu() {
       { id: 'awards', label: 'Awards' },
       { id: 'howto', label: 'How to Play' },
       { id: 'settings', label: 'Settings' },
+      { id: 'credits', label: 'Credits' },
     ],
   });
 }
@@ -2447,6 +2485,7 @@ refreshMainMenu();
   app.flow.onActivate = (screen: string, choice: string) => {
     if (screen === 'main-menu' && choice === 'howto') void openBriefing(false).then(() => app!.ui.show('main-menu'));
     else if (screen === 'main-menu' && choice === 'awards') void openAwards().then(() => app!.ui.show('main-menu'));
+    else if (screen === 'main-menu' && choice === 'credits') void openCredits().then(() => app!.ui.show('main-menu'));
     else if (screen === 'main-menu' && choice === 'run' && PROTO) void openPreShow().then((go) => (go ? flowActivate('mode-select', 'run') : app!.ui.show('main-menu')));
     else if (screen === 'main-menu' && (choice === 'run' || choice === 'endless' || choice === 'daily' || choice === 'broadcast')) flowActivate('mode-select', choice);
     else flowActivate(screen, choice);

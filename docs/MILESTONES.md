@@ -53,8 +53,8 @@ Status: `[ ]` todo · `[~]` in progress · `[x]` done
 
 ## M3 — Release build
 - [ ] Strip debug and playtest surfaces (`?tune`, `?debug`, `?playtest`, `?classic`, "Copy play data", `window.__GAME` outside dev).
-- [ ] Privacy policy (leaderboard names), terms, credits screen, age rating.
-- [ ] Title / trademark search (DECISIONS 2026-11-09 still open).
+- [~] Privacy policy (`public/privacy.html`, linked from Credits; contact email still to fill in) and credits screen (main menu → Credits) done; terms and age rating still todo.
+- [~] Title / trademark search: web pass found no conflict (`docs/TRADEMARK-SEARCH.md`); official USPTO / store checks listed there still to do.
 - [ ] Asset provenance list: Meshy, ElevenLabs, painted art, made under paid accounts (keep receipts / account tier per asset).
 - [ ] Music: a signature theme and a Rampage layer.
 

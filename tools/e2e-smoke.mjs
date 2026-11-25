@@ -525,7 +525,7 @@ try {
     await page.keyboard.press('Escape');
     await page.waitForTimeout(400);
     if (m.hud || m.asks) fail(`broadcast HUD shows behind the menu (${JSON.stringify(m)})`);
-    else if (m.choices !== 'run|endless|daily|awards|howto|settings') fail(`main menu choices: ${m.choices}`);
+    else if (m.choices !== 'run|endless|daily|awards|howto|settings|credits') fail(`main menu choices: ${m.choices}`);
     else ok(`main menu over a clean chopper shot: ${m.choices}`);
     await ctx.close();
   }

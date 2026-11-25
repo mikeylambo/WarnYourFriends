@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Privacy Policy · Giant at Large</title>
+<style>
+  :root { --paper: #ece0c8; --ink: #1a1020; --red: #b3122a; --mute: #5a4f5f; }
+  body { margin: 0; background: var(--paper); color: var(--ink); font: 16px/1.6 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { max-width: 760px; margin: 0 auto; padding: 32px 20px 64px; }
+  .kicker { display: inline-block; background: var(--ink); color: var(--paper); font: italic 900 13px/1 ui-sans-serif, system-ui, sans-serif; letter-spacing: 0.16em; padding: 8px 14px; text-transform: uppercase; }
+  h1 { font-size: 34px; line-height: 1.1; margin: 16px 0 4px; font-style: italic; }
+  .date { color: var(--mute); margin: 0 0 28px; }
+  h2 { font-size: 20px; margin: 32px 0 8px; border-left: 4px solid var(--red); padding-left: 10px; }
+  table { border-collapse: collapse; width: 100%; margin: 8px 0; font-size: 15px; }
+  th, td { text-align: left; vertical-align: top; padding: 8px 10px; border-bottom: 1px solid rgba(26, 16, 32, 0.15); }
+  th { font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--mute); }
+  code { background: rgba(26, 16, 32, 0.08); padding: 1px 5px; }
+  a { color: var(--red); }
+</style>
+</head>
+<body>
+<main>
+  <span class="kicker">WYF 6 News · Standards Desk</span>
+  <h1>Privacy Policy</h1>
+  <p class="date">Giant at Large: Warn Your Friends · Effective 25 November 2026</p>
+
+  <p>The short version: the game keeps your progress on your own device. If you put a score on the leaderboard, we store the name you typed and your score. If you leave "Share Anonymous Play Stats" on, the game sends counts such as "a Story broadcast ended in Downtown", with nothing that identifies you. There are no ads, no cookies, no tracking across other sites, and nothing is sold.</p>
+
+  <h2>What stays on your device</h2>
+  <p>The game saves the following in your browser's local storage. It never leaves your device unless a section below says so.</p>
+  <table>
+    <tr><th>What</th><th>Why</th></tr>
+    <tr><td>Settings (controls, display, audio, accessibility)</td><td>So the game remembers how you like it.</td></tr>
+    <tr><td>Progress: awards, outfits, unlocked traffic mods, best scores</td><td>So your progress carries over between sessions.</td></tr>
+    <tr><td>Whether you've seen the first-broadcast tutorial</td><td>So it only runs once.</td></tr>
+    <tr><td>Your leaderboard name, a random player ID and a random secret</td><td>So you can post scores under the same name without an account. These are created only when you use the leaderboard.</td></tr>
+  </table>
+  <p>To erase all of it, clear this site's data in your browser's settings.</p>
+
+  <h2>The leaderboard</h2>
+  <p>When you submit a score, the game sends:</p>
+  <ul>
+    <li>the name you entered (2–14 letters, numbers and a few symbols; offensive names and names that pose as staff are refused);</li>
+    <li>a random player ID and secret, which link your scores to your name and stop anyone else posting as you (we store only a one-way hash of the secret);</li>
+    <li>the run itself (your inputs, the road and mode), which the server replays to check the score is genuine.</li>
+  </ul>
+  <p>We keep the name, player ID and best score for as long as the leaderboard runs. Daily boards are deleted about a week after their day. Moderators can remove or rename an entry that breaks the rules.</p>
+
+  <h2>Anonymous play stats</h2>
+  <p>Unless you turn it off (Settings → Game → Share Anonymous Play Stats), or your browser sends "Do Not Track", the game sends short reports like these:</p>
+  <ul>
+    <li>a session started, on a touch screen or a desktop;</li>
+    <li>how a broadcast ended (signed off, caught, lost the audience), in which district, roughly how long it lasted, when the first Rampage happened, and how many traffic mods were on;</li>
+    <li>that a broadcast was left partway, and roughly where.</li>
+  </ul>
+  <p>Each report only adds 1 to a daily tally. No ID, name or score is attached, so a report can't be linked back to you or to your other reports. The tallies are kept for about four months. We use them to see where players get stuck and to tune the game.</p>
+
+  <h2>Your IP address</h2>
+  <p>Like every website, our servers see your IP address when your browser connects. We use it only to limit how many requests one connection can make per minute, to stop abuse. For the leaderboard, the address is part of a rate-limit counter that deletes itself after about two minutes. For play stats, only a scrambled (hashed) form is used, for the same two minutes. We never store your IP address with your name, scores or play stats.</p>
+
+  <h2>Who processes data for us</h2>
+  <ul>
+    <li><b>Vercel</b> hosts the game and runs the leaderboard and stats servers. As part of hosting, it keeps standard web logs (such as IP address, time and page requested) under its own privacy policy.</li>
+    <li><b>Upstash</b> provides the database that holds the leaderboard and the daily stat tallies.</li>
+  </ul>
+  <p>We don't share or sell data to anyone else.</p>
+
+  <h2>Children</h2>
+  <p>The game asks for no personal details. The leaderboard name is the only thing a player types. Please don't use your real full name or anything personal as your leaderboard name. If a child has posted something personal, contact us and we'll remove it.</p>
+
+  <h2>Your choices and rights</h2>
+  <ul>
+    <li>Play without ever using the leaderboard: nothing about you leaves your device except the anonymous stats.</li>
+    <li>Turn off anonymous stats in Settings.</li>
+    <li>Ask us to remove your leaderboard name and scores: contact us with the name you used and roughly when you played.</li>
+  </ul>
+
+  <h2>Changes</h2>
+  <p>If this policy changes, we'll update it here and change the date at the top.</p>
+
+  <h2>Contact</h2>
+  <p>[CONTACT EMAIL]</p>
+
+  <p><a href="./">Back to the game</a></p>
+</main>
+</body>
+</html>
