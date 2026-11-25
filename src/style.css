@@ -1342,3 +1342,9 @@ html:not(.reduceflashes) #gears.ready { animation: ramp-ready 0.9s ease-in-out i
 html.touch #pip, #pip, html.autoramp #pip { --pip-top: calc(var(--edge) + env(safe-area-inset-top) + 76px * var(--hs, 1) + 10px); }
 /* The VIEWER VIDEO tag runs the full width of the window. */
 #pip .tag { left: 0; right: 0; text-align: center; }
+/* VIEWER VIDEO tag along the bottom of the window (Mike, 2026-11-25), like a caption bar. */
+#pip .tag { top: auto; bottom: 0; }
+/* Ticker text centred vertically (Mike, 2026-11-25: it sat low; the face's metrics put caps under the line box's
+   middle). Nudged with position, not transform: the crawl animation owns transform. */
+#ticker span { position: relative; top: calc(var(--d-tick) * -0.15); }
+@media (orientation: landscape) and (max-height: 500px) { #ticker span { line-height: 18px; } }
