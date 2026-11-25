@@ -49,7 +49,7 @@ Status: `[ ]` todo · `[~]` in progress · `[x]` done
   - GPU not simulatable here: needs one real-device check (any Android friend's phone, or BrowserStack's free trial).
 
 ### Telemetry
-- [ ] Funnel + crash reporting (where people quit, which district ends runs, mod usage). `src/playlog.ts` is the seed.
+- [x] Funnel telemetry (anonymous counters, `tools/telemetry-report.mjs`); crash reporting still todo. Was: Funnel + crash reporting (where people quit, which district ends runs, mod usage). `src/playlog.ts` is the seed.
 
 ## M3 — Release build
 - [ ] Strip debug and playtest surfaces (`?tune`, `?debug`, `?playtest`, `?classic`, "Copy play data", `window.__GAME` outside dev).

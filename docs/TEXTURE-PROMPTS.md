@@ -32,5 +32,16 @@ Paste the "Rules" block above into each prompt if GPT drifts.
 2. Drop them in `src/assets/tex/` as `asphalt.webp`, `verge.webp`, `paving.webp`.
 3. Tell me and I'll check them in game at night, dusk and day and tune the tile sizes in `TILE` if needed.
 
-## Optional next set (not wired yet; say if you want them)
-- `concrete` (barrier walls and the bridge deck), `tunnelTile` (tunnel walls), `water` (under Saltmarsh Bridge, a stylized ripple pattern).
+## Set 2: walls, tunnel, water (wired: drop them in and they're used)
+Same rules as above. Until a file exists, these surfaces stay flat colour.
+
+### 4. `concrete` (highway barrier walls and the bridge deck, one tile = 3 m)
+> Seamless tileable texture, 1024x1024, flat front-on orthographic view of a poured concrete highway barrier surface. Stylized hand-painted, flat cel-shaded style like a modern stylized video game. Greyscale only, very light: near-white base (about 92% white) with soft light-grey mottling, a few tiny pores, faint horizontal form-board seams, one or two subtle water-stain streaks running down. Low contrast. No graffiti, no text, no shadows, no lighting, no perspective, no vignette. Edges must tile seamlessly.
+
+### 5. `tunnelTile` (Old Harbor Tunnel walls, one tile = 2 m)
+> Seamless tileable texture, 1024x1024, flat front-on orthographic view of a road-tunnel wall made of small rectangular ceramic tiles in a running-bond (brick) pattern, about 8 tiles across and 16 rows. Stylized hand-painted, flat cel-shaded style. Greyscale only, light: tiles near-white with slight tone variation, thin mid-grey grout lines, a few tiles faintly grimy toward the bottom edge of the image. The grout pattern must line up across the tile edges so it tiles seamlessly. No text, no signs, no lights, no shadows, no lighting, no perspective, no vignette.
+
+### 6. `water` (under Saltmarsh Bridge, one tile = 24 m)
+> Seamless tileable texture, 1024x1024, straight top-down orthographic view of calm harbour water. Stylized hand-painted, flat cel-shaded style: simple soft ripple shapes and a few short wavy highlight strokes, like a stylized game's water, not photoreal. Greyscale only, light: near-white base (about 88% white) with ripples in light grey and highlights in pure white. Low contrast, calm. No boats, no foam lines along edges, no reflections of objects, no text, no shadows, no lighting, no perspective, no vignette. Edges must tile seamlessly.
+
+After you have them: same as before, `src/assets/tex/concrete.webp`, `tunnelTile.webp`, `water.webp`. I'll check them at night, dusk and day, and lighten them if the giant's silhouette check needs it (as with set 1).

@@ -14,6 +14,7 @@ import { CruiserView } from './render/cruisers';
 import { UnitViews } from './render/units';
 import { ViewerVideo } from './render/pip';
 import { RampageAura } from './render/aura';
+import { setTelemetry, track } from './telemetry';
 import { Vfx } from './render/vfx';
 import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
@@ -54,6 +55,9 @@ if (PROTO) {
 
 const flags = readFlags(location.search);
 const settings = loadSettings();
+setTelemetry(settings.telemetry);
+// One session per page load (telemetry: touch vs desktop share).
+if (!flags.bot && !flags.autostart) track({ t: 'session', touch: matchMedia('(pointer: coarse)').matches });
 /** HUD colours: one layout, two palettes (CSS variables keyed off html[data-palette]). */
 function applyHudColors() {
   document.documentElement.dataset.palette = settings.hudColors;
@@ -458,8 +462,18 @@ function targetAt(s: number, d: number): CameraTarget {
 const where = (s: number, d: number) => sim.track.posAt(s, d, { x: 0, z: 0 });
 const sirenRight = new THREE.Vector3();
 
+/** Telemetry: sim time of this broadcast's first Rampage (−1: none yet). */
+let firstRampAt = -1;
+function telemetryQuit() {
+  track({ t: 'quit', mode: lb.mode, district: sim.track.segmentAt(sim.giant.s).district ?? 0, secs: Math.round(sim.time) });
+}
+// Closing the tab mid-broadcast is a quit too (sendBeacon gets it out as the page goes).
+window.addEventListener('pagehide', () => {
+  if (!attract && started && !bot && sim.live) telemetryQuit();
+});
 function newRun(seed: number, segment = 0, upgrades: UpgradeId[] = [], levels: Partial<Record<AbilityId, number>> = {}, guided = false) {
   firstCardShown = false;
+  firstRampAt = -1;
   forkSwap = null; // a fork wipe from the last broadcast never swaps this one's road
   forkWipe.classList.remove('in');
   if (replay) {
@@ -1687,6 +1701,7 @@ function present(e: SimEvent) {
       haptic(70, 0.4);
       break;
     case 'rampageStart': {
+      if (firstRampAt < 0 && !attract && !replay) firstRampAt = sim.time;
       // Activation (Mike, 2026-11-17: "a bit more prominence"): a beat of hit-pause, a slam across the screen, a
       // flash, a jolt and a rumble, on top of the gear-up's shockwave, punch and stinger.
       const R = TUNING.rampageFx;
@@ -2029,8 +2044,26 @@ function setPaused(p: boolean) {
   if (!p) menuGuard = 10; // §8 10f menu guard after any screen transition
 }
 
+/**
+ * Perf (2026-11-25, simulated Android profile): the one frame spike was first-use shader compiles. Compile every
+ * material in the scene up front, once, with the usually hidden ones (the Rampage aura) switched on for it.
+ */
+let shadersWarm = false;
+function warmShaders() {
+  if (shadersWarm) return;
+  shadersWarm = true;
+  const was = aura.root.visible;
+  aura.root.visible = true;
+  try {
+    renderer.compile(scene, rig.camera);
+  } catch {
+    /* only a warm-up */
+  }
+  aura.root.visible = was;
+}
 function start() {
   started = true;
+  warmShaders();
   paused = false;
   document.documentElement.classList.add('playing');
   try {
@@ -2080,6 +2113,8 @@ function beginBroadcast(mode = 'broadcast') {
 
 /** Back to the menus: the bot takes over a fresh broadcast behind them. */
 function enterAttract() {
+  // Left a live broadcast for the menu: that's a quit (telemetry: where people give up).
+  if (!attract && started && !bot && sim.live) telemetryQuit();
   attract = true;
   document.documentElement.classList.add('attract');
   run = null;
@@ -2255,6 +2290,7 @@ app = await createGameApp({
       // motion, shake, vibration, fullscreen) are filed under their tabs by settingsTabsDom.
       choices: () => {
         const all: (UIChoiceLite & { tab: SettingsTab })[] = [
+          { tab: 'game', id: 'wyf-stats', label: `Share Anonymous Play Stats: ${onOff(settings.telemetry)}`, description: 'How broadcasts end and where they stop. No names, ids or scores.' },
           { tab: 'game', id: 'wyf-auto', label: `Auto Rampage: ${onOff(settings.autoRampage)}`, description: 'Rampage fires by itself the moment the audience is full' },
           { tab: 'game', id: 'wyf-speed', label: `Game Speed: ${Math.round(settings.gameSpeed * 100)}%`, description: 'Slower gives more time to react. Below 100% scores stay off the leaderboard' },
           { tab: 'game', id: 'wyf-howto', label: 'How to Play' },
@@ -2311,6 +2347,10 @@ app = await createGameApp({
           resize();
         } else if (id === 'wyf-speed') settings.gameSpeed = next(GAME_SPEEDS, settings.gameSpeed);
         else if (id === 'wyf-auto') settings.autoRampage = !settings.autoRampage;
+        else if (id === 'wyf-stats') {
+          settings.telemetry = !settings.telemetry;
+          setTelemetry(settings.telemetry);
+        }
         if (id === 'wyf-brake' || id === 'wyf-hudsize' || id === 'wyf-speed' || id === 'wyf-auto') {
           saveSettings(settings);
           return true;
@@ -2566,6 +2606,8 @@ function frame(now: number) {
         app?.shell.session.setPhase('results');
         statsReady = recordStats();
       }
+      if (!bot && !flags.stepMode)
+        track({ t: 'end', mode: lb.mode, reason: run?.phase === 'won' ? 'won' : sim.show.state === 'cleared' ? 'cleared' : sim.show.reason === 'pin' && sim.show.pinCause === 'caught' ? 'caught' : (sim.show.reason ?? 'ratings'), district: sim.track.segmentAt(sim.giant.s).district ?? 0, secs: Math.round(sim.time), firstRamp: Math.round(firstRampAt), mods: simOpts.mods?.length ?? 0, guided: !!simOpts.guided });
       if (!flags.stepMode) dissolveOut();
       // Tonight's top moment first, then the recap.
       // Unlocks get their own moment before the recap (Mike, 2026-11-24: "more lively unlocks").

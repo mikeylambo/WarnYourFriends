@@ -6,8 +6,10 @@ import * as THREE from 'three';
  * code change. Textures are near-white greys that multiply the palette colour, so every look (night/dusk/day) and
  * the toon ramp still own the colour. Tiling: one tile covers `TILE[name]` metres.
  */
-export type GroundTex = 'asphalt' | 'verge' | 'paving';
-export const TILE: Record<GroundTex, number> = { asphalt: 8, verge: 10, paving: 4 };
+export type GroundTex = 'asphalt' | 'verge' | 'paving' | 'concrete' | 'tunnelTile' | 'water';
+export const TILE: Record<GroundTex, number> = { asphalt: 8, verge: 10, paving: 4, concrete: 3, tunnelTile: 2, water: 24 };
+/** These have no code-drawn version: used only once a painted file is dropped in (until then, flat colour as before). */
+const PAINTED_ONLY: GroundTex[] = ['concrete', 'tunnelTile', 'water'];
 
 const painted = import.meta.glob('../assets/tex/*.{webp,png,jpg}', { eager: true, query: '?url', import: 'default' }) as Record<string, string>;
 const cache = new Map<GroundTex, THREE.Texture>();
@@ -94,6 +96,11 @@ function draw(name: GroundTex, g: CanvasRenderingContext2D, S: number) {
     }
     speck(800, 190, 250, [1, 2]);
   }
+}
+
+/** Is there a texture for this surface (always for the three ground ones; the rest only once painted)? */
+export function hasTexture(name: GroundTex): boolean {
+  return !PAINTED_ONLY.includes(name) || Object.keys(painted).some((k) => k.split('/').pop()!.split('.')[0] === name);
 }
 
 export function groundTexture(name: GroundTex): THREE.Texture {

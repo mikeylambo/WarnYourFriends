@@ -9,7 +9,7 @@ import { KIND_COLORS, MATERIAL_DEBRIS, PALETTE } from './palette';
 import { crackTexture, isToonCached, toon, toonRamp } from './toon';
 import { GLOW, facade } from './glow';
 import type { LampPos } from './lighting';
-import { TILE, groundTexture, type GroundTex } from './textures';
+import { TILE, groundTexture, hasTexture, type GroundTex } from './textures';
 
 const basicMats = new Map<number, THREE.MeshBasicMaterial>();
 /** Unlit double-sided colour, one material per colour (was one per sweep). */
@@ -279,6 +279,17 @@ function groundMat(color: number, name: GroundTex): THREE.MeshToonMaterial {
  * so it's one extra draw per vehicle, not one per part.
  */
 const INK = new THREE.MeshBasicMaterial({ color: PALETTE.giantOutline, side: THREE.BackSide });
+/** An outline for a box-shaped mesh (buildings, pylons): an ink copy grown `look.inkWidth` m per side, batched with it. */
+function inkBox(m: THREE.Mesh, group: THREE.Group): THREE.Mesh {
+  const w = TUNING.look.inkWidth * 2;
+  const h = new THREE.Mesh(m.geometry, INK);
+  h.position.copy(m.position);
+  h.rotation.copy(m.rotation);
+  h.scale.set(m.scale.x + w * 2, m.scale.y + w * 2, m.scale.z + w * 2);
+  h.userData.batch = m.userData.batch;
+  group.add(h);
+  return m;
+}
 export function propBody(p: Pick<Prop, 'kind' | 'hl' | 'hw'>, kc: number): THREE.Mesh {
   const key = `${p.kind}:${kc}:${p.hl}:${p.hw}`;
   let geo = bodyGeos.get(key);
@@ -418,13 +429,23 @@ export class HighwayView {
         }
       }
     }
+    // Perf (2026-11-25, simulated mid-range Android): building a segment (an avenue's storefronts most of all) is the
+    // frame's biggest spike, so new ones are built `segBuildsPerFrame` at a time (all at once only on the first frame).
+    // Segments are generated far ahead of the camera, so the spread never shows. Props wait for their segment.
+    const first = this.segViews.size === 0;
+    let built = 0;
+    let lastBuilt = -1;
     for (const seg of ready) {
       if (!this.segViews.has(seg.index)) {
+        // Anything near him is built now whatever the budget (replays and tests step the sim many ticks per render).
+        if (!first && built >= TUNING.track.segBuildsPerFrame && seg.s0 > this.sim.giant.s + 150) break;
         const g = this.buildSegment(seg);
         this.segViews.set(seg.index, g);
         this.group.add(g);
         this.lampsDirty = true;
+        built++;
       }
+      lastBuilt = seg.index;
     }
     for (const [i, g] of this.segViews) {
       if (!live.has(i)) {
@@ -435,7 +456,7 @@ export class HighwayView {
       }
     }
     const liveProps = new Set<number>();
-    const lastReady = ready.length ? ready[ready.length - 1].index : -1;
+    const lastReady = lastBuilt;
     for (const p of track.props) {
       if (p.segment > lastReady) continue;
       // A prop that just died keeps its view: its smash/hijack event claims the body this frame.
@@ -570,7 +591,7 @@ export class HighwayView {
       const rz = Math.cos(h);
       for (const [d, y] of sec) {
         verts.push(seg.xs[i] + rx * d, y, seg.zs[i] + rz * d);
-        uvs.push(d, s); // metres; ground textures scale by their tile size
+        uvs.push(d + y, s); // metres (d + y so walls get a vertical axis too); textures scale by their tile size
       }
       if (prevCount === sec.length) {
         const n = sec.length;
@@ -610,7 +631,7 @@ export class HighwayView {
     const W = TUNING.lanes.width;
     const wallH = TUNING.track.wallHeight;
     const add = (geo: THREE.BufferGeometry, color: number, basic = false, paint = false, tex?: GroundTex) => {
-      const m = new THREE.Mesh(geo, tex ? groundMat(color, tex) : basic ? basicDouble(color) : toon(color, paint ? { side: THREE.DoubleSide, emissive: PAINT_GLOW } : { side: THREE.DoubleSide }));
+      const m = new THREE.Mesh(geo, tex && hasTexture(tex) ? groundMat(color, tex) : basic ? basicDouble(color) : toon(color, paint ? { side: THREE.DoubleSide, emissive: PAINT_GLOW } : { side: THREE.DoubleSide }));
       group.add(m);
       return m;
     };
@@ -625,8 +646,8 @@ export class HighwayView {
       add(this.sweep(seg, (_i, s) => [[this.edgeW(s) + 0.9, 0], [this.edgeW(s) + 0.9, 0.16], [this.edgeW(s) + 6, 0.16]]), PALETTE.sidewalk, false, false, 'paving');
     } else if (zone === 'bridge') {
       // Open water under a deck slab.
-      add(this.sweep(seg, (_i, s) => [[-160, -0.03], [this.edgeW(s) + 160, -0.03]]), PALETTE.water);
-      add(this.sweep(seg, (_i, s) => [[-1.4, 0.02], [-1.4, -1.6], [this.edgeW(s) + 1.4, -1.6], [this.edgeW(s) + 1.4, 0.02]]), PALETTE.deck);
+      add(this.sweep(seg, (_i, s) => [[-160, -0.03], [this.edgeW(s) + 160, -0.03]]), PALETTE.water, false, false, 'water');
+      add(this.sweep(seg, (_i, s) => [[-1.4, 0.02], [-1.4, -1.6], [this.edgeW(s) + 1.4, -1.6], [this.edgeW(s) + 1.4, 0.02]]), PALETTE.deck, false, false, 'concrete');
     } else {
       add(this.sweep(seg, (_i, s) => [[-1.6, 0.01], [this.edgeW(s) + 1.6, 0.01]]), PALETTE.deck);
     }
@@ -636,10 +657,12 @@ export class HighwayView {
     // Edge barriers (the sim's walls): concrete on the highway, a curb on the avenue,
     // a parapet on the bridge, the tunnel's own tiled walls.
     const [eh, ec] = zone === 'avenue' ? [0.3, PALETTE.curb] : zone === 'bridge' ? [0.9, PALETTE.deck] : zone === 'tunnel' ? [5.5, PALETTE.tunnelWall] : [wallH, PALETTE.wall];
-    add(this.sweep(seg, () => [[-0.4, 0], [-0.4, eh], [-0.9, eh], [-0.9, 0]]), ec);
+    // No ink on the barrier walls: they run right beside his lane, and the line ate his night Head-On silhouette (E2E).
+    const wallTex: GroundTex | undefined = zone === 'tunnel' ? 'tunnelTile' : zone === 'avenue' ? undefined : 'concrete';
+    add(this.sweep(seg, () => [[-0.4, 0], [-0.4, eh], [-0.9, eh], [-0.9, 0]]), ec, false, false, wallTex);
     const exitSeg = this.exitFor(seg);
     if (exitSeg) this.buildRamp(seg, exitSeg, group);
-    else add(this.sweep(seg, (_i, s) => [[this.edgeW(s) + 0.4, 0], [this.edgeW(s) + 0.4, eh], [this.edgeW(s) + 0.9, eh], [this.edgeW(s) + 0.9, 0]]), ec);
+    else add(this.sweep(seg, (_i, s) => [[this.edgeW(s) + 0.4, 0], [this.edgeW(s) + 0.4, eh], [this.edgeW(s) + 0.9, eh], [this.edgeW(s) + 0.9, 0]]), ec, false, false, wallTex);
     const nextExit = this.sim.track.segments.find((x) => (x.exit || x.fork) && x.index === seg.index + 1);
     if (nextExit) this.signGantry(seg, seg.s0 + 6, group, nextExit.fork?.name);
 
@@ -756,6 +779,7 @@ export class HighwayView {
       b.scale.set(bw, bh, bd);
       b.position.set(this.pos.x, bh / 2, this.pos.z);
       b.rotation.y = -h;
+      inkBox(b, group);
       const cap = new THREE.Mesh(this.box, toon(PALETTE.roofCap));
       cap.scale.set(bw + 0.4, 0.5, bd + 0.4);
       cap.position.set(this.pos.x, bh + 0.25, this.pos.z);
@@ -861,12 +885,12 @@ export class HighwayView {
         // Tall ones step back above the fifth floor or so; every roof gets a parapet and a unit or two.
         const setback = ht > 14;
         const lowH = setback ? ht * 0.68 : ht;
-        put(new THREE.Mesh(this.box, facade(color, toonRamp())), wid - 0.6, lowH, depth, lowH / 2, at(0));
+        inkBox(put(new THREE.Mesh(this.box, facade(color, toonRamp())), wid - 0.6, lowH, depth, lowH / 2, at(0)), group);
         put(new THREE.Mesh(this.box, toon(PALETTE.roofCap)), wid - 0.3, 0.45, depth + 0.3, lowH + 0.22, at(0));
         let roofY = lowH + 0.45;
         if (setback) {
           const upH = ht - lowH;
-          put(new THREE.Mesh(this.box, facade(color, toonRamp())), (wid - 0.6) * 0.7, upH, depth * 0.65, lowH + upH / 2, at(depth * 0.12));
+          inkBox(put(new THREE.Mesh(this.box, facade(color, toonRamp())), (wid - 0.6) * 0.7, upH, depth * 0.65, lowH + upH / 2, at(depth * 0.12)), group);
           put(new THREE.Mesh(this.box, toon(PALETTE.roofCap)), (wid - 0.6) * 0.7 + 0.3, 0.4, depth * 0.65 + 0.3, ht + 0.2, at(depth * 0.12));
           roofY = ht + 0.4;
         }
@@ -894,6 +918,7 @@ export class HighwayView {
         m.scale.set(2, H, 2);
         m.position.set(p.x, H / 2 - 1.6, p.z);
         group.add(m);
+        inkBox(m, group);
       }
       const mid = track.posAt(s, w / 2, { x: 0, z: 0 });
       const beam = new THREE.Mesh(this.box, toon(0x8a6f62));
@@ -901,6 +926,7 @@ export class HighwayView {
       beam.position.set(mid.x, H - 3, mid.z);
       beam.rotation.y = -track.headingAt(s);
       group.add(beam);
+      inkBox(beam, group);
     };
     if (seg.zoneStart) tower(seg.s0 + 6);
     // Main cables sagging along the span, one per side.

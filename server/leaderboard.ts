@@ -75,6 +75,13 @@ export function memoryStore(): Store {
           case 'HSET':
             hash(k).set(String(a[1]), String(a[2]));
             return 1;
+          case 'HINCRBY': {
+            const v = Number(hash(k).get(String(a[1])) ?? 0) + Number(a[2]);
+            hash(k).set(String(a[1]), String(v));
+            return v;
+          }
+          case 'HGETALL':
+            return [...hash(k)].flat();
           case 'ZREM':
             return zset(k).delete(String(a[1])) ? 1 : 0;
           case 'HDEL':

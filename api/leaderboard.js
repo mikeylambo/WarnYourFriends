@@ -383,6 +383,8 @@ var TUNING = {
     aheadDistance: 480,
     /** Render-only road behind the start line (segments), so the opening head-on shot has road behind him. */
     leadInSegments: 6,
+    /** Perf (2026-11-25): new road segments built per rendered frame (the first frame builds all), so no frame pays for several. */
+    segBuildsPerFrame: 1,
     keepBehind: 120,
     /** Concrete edge walls. */
     wallHeight: 1
