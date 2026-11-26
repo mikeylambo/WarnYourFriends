@@ -5171,6 +5171,17 @@ var BANNED = "wyf:lb:banned";
 var ALL_MODES = ["run", "broadcast", "endless", "daily"];
 async function moderate(store2, b, adminKey, now) {
   if (!adminKey || typeof b.admin !== "string" || sha(b.admin) !== sha(adminKey)) return { status: 403, body: { error: "admin" } };
+  if (b.action === "list") {
+    const day = dailyDay(now);
+    const boards = {};
+    for (const [label, key] of [["run", KEY("run")], ["endless", KEY("endless")], ["broadcast", KEY("broadcast")], ["daily", KEY("daily", day)]]) {
+      const flat = (await store2.run([["ZRANGE", key, 0, 99, "REV", "WITHSCORES"]]))[0] ?? [];
+      const ids = flat.filter((_, i) => i % 2 === 0);
+      const names = ids.length ? (await store2.run([["HMGET", NAMES, ...ids]]))[0] : [];
+      boards[label] = ids.map((id, i) => ({ player: id, name: names[i] ?? "\u2014", score: Number(flat[i * 2 + 1]) }));
+    }
+    return { status: 200, body: { boards } };
+  }
   if (!isPlayer(b.player)) return { status: 400, body: { error: "player" } };
   const p = b.player;
   if (b.action === "ban") {

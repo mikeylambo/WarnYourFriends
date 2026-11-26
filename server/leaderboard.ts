@@ -156,6 +156,18 @@ const ALL_MODES: BoardMode[] = ['run', 'broadcast', 'endless', 'daily'];
  */
 async function moderate(store: Store, b: Record<string, unknown>, adminKey: string | undefined, now: number): Promise<Reply> {
   if (!adminKey || typeof b.admin !== 'string' || sha(b.admin) !== sha(adminKey)) return { status: 403, body: { error: 'admin' } };
+  if (b.action === 'list') {
+    // The admin page's view: every board's top 100 with player ids (the public board hides ids).
+    const day = dailyDay(now);
+    const boards: Record<string, { player: string; name: string; score: number }[]> = {};
+    for (const [label, key] of [['run', KEY('run')], ['endless', KEY('endless')], ['broadcast', KEY('broadcast')], ['daily', KEY('daily', day)]] as const) {
+      const flat = ((await store.run([['ZRANGE', key, 0, 99, 'REV', 'WITHSCORES']]))[0] ?? []) as string[];
+      const ids = flat.filter((_, i) => i % 2 === 0);
+      const names = ids.length ? ((await store.run([['HMGET', NAMES, ...ids]]))[0] as (string | null)[]) : [];
+      boards[label] = ids.map((id, i) => ({ player: id, name: names[i] ?? '—', score: Number(flat[i * 2 + 1]) }));
+    }
+    return { status: 200, body: { boards } };
+  }
   if (!isPlayer(b.player)) return { status: 400, body: { error: 'player' } };
   const p = b.player;
   if (b.action === 'ban') {

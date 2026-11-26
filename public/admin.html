@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="robots" content="noindex, nofollow" />
+<title>Control Room · Giant at Large</title>
+<style>
+  :root { --paper: #ece0c8; --ink: #1a1020; --red: #b3122a; --mute: #6a5f6f; --gold: #f2b632; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--ink); color: var(--paper); font: 15px/1.45 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { max-width: 900px; margin: 0 auto; padding: 24px 16px 60px; }
+  .kicker { display: inline-block; background: var(--red); color: #fff; font: italic 900 13px/1 ui-sans-serif, system-ui, sans-serif; letter-spacing: 0.16em; padding: 8px 14px; text-transform: uppercase; }
+  h1 { margin: 12px 0 18px; font-style: italic; }
+  .card { background: var(--paper); color: var(--ink); padding: 16px; margin: 14px 0; }
+  input, select, button { font: inherit; padding: 9px 12px; border: 2px solid var(--ink); background: #fff; color: var(--ink); }
+  button { background: var(--ink); color: var(--paper); font-weight: 800; cursor: pointer; }
+  button.danger { background: var(--red); border-color: var(--red); color: #fff; }
+  button.ghost { background: transparent; color: var(--ink); }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .tabs button { background: transparent; color: var(--paper); border-color: var(--paper); }
+  .tabs button.on { background: var(--paper); color: var(--ink); }
+  table { width: 100%; border-collapse: collapse; }
+  th, td { text-align: left; padding: 7px 8px; border-bottom: 1px solid rgba(26, 16, 32, 0.15); vertical-align: middle; }
+  th { font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--mute); }
+  td.num { font-variant-numeric: tabular-nums; }
+  td code { font-size: 11px; color: var(--mute); }
+  .msg { min-height: 1.4em; margin: 8px 0; font-weight: 700; }
+  .msg.err { color: #ff8a8a; }
+  .stats h3 { margin: 14px 0 6px; border-left: 4px solid var(--red); padding-left: 8px; }
+  .bar { display: inline-block; height: 10px; background: var(--red); vertical-align: middle; margin-left: 8px; }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<main>
+  <span class="kicker">WYF 6 · Control Room</span>
+  <h1>Giant at Large admin</h1>
+
+  <section id="login" class="card">
+    <p>Paste the admin key (the <code>LB_ADMIN_KEY</code> value from Vercel). It stays in this tab only and is forgotten when you close it.</p>
+    <div class="row"><input id="key" type="password" placeholder="Admin key" autocomplete="off" size="40" /><button id="go">Unlock</button></div>
+  </section>
+
+  <section id="app" hidden>
+    <div class="row tabs"><button data-tab="boards" class="on">Leaderboards</button><button data-tab="stats">Play stats</button><span style="flex:1"></span><button id="lock" class="ghost" style="color:var(--paper);border-color:var(--paper)">Lock</button></div>
+    <div id="msg" class="msg"></div>
+
+    <div id="boards" class="card">
+      <div class="row"><label>Board <select id="board"><option value="run">Story</option><option value="endless">Endless</option><option value="daily">Daily (today)</option><option value="broadcast">Single Broadcast</option></select></label><button id="refresh" class="ghost">Refresh</button><input id="filter" placeholder="Filter by name" /></div>
+      <table><thead><tr><th>#</th><th>Name</th><th>Score</th><th>Player ID</th><th></th></tr></thead><tbody id="rows"></tbody></table>
+    </div>
+
+    <div id="stats" class="card stats" hidden>
+      <div class="row"><label>Days <select id="days"><option>7</option><option selected>14</option><option>30</option><option>90</option></select></label><button id="loadStats" class="ghost">Load</button></div>
+      <div id="statsOut"></div>
+    </div>
+  </section>
+</main>
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+  let key = '';
+  let data = null;
+  try { key = sessionStorage.getItem('wyf.admin') || ''; } catch { /* private mode */ }
+  const say = (t, err) => { $('msg').textContent = t; $('msg').className = 'msg' + (err ? ' err' : ''); };
+  const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+  async function admin(body) {
+    const r = await fetch('/api/leaderboard', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ admin: key, ...body }) });
+    const j = await r.json().catch(() => ({}));
+    if (r.status === 403) throw new Error('That key was refused. Check LB_ADMIN_KEY in Vercel (and that you redeployed after setting it).');
+    if (!r.ok) throw new Error(j.error ? `Server said: ${j.error}` : `Error ${r.status}`);
+    return j;
+  }
+  function draw() {
+    const list = (data && data.boards[$('board').value]) || [];
+    const f = $('filter').value.trim().toLowerCase();
+    $('rows').innerHTML = list.map((x, i) => ({ ...x, rank: i + 1 })).filter((x) => !f || x.name.toLowerCase().includes(f)).map((x) =>
+      `<tr><td class="num">${x.rank}</td><td><b>${esc(x.name)}</b></td><td class="num">${Number(x.score).toLocaleString()}</td><td><code>${esc(x.player)}</code></td>
+       <td class="row"><button class="ghost" data-rename="${esc(x.player)}" data-name="${esc(x.name)}">Rename</button><button class="danger" data-ban="${esc(x.player)}" data-name="${esc(x.name)}">Remove</button></td></tr>`).join('')
+      || '<tr><td colspan="5">Nobody on this board yet.</td></tr>';
+  }
+  async function load() {
+    say('Loading…');
+    data = await admin({ action: 'list' });
+    say('');
+    draw();
+  }
+  async function unlock() {
+    key = $('key').value.trim() || key;
+    if (!key) return;
+    try {
+      await load();
+      try { sessionStorage.setItem('wyf.admin', key); } catch { /* private mode */ }
+      $('login').hidden = true; $('app').hidden = false;
+    } catch (e) { key = ''; $('login').hidden = false; $('app').hidden = true; alert(e.message); }
+  }
+  $('go').onclick = unlock;
+  $('key').onkeydown = (e) => e.key === 'Enter' && unlock();
+  $('lock').onclick = () => { key = ''; try { sessionStorage.removeItem('wyf.admin'); } catch {} location.reload(); };
+  $('board').onchange = draw;
+  $('filter').oninput = draw;
+  $('refresh').onclick = () => load().catch((e) => say(e.message, true));
+  $('rows').onclick = async (e) => {
+    const b = e.target.closest('button');
+    if (!b) return;
+    try {
+      if (b.dataset.ban) {
+        if (!confirm(`Remove "${b.dataset.name}" from every board and block their future scores?`)) return;
+        await admin({ action: 'ban', player: b.dataset.ban });
+        say(`Removed "${b.dataset.name}".`);
+      } else if (b.dataset.rename) {
+        const name = prompt(`New name for "${b.dataset.name}" (2–14 letters/numbers):`, '');
+        if (!name) return;
+        await admin({ action: 'rename', player: b.dataset.rename, name });
+        say(`Renamed to "${name}".`);
+      }
+      await load();
+    } catch (err) { say(err.message, true); }
+  };
+  for (const t of document.querySelectorAll('[data-tab]')) t.onclick = () => {
+    for (const x of document.querySelectorAll('[data-tab]')) x.classList.toggle('on', x === t);
+    $('boards').hidden = t.dataset.tab !== 'boards';
+    $('stats').hidden = t.dataset.tab !== 'stats';
+    if (t.dataset.tab === 'stats' && !$('statsOut').innerHTML) loadStats();
+  };
+  async function loadStats() {
+    try {
+      say('Loading stats…');
+      const r = await fetch(`/api/telemetry?days=${$('days').value}`, { headers: { 'x-admin-key': key } });
+      if (!r.ok) throw new Error(r.status === 403 ? 'Key refused for stats.' : `Stats error ${r.status}`);
+      const { days } = await r.json();
+      const sum = {};
+      for (const d of Object.values(days)) for (const [k, v] of Object.entries(d)) sum[k] = (sum[k] || 0) + v;
+      const groups = [['Sessions', 'sessions'], ['How broadcasts end', 'end:'], ['Quits mid-broadcast', 'quit:'], ['First Rampage (seconds in)', 'firstRamp:'], ['Traffic mods on', 'mods:'], ['First broadcast ever', 'guided:']];
+      $('statsOut').innerHTML = `<p>${Object.keys(days).length} day(s) with data.</p>` + groups.map(([title, p]) => {
+        const rows = Object.entries(sum).filter(([k]) => k.startsWith(p)).sort((a, b) => b[1] - a[1]);
+        if (!rows.length) return `<h3>${title}</h3><p>None yet.</p>`;
+        const max = rows[0][1];
+        return `<h3>${title}</h3><table>${rows.map(([k, v]) => `<tr><td>${esc(k)}</td><td class="num">${v}<span class="bar" style="width:${Math.round((v / max) * 160)}px"></span></td></tr>`).join('')}</table>`;
+      }).join('');
+      say('');
+    } catch (e) { say(e.message, true); }
+  }
+  $('loadStats').onclick = loadStats;
+  if (key) unlock();
+})();
+</script>
+</body>
+</html>

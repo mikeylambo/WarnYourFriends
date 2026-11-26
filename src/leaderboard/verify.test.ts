@@ -171,6 +171,16 @@ describe('leaderboard API', () => {
     const again = await handle(store, 'POST', {}, { ...(await issued(store, player, botRun(83))), player, secret, name: 'Tester' }, '1.1.1.3');
     expect(again.body).toEqual({ error: 'banned' });
   });
+  it('admin list: every board with player ids, only with the key', async () => {
+    const store = memoryStore();
+    const sub = await issued(store, player, botRun(81));
+    expect((await handle(store, 'POST', {}, { ...sub, player, secret, name: 'Tester' }, '1.1.1.1')).status).toBe(200);
+    expect((await handle(store, 'POST', {}, { admin: 'nope', action: 'list' }, '9.9.9.9', Date.now(), 'adminkey')).status).toBe(403);
+    const r = await handle(store, 'POST', {}, { admin: 'adminkey', action: 'list' }, '9.9.9.9', Date.now(), 'adminkey');
+    const boards = (r.body as { boards: Record<string, { player: string; name: string }[]> }).boards;
+    expect(Object.keys(boards).sort()).toEqual(['broadcast', 'daily', 'endless', 'run']);
+    expect(Object.values(boards).flat().some((x) => x.player === player && x.name === 'Tester')).toBe(true);
+  });
   it('lets only the first secret post for a player id', async () => {
     const store = memoryStore();
     const sub = await issued(store, player, botRun(85));
