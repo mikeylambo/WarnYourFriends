@@ -5,3 +5,4 @@
 - `itch/banner-1920x480.png`, `banner-960x240.png`: the page header (itch shows it at up to 960 wide).
 - `itch/background-1774x887.png`: the text-free art, for the page background.
 - `itch/screenshots/`: 1920×1080 frames from the running build (`tools/shots-*`).
+- `itch/gifs/`: 6s clips from the running build, bot driving (`tools/gifs.mjs`): 640 wide, and `-small` (512 wide, 12 fps, under 4 MB) for the page.
