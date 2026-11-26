@@ -10,9 +10,21 @@ import { TUNING, type MassClass } from './tuning';
 const SPATIAL = { panWidth: 14, panMax: 0.85, near: 6, falloff: 28, duckDepth: 0.45, duckHold: 0.9 };
 
 const SFX_FILES = import.meta.glob('./assets/sfx/*.mp3', { eager: true, query: '?url', import: 'default' }) as Record<string, string>;
+/** Music (Suno, Mikey Lambo, 2026-11-26): the in-game theme loops under the run, the busted theme plays once. */
+const MUSIC_FILES = import.meta.glob('./assets/music/{game-theme,busted}.mp3', { eager: true, query: '?url', import: 'default' }) as Record<string, string>;
 export type SfxKind =
   | 'foot' | 'smash-light' | 'smash-medium' | 'smash-heavy' | 'bounce' | 'scrape' | 'shoulder' | 'leap' | 'land'
-  | 'whoosh' | 'tierup' | 'tierdown' | 'banked' | 'cape' | 'spike' | 'roadblock';
+  | 'whoosh' | 'tierup' | 'tierdown' | 'banked' | 'cape' | 'spike' | 'roadblock'
+  | 'chain-tick' | 'chain-bank' | 'chain-drop' | 'gear-tick' | 'rampage-on' | 'rampage-off' | 'honk' | 'whoop'
+  | 'tell-cruiser' | 'tell-cruiser-siren' | 'tell-rolling' | 'tell-chopper' | 'tell-carrier' | 'spotlight-lock';
+
+/**
+ * Loop mix (presentation): the loops are peak-normalised at -3 dBFS, so these set how loud they sit.
+ * Sirens at full level, the rotor at rest and at Rampage, the theme on the music bus.
+ */
+const LOOP_MIX = { siren: 0.25, rotorBase: 0.2, rotorGear: 0.25, theme: 0.85, busted: 0.9, themeDuck: 0.08 };
+/** Siren voice per cruiser slot → its loop (wail, yelp, hi-lo). */
+const SIREN_LOOPS = ['siren-wail-loop', 'siren-yelp-loop', 'siren-hilo-loop'] as const;
 
 /**
  * Audio: authored samples where they exist (SFX_FILES), Web Audio synthesis for the rest.
@@ -24,10 +36,16 @@ export class Audio {
   private master!: GainNode;
   readonly buses: Record<'music' | 'sfx' | 'voice', GainNode> = {} as never;
   private noiseBuf!: AudioBuffer;
-  private rotor: { gain: GainNode } | null = null;
+  private rotor: { gain: GainNode; synth: AudioNode; sample: GainNode | null } | null = null;
   private lastWhip = 0;
   private sirens: GainNode[] = [];
   private sirenPans: StereoPannerNode[] = [];
+  /** Each siren's synth voice (cut when its recorded loop is in) and the level it's scaled by. */
+  private sirenSynth: AudioNode[] = [];
+  private sirenK: number[] = [];
+  /** The in-game theme loop (null until decoded; the synth bed plays until then) and the gain under it. */
+  private theme: { src: AudioBufferSourceNode | null; gain: GainNode } | null = null;
+  private music = new Map<string, AudioBuffer>();
   private bed: { next: number; step: number; timer: number } | null = null;
   /** Rampage layer on the music bus (driving kick, 16th hats, brass stabs): in at Rampage, out when it's lost. */
   private rampLayer: GainNode | null = null;
@@ -97,9 +115,81 @@ export class Audio {
           const list = this.samples.get(kind) ?? [];
           list.push(buf);
           this.samples.set(kind, list);
+          this.attachLoop(kind);
         })
         .catch((e) => console.warn(`sfx ${path} failed to load:`, e));
     }
+    for (const [path, url] of Object.entries(MUSIC_FILES)) {
+      const name = path.replace(/^.*\/|\.mp3$/g, '');
+      fetch(url)
+        .then((r) => r.arrayBuffer())
+        .then((b) => this.ctx!.decodeAudioData(b))
+        .then((buf) => {
+          this.music.set(name, buf);
+          if (name === 'game-theme') this.startTheme();
+        })
+        .catch((e) => console.warn(`music ${path} failed to load:`, e));
+    }
+  }
+
+  /** A recorded loop has decoded: it takes over from its synth voice (sirens, rotor). */
+  private attachLoop(kind: string) {
+    const c = this.ctx;
+    const buf = this.samples.get(kind)?.[0];
+    if (!c || !buf) return;
+    const loop = () => {
+      const src = c.createBufferSource();
+      src.buffer = buf;
+      src.loop = true;
+      return src;
+    };
+    const slot = (SIREN_LOOPS as readonly string[]).indexOf(kind);
+    if (slot >= 0) {
+      // One slot per cruiser, each its own voice; cruisers beyond the third share these in turn.
+      for (let i = slot; i < this.sirens.length; i += SIREN_LOOPS.length) {
+        const src = loop();
+        src.connect(this.sirens[i]);
+        src.start(0, Math.random() * buf.duration);
+        this.sirenSynth[i].disconnect();
+        this.sirenK[i] = LOOP_MIX.siren;
+      }
+    } else if (kind === 'rotor-loop' && this.rotor && !this.rotor.sample) {
+      const g = c.createGain();
+      g.gain.value = LOOP_MIX.rotorBase;
+      const src = loop();
+      src.connect(g).connect(this.buses.sfx);
+      src.start();
+      this.rotor.synth.disconnect();
+      this.rotor.sample = g;
+    }
+  }
+
+  /** The in-game theme: loops on the music bus; the synth bed stands down. Called when it has decoded. */
+  private startTheme() {
+    const c = this.ctx;
+    const buf = this.music.get('game-theme');
+    if (!c || !buf || this.theme) return;
+    const gain = c.createGain();
+    gain.gain.value = LOOP_MIX.theme;
+    gain.connect(this.buses.music);
+    this.theme = { src: null, gain };
+    this.restartTheme();
+  }
+
+  /** Back to the top of the theme (a new broadcast): a few ms fade-in so the cut is clean. */
+  restartTheme() {
+    const c = this.ctx;
+    const buf = this.music.get('game-theme');
+    if (!c || !buf || !this.theme) return;
+    try {
+      this.theme.src?.stop();
+    } catch { /* already stopped */ }
+    const src = c.createBufferSource();
+    src.buffer = buf;
+    src.loop = true;
+    src.connect(this.theme.gain);
+    src.start();
+    this.theme.src = src;
   }
 
   /** Kinds with at least one decoded take, and how many takes (E2E / debug). */
@@ -301,6 +391,8 @@ export class Audio {
   /** Spectacle chain: a bright tick per stunt, pitched up by the multiplier. */
   chainTick(mult: number) {
     if (!this.ready) return;
+    // The recorded tick, stepped up a half-fifth-ish per multiplier like the synth was.
+    if (this.play('chain-tick', 0.5, Math.pow(2, (mult - 1) / 6), 0.01)) return;
     const t = this.ctx!.currentTime;
     const f = 520 * Math.pow(2, (mult - 1) / 6);
     this.tone(t, 0.12, f, f * 1.5, 0.07, 'square');
@@ -310,10 +402,12 @@ export class Audio {
     if (!this.ready) return;
     const t = this.ctx!.currentTime;
     if (dropped) {
+      if (this.play('chain-drop', 0.6)) return;
       this.tone(t, 0.3, 160, 70, 0.18, 'sawtooth');
       return;
     }
     // A till ring, louder and a touch higher for a bigger multiplier.
+    if (this.play('chain-bank', Math.min(0.9, 0.5 + mult * 0.08), 1 + Math.min(4, mult) * 0.02, 0.01)) return;
     if (this.play('banked', Math.min(0.85, 0.35 + mult * 0.1), 1 + Math.min(4, mult) * 0.03, 0.01)) return;
     for (let i = 0; i < Math.min(4, mult); i++) this.tone(t + i * 0.06, 0.25, 880 * Math.pow(1.26, i), 880 * Math.pow(1.26, i), 0.06, 'triangle');
   }
@@ -321,6 +415,7 @@ export class Audio {
   /** Gear build-up: a short rising tick on each step of the last second before a gear-up (k 0..1). */
   gearTick(k: number) {
     if (!this.ready) return;
+    if (this.play('gear-tick', 0.35 + k * 0.3, 0.9 + k * 0.5, 0.01)) return;
     const t = this.ctx!.currentTime;
     this.tone(t, 0.09, 420 + k * 520, 520 + k * 700, 0.05 + k * 0.05, 'triangle');
   }
@@ -340,7 +435,7 @@ export class Audio {
     g.cancelScheduledValues(t);
     g.setValueAtTime(g.value, t);
     g.linearRampToValueAtTime(top ? R.layer : 0, t + (top ? R.fadeIn : R.fadeOut));
-    if (was && !top && !quiet) {
+    if (was && !top && !quiet && !this.samples.get('rampage-off')?.length) {
       // Power-down: a falling saw through a closing filter, like the band running out of tape.
       const o = this.ctx!.createOscillator();
       o.type = 'sawtooth';
@@ -361,6 +456,8 @@ export class Audio {
 
   tierUp(tier: number) {
     if (!this.ready) return;
+    // Into Rampage: its own power-up, not the tier thump.
+    if (tier >= TUNING.tiers.length - 1 && this.play('rampage-on', 0.9, 1, 0.02)) return;
     // Lower and bigger at Rampage.
     if (this.play('tierup', tier >= 2 ? 1 : 0.8, tier >= 2 ? 0.85 : 1, 0.02)) return;
     const t = this.ctx!.currentTime;
@@ -370,6 +467,8 @@ export class Audio {
 
   tierDown() {
     if (!this.ready) return;
+    // Losing Rampage (the gear is still Rampage until setGear follows): its own power-down.
+    if (this.gear === TUNING.tiers.length - 1 && this.play('rampage-off', 0.8, 1, 0.02)) return;
     if (this.play('tierdown', 0.7)) return;
     const t = this.ctx!.currentTime;
     this.noise(t, 0.3, 'bandpass', 1400, 1.5, 0.2, 300);
@@ -480,7 +579,7 @@ export class Audio {
     src.connect(f).connect(chop).connect(g).connect(this.buses.sfx);
     src.start();
     lfo.start();
-    this.rotor = { gain: g };
+    this.rotor = { gain: g, synth: f, sample: null };
   }
 
   /** Phase 0c: car horn, two detuned square tones (deadpan, not angry). */
@@ -489,6 +588,8 @@ export class Audio {
     this.at(pos, () => this.honkAt(vol));
   }
   private honkAt(vol: number) {
+    // Four recorded takes (sedan, van, truck, old compact), a little pitch spread so repeats don't match.
+    if (this.play('honk', 0.3 * vol, 1, 0.08)) return;
     const c = this.ctx!;
     const t = c.currentTime;
     const dur = 0.18 + Math.random() * 0.2;
@@ -543,6 +644,8 @@ export class Audio {
       lfo.start();
       this.sirens.push(g);
       this.sirenPans.push(pan);
+      this.sirenSynth.push(bp);
+      this.sirenK.push(0.022);
     }
   }
 
@@ -550,7 +653,7 @@ export class Audio {
   setSirens(levels: number[], positions?: ({ x: number; z: number } | null)[]) {
     if (!this.ctx) return;
     const t = this.ctx.currentTime;
-    this.sirens.forEach((g, i) => g.gain.setTargetAtTime(0.022 * (levels[i] ?? 0), t, 0.4));
+    this.sirens.forEach((g, i) => g.gain.setTargetAtTime(this.sirenK[i] * (levels[i] ?? 0), t, 0.4));
     if (positions) this.sirenPans.forEach((p, i) => {
       const at = positions[i];
       if (at) p.pan.setTargetAtTime(this.placeOf(at.x, at.z).pan, t, 0.15);
@@ -620,6 +723,11 @@ export class Audio {
     const tick = () => {
       const b = this.bed!;
       if (c.state !== 'running') return;
+      // The recorded theme is up: the synth bed (and its D-minor Rampage layer) stands down.
+      if (this.theme) {
+        b.next = c.currentTime + 0.1;
+        return;
+      }
       while (b.next < c.currentTime + 0.25) {
         const t = b.next;
         const step = b.step; // 8th notes, 32 per 4-bar phrase
@@ -678,6 +786,7 @@ export class Audio {
   /** §19: a siren whoop announces each pursuer before it arrives. */
   whoop() {
     if (!this.ready) return;
+    if (this.play('whoop', 0.5, 1, 0.03)) return;
     const t = this.ctx!.currentTime;
     this.tone(t, 0.5, 500, 1300, 0.07, 'sawtooth');
     this.tone(t + 0.5, 0.35, 1300, 600, 0.05, 'sawtooth');
@@ -694,6 +803,7 @@ export class Audio {
     }
     if (kind === 'carrier') {
       this.at(pos, () => {
+        if (this.play('tell-carrier', 0.8, 1, 0.02)) return;
         this.honkAt(0.9);
         this.tellAt('spike');
       });
@@ -705,6 +815,11 @@ export class Audio {
     const t = this.ctx!.currentTime;
     switch (kind) {
       case 'cruiser':
+        // Engine rev with a siren chirp over it.
+        if (this.play('tell-cruiser', 0.8, 1, 0.02)) {
+          this.play('tell-cruiser-siren', 0.4, 1, 0.02);
+          break;
+        }
         this.tone(t, 0.6, 70, 190, 0.18, 'sawtooth');
         this.noise(t, 0.6, 'lowpass', 300, 1, 0.15, 900);
         break;
@@ -718,9 +833,11 @@ export class Audio {
         for (let k = 0; k < 8; k++) this.noise(t + k * 0.09, 0.05, 'highpass', 4500, 2, 0.12);
         break;
       case 'rolling':
+        if (this.play('tell-rolling', 0.8, 1, 0.02)) break;
         this.noise(t, 1.0, 'bandpass', 3400, 9, 0.12, 2400);
         break;
       case 'chopper':
+        if (this.play('tell-chopper', 0.8, 1, 0.02)) break;
         // A second rotor comes in, its pitch rising as the cone sweeps (§11 "rotor pitch rises").
         for (let k = 0; k < 14; k++) this.noise(t + k * 0.1, 0.06, 'lowpass', 260 + k * 22, 1.5, 0.16 + k * 0.01);
         this.tone(t, 1.5, 48, 74, 0.08, 'sawtooth');
@@ -731,6 +848,7 @@ export class Audio {
   /** Police chopper spotlight locks on: a hard electrical clunk. */
   spotlightLock() {
     if (!this.ready) return;
+    if (this.play('spotlight-lock', 0.7, 1, 0.02)) return;
     const t = this.ctx!.currentTime;
     this.noise(t, 0.08, 'bandpass', 1800, 3, 0.35);
     this.tone(t, 0.25, 140, 120, 0.12, 'square');
@@ -741,12 +859,32 @@ export class Audio {
     if (!this.ready) return;
     this.duck(SPATIAL.duckDepth, SPATIAL.duckHold * 1.4);
     const t = this.ctx!.currentTime;
+    // Busted: "And We're Out of Time", once, with the theme laid down under it.
+    const theme = this.music.get('busted');
+    if (!cleared && theme) {
+      const src = this.ctx!.createBufferSource();
+      src.buffer = theme;
+      const g = this.ctx!.createGain();
+      g.gain.value = LOOP_MIX.busted;
+      src.connect(g).connect(this.buses.music);
+      src.start(t);
+      if (this.theme) {
+        const tg = this.theme.gain.gain;
+        tg.cancelScheduledValues(t);
+        tg.setTargetAtTime(LOOP_MIX.themeDuck, t, 0.08);
+        tg.setTargetAtTime(LOOP_MIX.theme, t + theme.duration, 0.4);
+      }
+      return;
+    }
     const chord = cleared ? [293.66, 369.99, 440, 587.33] : [293.66, 349.23, 415.3, 220];
     chord.forEach((f, i) => this.tone(t + i * 0.12, 0.9, f, cleared ? f : f * 0.94, 0.05, 'sawtooth'));
     this.tone(t, 1.2, 60, 35, 0.6);
   }
 
   setRotor(level: number) {
-    if (this.rotor && this.ctx) this.rotor.gain.gain.setTargetAtTime(0.08 + level * 0.06, this.ctx.currentTime, 0.3);
+    if (!this.rotor || !this.ctx) return;
+    const t = this.ctx.currentTime;
+    if (this.rotor.sample) this.rotor.sample.gain.setTargetAtTime(LOOP_MIX.rotorBase + level * LOOP_MIX.rotorGear, t, 0.3);
+    else this.rotor.gain.gain.setTargetAtTime(0.08 + level * 0.06, t, 0.3);
   }
 }

@@ -500,6 +500,7 @@ function newRun(seed: number, segment = 0, upgrades: UpgradeId[] = [], levels: P
   inputLog.length = 0;
   input.resetLatches();
   audio.setGear(0, true);
+  audio.restartTheme(); // each broadcast opens on the top of the theme
   moment = null;
   preroll = null;
   recapShot = null;
