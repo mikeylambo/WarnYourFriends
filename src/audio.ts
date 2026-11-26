@@ -11,7 +11,7 @@ const SPATIAL = { panWidth: 14, panMax: 0.85, near: 6, falloff: 28, duckDepth: 0
 
 const SFX_FILES = import.meta.glob('./assets/sfx/*.mp3', { eager: true, query: '?url', import: 'default' }) as Record<string, string>;
 /** Music (Suno, Mikey Lambo, 2026-11-26): the in-game theme loops under the run, the busted theme plays once. */
-const MUSIC_FILES = import.meta.glob('./assets/music/{game-theme,busted}.mp3', { eager: true, query: '?url', import: 'default' }) as Record<string, string>;
+const MUSIC_FILES = import.meta.glob('./assets/music/{game-theme,busted,sign-off}.mp3', { eager: true, query: '?url', import: 'default' }) as Record<string, string>;
 export type SfxKind =
   | 'foot' | 'smash-light' | 'smash-medium' | 'smash-heavy' | 'bounce' | 'scrape' | 'shoulder' | 'leap' | 'land'
   | 'whoosh' | 'tierup' | 'tierdown' | 'banked' | 'cape' | 'spike' | 'roadblock'
@@ -22,7 +22,13 @@ export type SfxKind =
  * Loop mix (presentation): the loops are peak-normalised at -3 dBFS, so these set how loud they sit.
  * Sirens at full level, the rotor at rest and at Rampage, the theme on the music bus.
  */
-const LOOP_MIX = { siren: 0.25, rotorBase: 0.2, rotorGear: 0.25, theme: 0.85, busted: 0.9, themeDuck: 0.08 };
+const LOOP_MIX = { siren: 0.25, rotorBase: 0.2, rotorGear: 0.25, theme: 0.85, busted: 0.9, signOff: 0.85 };
+/**
+ * The in-game theme (stems mixed by hand, 103 BPM): an intro of six bars plays once, then bars 7–14 loop. The file
+ * ends exactly at bar 14's end, with a 60 ms equal-power crossfade into the audio before the loop start baked into its
+ * last samples, so the wrap is seamless. `loopStart` is bar 7 (s); the loop end is the end of the buffer.
+ */
+const THEME_LOOP_START = 14.098571;
 /** Siren voice per cruiser slot → its loop (wail, yelp, hi-lo). */
 const SIREN_LOOPS = ['siren-wail-loop', 'siren-yelp-loop', 'siren-hilo-loop'] as const;
 
@@ -187,6 +193,10 @@ export class Audio {
     const src = c.createBufferSource();
     src.buffer = buf;
     src.loop = true;
+    src.loopStart = THEME_LOOP_START;
+    src.loopEnd = buf.duration;
+    this.theme.gain.gain.cancelScheduledValues(c.currentTime);
+    this.theme.gain.gain.setValueAtTime(LOOP_MIX.theme, c.currentTime);
     src.connect(this.theme.gain);
     src.start();
     this.theme.src = src;
@@ -859,20 +869,20 @@ export class Audio {
     if (!this.ready) return;
     this.duck(SPATIAL.duckDepth, SPATIAL.duckHold * 1.4);
     const t = this.ctx!.currentTime;
-    // Busted: "And We're Out of Time", once, with the theme laid down under it.
-    const theme = this.music.get('busted');
-    if (!cleared && theme) {
+    // The recorded endings (busted: "And We're Out of Time"; sign-off): the run's theme fades out under them, once,
+    // and stays out until the next broadcast restarts it (the recap and menus are silent, 2026-11-17).
+    const song = this.music.get(cleared ? 'sign-off' : 'busted');
+    if (song) {
       const src = this.ctx!.createBufferSource();
-      src.buffer = theme;
+      src.buffer = song;
       const g = this.ctx!.createGain();
-      g.gain.value = LOOP_MIX.busted;
+      g.gain.value = cleared ? LOOP_MIX.signOff : LOOP_MIX.busted;
       src.connect(g).connect(this.buses.music);
       src.start(t);
       if (this.theme) {
         const tg = this.theme.gain.gain;
         tg.cancelScheduledValues(t);
-        tg.setTargetAtTime(LOOP_MIX.themeDuck, t, 0.08);
-        tg.setTargetAtTime(LOOP_MIX.theme, t + theme.duration, 0.4);
+        tg.setTargetAtTime(0, t, 0.25);
       }
       return;
     }
