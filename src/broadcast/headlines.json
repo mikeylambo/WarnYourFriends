@@ -8,7 +8,7 @@
   "kicker": [
     "SPOTTED",
     "AT LARGE",
-    "RAMPAGE",
+    "UNREAL",
     "CITY IN CHAOS"
   ],
   "subject": [
@@ -124,23 +124,9 @@
     "wall": [
       "Grazes Barrier",
       "Scuffs Median"
-    ],
-    "slow": [
-      "Slows",
-      "Eases Off",
-      "Catches Breath"
     ]
   },
   "places": {
-    "road": [
-      "On Highway",
-      "On The Interstate"
-    ],
-    "bound": "{dir}bound",
-    "lane": "In Lane {n}",
-    "fast": "In The Fast Lane",
-    "slow": "In The Slow Lane",
-    "mile": "Near Mile {m}",
     "zone": {
       "highway": "On {name}",
       "avenue": "On {name}",
@@ -151,69 +137,50 @@
   "lines": {
     "spotted": "{subject} Spotted {place}",
     "atLarge": "Giant At Large. Warn Your Friends.",
-    "stride": [
-      [
-        "Picks Up",
-        "{subject} Picks Up Pace {place}"
-      ],
-      [
-        "Finds",
-        "{subject} Finds Second Wind {place}"
-      ],
-      [
-        "Speeds Up",
-        "{subject} Speeds Up {place}"
-      ],
-      [
-        "Lengthens",
-        "{subject} Lengthens Stride {place}"
-      ]
-    ],
     "rampage": [
       [
         "Reaches",
-        "Giant Reaches Full Rampage {place}"
-      ],
-      [
-        "Resumes",
-        "Rampage Resumes {place}"
-      ],
-      [
-        "Hits",
-        "Giant Hits Top Speed {place}"
-      ],
-      [
-        "Returns",
-        "Giant Returns To Rampage {place}"
+        "Giant Reaches Full Rampage"
       ],
       [
         "Goes",
-        "Giant Goes Full Rampage {place}"
+        "Giant Goes Full Rampage"
+      ],
+      [
+        "Stops",
+        "Giant Stops Going Around Things"
+      ],
+      [
+        "Resumes",
+        "Rampage Resumes"
+      ],
+      [
+        "Returns",
+        "Giant Returns To Rampage"
       ]
     ],
     "rampageLost": [
       [
         "Ends",
-        "Rampage Ends {place}"
-      ],
-      [
-        "Loses",
-        "Giant Loses Momentum {place}"
+        "Rampage Ends"
       ],
       [
         "Drops",
-        "Giant Drops Out Of Rampage {place}"
+        "Giant Drops Out Of Rampage"
       ],
       [
-        "Off",
-        "Giant Off Top Speed {place}"
+        "Calms",
+        "Giant Calms Down, For Now"
+      ],
+      [
+        "Exhales",
+        "Rampage Over; Traffic Exhales"
       ]
     ],
-    "slowed": "{subject} {verb} {place}",
-    "smashOne": "{subject} {verb} {noun} {place}",
-    "smashMany": "{subject} {verb} {count} {nouns} {place}",
-    "bounce": "{subject} {verb} {noun} {place}",
-    "wall": "{subject} {verb} {place}",
+    "smashOne": "{subject} {verb} {noun}",
+    "smashMany": "{subject} {verb} {count} {nouns}",
+    "bounce": "{subject} {verb} {noun}",
+    "wall": "{subject} {verb}",
     "narrows": [
       [
         "Narrows",
@@ -229,7 +196,7 @@
       ],
       [
         "Squeezes",
-        "Road Squeezes To {lanes} Lanes; Giant Unbothered"
+        "Road Squeezes To {lanes} Lanes; Giant Makes It Work"
       ]
     ],
     "widens": [
@@ -253,18 +220,9 @@
     "escort": [
       [
         "Join",
-        "Police Join Pursuit {place}"
-      ],
-      [
-        "Tags Along",
-        "Second Cruiser Tags Along"
-      ],
-      [
-        "Keeps",
-        "Third Cruiser Keeps A Respectful Distance"
+        "Police Join Pursuit"
       ]
     ],
-    "rampageFallback": "Giant: Full Rampage",
     "spikeStrip": "Own Spike Strip",
     "guardrail": "The Guardrail",
     "mergeFallback": "{lanes} Lanes Ahead",
@@ -273,17 +231,17 @@
       [
         [
           "Remains",
-          "Giant Remains At Large {place}"
+          "Giant Remains At Large"
         ],
         [
           "Still",
-          "Giant Still At Large {place}"
+          "Giant Still At Large"
         ]
       ],
       [
         [
-          "Rampaging",
-          "Giant Rampaging {place}"
+          "Unreal",
+          "Scenes Described As Unreal"
         ],
         [
           "Tears Up",
@@ -291,24 +249,24 @@
         ],
         [
           "Goes Off",
-          "Giant Goes Off {place}"
+          "Giant Goes Off"
         ]
       ],
       [
         [
           "Chaos",
-          "City In Chaos As Giant Heads {dir}"
+          "City In Chaos; Giant Has Places To Be"
         ],
         [
           "Erupts",
-          "City Erupts; Giant Unbothered"
+          "City Erupts; Giant Has Not Looked Up"
         ]
       ]
     ],
     "ramHit": [
       [
         "Sideswipes",
-        "Police Cruiser Sideswipes Giant {place}"
+        "Police Cruiser Sideswipes Giant"
       ],
       [
         "Nudges",
@@ -330,21 +288,21 @@
       ],
       [
         "Whiffs",
-        "Cruiser Whiffs {place}"
+        "Cruiser Whiffs"
       ]
     ],
     "lostTrack": [
       [
         "Lose",
-        "Police Lose Large Man {place}"
+        "Police Lose {subject}"
       ],
       [
         "Loses Sight",
-        "Cruiser Loses Sight Of Giant {place}"
+        "Cruiser Loses Sight Of Giant"
       ],
       [
         "Falls Behind",
-        "Pursuit Car Falls Behind {place}"
+        "Pursuit Car Falls Behind"
       ]
     ],
     "spiked": [
@@ -360,7 +318,7 @@
     "heat": [
       [
         "Request",
-        "Police Request Backup {place}"
+        "Police Request Backup"
       ],
       [
         "Escalates",
@@ -371,42 +329,12 @@
         "City Scrambles More Units"
       ]
     ],
-    "tellRoadblock": [
-      [
-        "Set Up",
-        "Police Set Up Roadblock {place}"
-      ],
-      [
-        "Block",
-        "Police Block The Road Ahead"
-      ]
-    ],
-    "tellRolling": [
-      [
-        "Attempt",
-        "Police Attempt Rolling Roadblock"
-      ],
-      [
-        "Form",
-        "Cruisers Form Line Ahead Of Giant"
-      ]
-    ],
-    "tellSpike": [
-      [
-        "Deploy",
-        "Officers Deploy Spike Strip {place}"
-      ],
-      [
-        "Lay",
-        "Officers Lay Spikes Ahead Of Giant"
-      ]
-    ],
-    "exitOpen": "Chopper Fuel Low; Coverage Ends At The Next Exit",
+    "exitOpen": "Coverage Ends At The Next Exit",
     "signOff": "Giant Takes The Exit; Whereabouts Unknown",
     "busted": {
       "pin": "Suspect In Custody",
       "ratings": "We'll Be Right Back After These Messages",
-      "missed": "Chopper Out Of Fuel; Giant Gets Away From Us"
+      "missed": "Giant Misses The Exit; We Lose The Picture"
     },
     "zone": {
       "tunnel": [
@@ -435,8 +363,8 @@
           "Giant Leaves Highway For {name}"
         ],
         [
-          "Turns Onto",
-          "Giant Turns Onto {name}; Shops Close Early"
+          "Heads Into",
+          "Giant Heads Into {name}; Shops Close Early"
         ]
       ],
       "highway": [
@@ -450,102 +378,7 @@
         ]
       ]
     },
-    "leap": [
-      [
-        "Airborne",
-        "{subject} Airborne {place}"
-      ],
-      [
-        "Clears",
-        "{subject} Clears Traffic In Single Bound"
-      ],
-      [
-        "Leaps",
-        "{subject} Leaps {place}; Experts Unsure How"
-      ]
-    ],
-    "leapSmash": [
-      [
-        "Lands",
-        "{subject} Lands On {count} {nouns}"
-      ],
-      [
-        "Comes Down",
-        "{subject} Comes Down Hard On {count} {nouns}"
-      ]
-    ],
-    "leapSmashOne": [
-      [
-        "Lands",
-        "{subject} Lands On {noun}"
-      ],
-      [
-        "Flattens",
-        "{subject} Lands Squarely On {noun}"
-      ]
-    ],
-    "stare": [
-      [
-        "Yield",
-        "Motorists Yield To Giant {place}"
-      ],
-      [
-        "Parts",
-        "Traffic Parts {place}"
-      ],
-      [
-        "Pull Over",
-        "Drivers Pull Over After Giant Looks At Them"
-      ]
-    ],
-    "stareCops": [
-      [
-        "Fall Back",
-        "Police Fall Back After Long Look From Giant"
-      ],
-      [
-        "Reconsider",
-        "Pursuing Units Reconsider {place}"
-      ],
-      [
-        "Hesitate",
-        "Officers Hesitate; Giant Did Not Blink"
-      ]
-    ],
-    "tellChopper": [
-      [
-        "Sweeps",
-        "Police Chopper Sweeps Highway For Giant"
-      ],
-      [
-        "Searches",
-        "Police Chopper Searches {place}"
-      ]
-    ],
-    "spotlight": [
-      [
-        "Lights Up",
-        "Police Chopper Lights Up Giant {place}"
-      ],
-      [
-        "Has",
-        "Police Chopper Has Giant In Its Light"
-      ],
-      [
-        "Spotlights",
-        "Police Spotlight Finds Giant {place}"
-      ]
-    ],
-    "chopperLost": [
-      [
-        "Shakes",
-        "Giant Shakes Police Chopper {place}"
-      ],
-      [
-        "Loses",
-        "Police Chopper Loses Giant {place}"
-      ]
-    ],
+    "chopperLost": [],
     "policeCrash": [
       [
         "Crashes Into",
@@ -553,7 +386,7 @@
       ],
       [
         "Finds",
-        "Pursuit Car Finds {noun} {place}"
+        "Pursuit Car Finds {noun}"
       ],
       [
         "Ends",
@@ -563,7 +396,7 @@
     "policeSmash": [
       [
         "Ploughs Through",
-        "Cruiser Ploughs Through {noun} {place}"
+        "Cruiser Ploughs Through {noun}"
       ],
       [
         "Clips",
@@ -631,7 +464,7 @@
     "tellNet": [
       [
         "Close In",
-        "Police Close In On Giant {place}"
+        "Police Close In On Giant"
       ],
       [
         "Box",
@@ -649,7 +482,7 @@
       ],
       [
         "Loses",
-        "Car Carrier Loses Cargo {place}"
+        "Car Carrier Loses Cargo"
       ],
       [
         "Drops",
@@ -683,40 +516,16 @@
       ],
       [
         "Escapes",
-        "Giant Escapes Police Box {place}"
+        "Giant Escapes Police Box"
       ],
       [
-        "Shrugs Off",
-        "Giant Shrugs Off Police Net"
-      ]
-    ],
-    "breakaway": [
-      [
-        "Dives",
-        "{subject} Dives Clear Of Pursuit {place}"
-      ],
-      [
-        "Leaves",
-        "{subject} Leaves Police Behind In Single Bound"
-      ],
-      [
-        "Breaks Away",
-        "{subject} Breaks Away {place}; Police Regroup"
-      ]
-    ],
-    "primeTime": [
-      [
-        "Goes Wall To Wall",
-        "Coverage Goes Wall To Wall As Giant Hits Prime Time"
-      ],
-      [
-        "Takes",
-        "Every Station Takes WYF 6 Feed"
-      ],
-      [
-        "Interrupts",
-        "Regular Programming Interrupted {place}"
+        "Fails",
+        "Police Net Fails To Hold Giant"
       ]
     ]
-  }
+  },
+  "breaking": [
+    "BREAKING",
+    "LIVE REPORT"
+  ]
 }

@@ -491,7 +491,7 @@ export const TUNING = {
     /** Chance a highway segment has an overpass crossing it. */
     overpassChance: 0.18,
     names: {
-      first: ['Harbor', 'Quarry', 'Ninth', 'Kessler', 'Orchard', 'Lantern', 'Millbrook', 'Ashgrove', 'Redline', 'Copper', 'Dunmore', 'Saltmarsh'],
+      first: ['Harbor', 'Quarry', 'Ninth', 'Kessler', 'Orchard', 'Lantern', 'Millbrook', 'Ashgrove', 'Kennedy', 'Copper', 'Dunmore', 'Saltmarsh'],
       suffix: { highway: 'Expressway', avenue: 'Avenue', bridge: 'Bridge', tunnel: 'Tunnel' },
     },
   },
