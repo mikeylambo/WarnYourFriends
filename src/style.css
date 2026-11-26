@@ -1373,3 +1373,20 @@ html.touch #pip, #pip, html.autoramp #pip { --pip-top: calc(var(--edge) + env(sa
 /* The shell's Back stays pinned to the bottom of its panel, so it's on screen however long the list (Settings on a
    landscape phone put it below the edge). */
 #ui .slu-panel .slu-back { position: sticky; bottom: 8px; z-index: 3; box-shadow: 0 -10px 18px rgba(10, 8, 20, 0.6); }
+
+/* === Safe areas (iPhone with a Dynamic Island, landscape; tools/safe-area.mjs) =====================================
+   The ticker and the lower third sit right on the home indicator's safe line, never under it (half the inset put the
+   ticker 9px into it). The shell's menu panel keeps clear of it too. The 11 O'Clock Recap scrolls like every other card
+   (it ran ~150px past a landscape phone's bottom), with its buttons pinned. */
+#ticker, html.touch #ticker { bottom: max(4px, env(safe-area-inset-bottom)); }
+#hud.cov1 #chyron, #hud.cov2 #chyron, #hud.cov3 #chyron { bottom: calc(max(4px, env(safe-area-inset-bottom)) + var(--d-tick) + 4px); }
+@media (orientation: landscape) and (max-height: 500px) {
+  #ticker, html.touch #ticker { bottom: max(2px, env(safe-area-inset-bottom)); }
+  #hud.cov1 #chyron, #hud.cov2 #chyron, #hud.cov3 #chyron { bottom: calc(max(2px, env(safe-area-inset-bottom)) + 18px + 4px); }
+  #chyron { bottom: max(4px, env(safe-area-inset-bottom)); }
+}
+#ui .slu-panel { max-height: calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom) - 16px); margin-bottom: env(safe-area-inset-bottom); }
+#recap .rc { max-height: calc(100dvh - 24px - env(safe-area-inset-top) - env(safe-area-inset-bottom)); overflow-y: auto; overscroll-behavior: contain; touch-action: pan-y; -webkit-overflow-scrolling: touch; }
+#recap .rc * { touch-action: pan-y; }
+#recap .rc > .row { position: sticky; bottom: 0; z-index: 2; margin-bottom: 0; padding: 10px 0 12px; background: inherit; }
+#recap .rc .row { position: sticky; bottom: 4px; z-index: 2; background: linear-gradient(to top, rgba(8, 5, 16, 0.96) 72%, rgba(8, 5, 16, 0)); padding-top: 18px; }
