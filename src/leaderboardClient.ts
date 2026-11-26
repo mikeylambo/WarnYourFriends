@@ -45,26 +45,49 @@ function secret(): string {
  * Roads the station issues (only issued roads rank). One is fetched ahead so a broadcast never waits for it;
  * offline or local, there is none and the broadcast runs on a road of its own (it plays the same, unranked).
  */
-let issued: number | null = null;
+let issued: { seed: number; at: number } | null = null;
 let fetching = false;
+/** Whether the board answered the last time we asked (null: not asked yet). Daily needs no ticket, only this. */
+let reachable: boolean | null = null;
+const fresh = (t: { at: number } | null, now = Date.now()) => !!t && now - t.at < TUNING.leaderboard.ticketUseBy * 1000;
 export function prefetchSeed() {
+  if (issued && !fresh(issued)) issued = null; // left on the title overnight: the server has forgotten it
   if (issued !== null || fetching) return;
   fetching = true;
   fetch(`${API}?ticket=1&player=${playerId()}`)
     .then((r) => (r.ok ? r.json() : null))
     .then((b: { seed?: unknown } | null) => {
-      if (b && Number.isSafeInteger(b.seed)) issued = b.seed as number;
+      reachable = !!b;
+      if (b && Number.isSafeInteger(b.seed)) issued = { seed: b.seed as number, at: Date.now() };
     })
-    .catch(() => {})
-    .finally(() => (fetching = false));
+    .catch(() => (reachable = false))
+    .finally(() => {
+      fetching = false;
+      onRank?.();
+    });
 }
-/** The issued road for a fresh broadcast (and fetch the next), or null. */
-export function takeSeed(): number | null {
-  const s = issued;
+// Coming back to the tab: drop a road that's gone stale and fetch a fresh one before Go Live.
+if (typeof document !== 'undefined') document.addEventListener('visibilitychange', () => document.visibilityState === 'visible' && prefetchSeed());
+let onRank: (() => void) | null = null;
+/** Called whenever what the next broadcast would rank as may have changed (a ticket arrived or failed). */
+export function onRankChange(f: () => void) {
+  onRank = f;
+}
+/** The issued road for a fresh broadcast (and fetch the next), or null; `at` is when it was issued. */
+export function takeSeed(): { seed: number; at: number } | null {
+  const s = fresh(issued) ? issued : null;
   issued = null;
   prefetchSeed();
   return s;
 }
+/** Will the next broadcast in this mode rank? (Daily: the board answered. Others: a fresh road is in hand.) */
+export function nextRanked(mode: BoardMode): 'ranked' | 'unranked' | 'checking' {
+  if (mode === 'daily' ? reachable === true : fresh(issued)) return 'ranked';
+  return fetching || reachable === null ? 'checking' : 'unranked';
+}
+/** Is a road issued at `at` still rankable now? */
+export const ticketFresh = (at: number | undefined) => at !== undefined && fresh({ at });
+export const boardReachable = () => reachable;
 
 type Row = { rank: number; name: string; score: number; you?: boolean };
 const esc = (s: string) => s.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
@@ -155,7 +178,8 @@ export function mountBoard(el: HTMLElement, mode: BoardMode, sub: Submission | n
         await post(saved);
       } else show(body.top, body.you);
     } catch {
-      el.hidden = true; // no board here (local dev, offline, or not configured yet)
+      // Never hide it silently: say the score didn't go on the board.
+      el.innerHTML = `${head('UNRANKED')}<p class="note">Couldn’t reach the board, so this score stays off it.</p>`;
     }
   })();
 }

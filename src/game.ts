@@ -34,7 +34,7 @@ import { AWARD_BADGE, MOD_ART, OUTFIT_ART } from './unlockArt';
 import { PlayLog, appendLog, exportLog, type PlayEntry } from './playlog';
 import { readFlags } from './debug';
 import { dailyDay, dailySeed, encodeInputs, type BoardMode, type Submission } from './leaderboard/verify';
-import { mountBoard, prefetchSeed, takeSeed } from './leaderboardClient';
+import { boardReachable, mountBoard, nextRanked, onRankChange, prefetchSeed, takeSeed, ticketFresh } from './leaderboardClient';
 import { Onboarding, type PromptId } from './onboarding';
 import { AWARDS, loadProfile, modUnlocked, storyAskOffer, outfitUnlocked, record, rewardLine, saveProfile, upgradePool, type Award } from './awards';
 import { GAME_SPEEDS, HUD_SIZES, loadSettings, saveSettings } from './settings';
@@ -431,7 +431,7 @@ let lastEntry: PlayEntry | null = null;
 let simOpts: { seed: number; segment: number; upgrades: UpgradeId[]; levels: Partial<Record<AbilityId, number>>; growth: boolean; guided?: boolean; edition?: number; endless?: boolean; asks?: string[]; mods?: string[] } = { seed: 0, segment: 0, upgrades: [], levels: {}, growth: false };
 const inputLog: SimInput[] = [];
 /** Leaderboard: this broadcast's (or run's) seed, each segment's inputs and the meeting buys, for the server to re-play. */
-let lb: { mode: BoardMode; day?: number; seed: number; segments: string[]; buys: UpgradeId[][]; pool: UpgradeId[]; guided?: boolean; edition?: number } = { mode: 'broadcast', seed: 0, segments: [], buys: [], pool: [] };
+let lb: { mode: BoardMode; day?: number; seed: number; segments: string[]; buys: UpgradeId[][]; pool: UpgradeId[]; guided?: boolean; edition?: number; issuedAt?: number; ranked?: boolean } = { mode: 'broadcast', seed: 0, segments: [], buys: [], pool: [] };
 /** Why this browser's scores can't go on the board (a setting that changes the sim), or null. */
 const lbBlocked = () =>
   !PROTO
@@ -1253,7 +1253,9 @@ function showRecap() {
   mountClip();
   const boardEl = recapEl.querySelector<HTMLElement>('.rc-board');
   if (boardEl) {
-    const blocked = lbBlocked();
+    // A road the station never issued, or one it has since forgotten, can't rank: say so rather than fail the post.
+    const unissued = lb.mode !== 'daily' && !ticketFresh(lb.issuedAt) ? 'Unranked road: the station didn’t issue it (offline, or it sat too long), so this score stays off the board.' : null;
+    const blocked = lbBlocked() ?? unissued;
     const sub: Submission | null = blocked || lb.segments.length === 0
       ? null
       : { mode: lb.mode, seed: lb.seed, growth: simOpts.growth, segments: lb.segments, buys: lb.buys, pool: lb.pool, ...(lb.guided ? { guided: true } : {}), ...(lb.edition ? { edition: lb.edition } : {}), ...(lb.day !== undefined ? { day: lb.day } : {}), ...(simOpts.asks ? { asks: simOpts.asks } : {}), ...(simOpts.mods ? { mods: simOpts.mods } : {}), claimed: Math.round(run ? run.earned : sim.show.banked) };
@@ -2160,12 +2162,18 @@ function beginBroadcast(mode = 'broadcast') {
   endlessMode = PROTO && (mode === 'endless' || dailyMode);
   if (endlessMode) mode = 'broadcast'; // one long broadcast, no run around it
   const day = dailyDay(Date.now());
-  const seed = dailyMode ? dailySeed(day) : nextSeed ?? takeSeed() ?? (Math.random() * 1e9) | 0;
+  // Run Again keeps the road (and its ticket's age); a fresh broadcast takes the prefetched road if it's still fresh.
+  const again = nextSeed !== null && nextSeed === lb.seed ? lb.issuedAt : undefined;
+  const taken = dailyMode || nextSeed !== null ? null : takeSeed();
+  const seed = dailyMode ? dailySeed(day) : nextSeed ?? taken?.seed ?? (Math.random() * 1e9) | 0;
+  const issuedAt = dailyMode ? undefined : nextSeed !== null ? again : taken?.at;
   nextSeed = null;
   // The very first broadcast a player goes live in is the guided one (TUNING.guided): its first segment opens calm.
   const guided = !flags.bot && !flags.autostart && !briefingSeen();
   const edition = 0; // Editions off (2026-11-19)
-  lb = { mode: dailyMode ? 'daily' : endlessMode ? 'endless' : mode === 'run' ? 'run' : 'broadcast', ...(dailyMode ? { day } : {}), seed, segments: [], buys: [], pool: upgradePool(profile), ...(guided ? { guided } : {}), ...(edition ? { edition } : {}) };
+  lb = { mode: dailyMode ? 'daily' : endlessMode ? 'endless' : mode === 'run' ? 'run' : 'broadcast', ...(dailyMode ? { day } : {}), seed, segments: [], buys: [], pool: upgradePool(profile), ...(guided ? { guided } : {}), ...(edition ? { edition } : {}), ...(issuedAt !== undefined ? { issuedAt } : {}) };
+  lb.ranked = !lbBlocked() && (dailyMode ? boardReachable() !== false : ticketFresh(issuedAt));
+  showRankTag();
   if (mode === 'run') {
     run = new RunState(seed, lb.pool, edition); // Awards unlock the rest of the pool
     newRun(run.segmentSeed(), 0, [], {}, guided);
@@ -2961,7 +2969,22 @@ async function renderMenuCard() {
     best?.runs ? `<div class="mc-row"><small>STORIES FINISHED</small><b>${best.runsWon ?? 0}<span>/${best.runs}</span></b></div>` : '',
   ].join('');
   const nx = next ? `<div class="mc-next"><small>NEXT AWARD</small><b>${esc(next.a.title)}</b><span>${esc(next.a.how)} · ${next.have.toLocaleString()}/${next.a.n.toLocaleString()}${rewardLine(next.a) ? ` · ${esc(rewardLine(next.a))}` : ''}</span><i style="--p:${((next.have / next.a.n) * 100).toFixed(0)}%"></i></div>` : `<div class="mc-next"><small>AWARDS</small><b>Every award won</b></div>`;
-  el.innerHTML = rows ? `<div class="mc-rows">${rows}</div>${nx}` : nx;
+  const rs = nextRanked('run');
+  const rk = rs === 'checking' ? `<div class="mc-rank"><b>CHECKING THE BOARD…</b></div>` : rs === 'ranked' ? `<div class="mc-rank on"><b>RANKED</b><span>Scores go on the board</span></div>` : `<div class="mc-rank"><b>UNRANKED</b><span>Can’t reach the board, so scores stay off it (Daily still counts once it’s back)</span></div>`;
+  el.innerHTML = (rows ? `<div class="mc-rows">${rows}</div>${nx}` : nx) + rk;
+}
+onRankChange(() => void renderMenuCard());
+
+/** RANKED / UNRANKED beside LIVE for the first seconds of a player broadcast, so the player knows what counts. */
+let rankTagTimer = 0;
+function showRankTag() {
+  const t = document.getElementById('ranktag');
+  if (!t) return;
+  clearTimeout(rankTagTimer);
+  t.hidden = attract || !!flags.bot;
+  t.textContent = lb.ranked ? 'RANKED' : 'UNRANKED';
+  t.classList.toggle('on', !!lb.ranked);
+  rankTagTimer = window.setTimeout(() => (t.hidden = true), TUNING.hud.rankTagSecs * 1000);
 }
 
 /** Persist the bests (shell storage, per game id). */
@@ -3186,7 +3209,8 @@ declare global {
     __GAME: unknown;
   }
 }
-window.__GAME = {
+// Test builds only (VITE_TEST_HOOK=1, or dev): the public build ships no control surface for automated play.
+if (import.meta.env.DEV || import.meta.env.VITE_TEST_HOOK === '1') window.__GAME = {
   get sim() {
     return sim;
   },

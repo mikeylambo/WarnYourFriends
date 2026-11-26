@@ -645,6 +645,8 @@ var TUNING = {
    */
   /** `rampWarn`: Rampage's last this-many seconds pulse red and tick (review pick 2: see it ending). */
   hud: {
+    /** RANKED / UNRANKED tag beside LIVE at the start of a broadcast (s): long enough to read, gone before the first hazard needs the eye. */
+    rankTagSecs: 5,
     /** Chopper fuel gauge: red and pulsing for this many seconds before the segment's hard end. */
     fuelCritical: 15,
     minScale: 0.5,
@@ -1083,6 +1085,8 @@ var TUNING = {
     perMinuteAll: 120,
     /** A road the server hands out stays rankable for this player this long (s): Run Again on it counts, a road picked by hand doesn't. */
     ticketTtl: 6 * 3600,
+    /** The client stops using a prefetched road this long after it was issued (s): ticketTtl less an hour, so the longest broadcast (~20 min Endless) still posts before the server forgets it. */
+    ticketUseBy: 5 * 3600,
     /** Roads handed out per player per minute. */
     ticketsPerMinute: 10,
     /** Submissions per player id per minute (a broadcast takes minutes; this only stops scripted bursts). */
