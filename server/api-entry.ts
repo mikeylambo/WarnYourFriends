@@ -24,7 +24,7 @@ export default async function leaderboard(req: Req, res: Res) {
   const fwd = req.headers['x-forwarded-for'];
   const ip = (Array.isArray(fwd) ? fwd[0] : fwd)?.split(',')[0].trim() || req.socket?.remoteAddress || 'unknown';
   try {
-    const r = await handle(store, req.method ?? 'GET', req.query ?? {}, req.body, ip);
+    const r = await handle(store, req.method ?? 'GET', req.query ?? {}, req.body, ip, Date.now(), process.env.LB_ADMIN_KEY);
     res.setHeader('Cache-Control', req.method === 'GET' ? 'public, s-maxage=10, stale-while-revalidate=30' : 'no-store');
     res.status(r.status).json(r.body);
   } catch (e) {

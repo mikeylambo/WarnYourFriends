@@ -175,10 +175,10 @@ export const TUNING = {
     storySpare: 1,
     storyOffer: [2, 2, 2],
     storyAsks: [
-      { id: 's-scoops', tier: 1, kind: 'scoops', n: 8, text: 'Grab {n} Scoops' },
+      { id: 's-scoops', tier: 1, kind: 'scoops', n: 8, text: 'Grab {n} Exclusives' },
       { id: 's-rampage', tier: 1, kind: 'rampage', n: 3, text: 'Go Rampage {n} times' },
       { id: 's-rivals', tier: 1, kind: 'rivals', n: 2, text: 'Flatten {n} rival news vans' },
-      { id: 's-near', tier: 1, kind: 'nearMiss', n: 12, text: '{n} close calls' },
+      { id: 's-near', tier: 1, kind: 'nearMiss', n: 12, text: '{n} near misses' },
       { id: 's-bridge', tier: 2, kind: 'cleanDistrict', district: 1, n: 1, text: 'Cross Saltmarsh Bridge without a hit', requires: 's-scoops', unlock: 'heavyLoad' },
       { id: 's-crash', tier: 2, kind: 'crashBefore', district: 3, n: 2, text: 'Crash {n} police cars before the tunnel', requires: 's-rampage', unlock: 'hotPursuit' },
       { id: 's-chain', tier: 2, kind: 'chain', n: 15, text: 'Combo {n} stunts', requires: 's-near', unlock: 'glassJaw' },
@@ -189,7 +189,7 @@ export const TUNING = {
       { id: 's-tunnel', tier: 3, kind: 'cleanDistrict', district: 3, n: 1, text: 'Through the tunnel without a hit', requires: 's-bridge' },
       { id: 's-units', tier: 3, kind: 'units', n: 4, text: 'Flatten {n} police cars', requires: 's-crash', unlock: 'shortLeash' },
       // Replaces 'Shake the police chopper' (Mike, 2026-11-24: there's no real way to lose it).
-      { id: 's-scoops20', tier: 3, kind: 'scoops', n: 20, text: 'Grab {n} Scoops', requires: 's-scoops', unlock: 'liveWire' },
+      { id: 's-scoops20', tier: 3, kind: 'scoops', n: 20, text: 'Grab {n} Exclusives', requires: 's-scoops', unlock: 'liveWire' },
       { id: 's-clean', tier: 3, kind: 'cleanRun', n: 1, text: 'Sign off without a single hit', requires: 's-tunnel' },
       { id: 's-modded', tier: 3, kind: 'finishModded', n: 1, text: 'Sign off with a traffic mod on', requires: 's-finish' },
     ] as { id: string; tier: 1 | 2 | 3; kind: string; n: number; text: string; district?: number; requires?: string; unlock?: string }[],
@@ -360,7 +360,14 @@ export const TUNING = {
    * and the meter's countdown. All under 3 Hz; Reduce Flashes holds the throb still.
    */
   /** Activation: hit-pause frames, a one-frame flash (off under Reduce Flashes), a camera jolt (px) and a rumble (ms). */
-  rampageFx: { rimColor: 0xff5a1f, rimBoost: 2.4, rimFloor: 0.5, /** Dusk and day: barely brighter, just hotter in colour. */ rimBoostLit: 1.15, ease: 0.25, pulseHz: 1.6, pulseAmp: 0.25, slamHitstop: 6, slamFlash: 2, slamShake: 7, slamHaptic: 220 },
+  rampageFx: {
+    /**
+     * Gold aura (Mike, 2026-11-24: "Hercules glow / SSJ aura", gold): halo + flame tongues behind him, additive.
+     * height: aura height per unit of his size (m, a head above him); behind: pushed away from the camera (m) so he
+     * stays in front; flicker/lick under 3 Hz (photosensitivity); burst: the gold shockwave rings when it fires.
+     */
+    aura: { color: 0xffc83a, height: 4.8, behind: 0.8, haloScale: 1.25, haloOpacity: 0.55, flames: 5, flameWidth: 0.42, flameHeight: 0.95, flameLick: 0.25, flameOpacity: 0.6, flicker: 0.12, flickerHz: 2.2, lickHz: 2.6, burst: [[16, 0.7, 0.95], [10, 0.5, 0.9], [22, 0.9, 0.6]] as [number, number, number][] },
+    rimColor: 0xffc23a, rimBoost: 2.4, rimFloor: 0.5, /** Dusk and day: barely brighter, just hotter in colour. */ rimBoostLit: 1.15, ease: 0.25, pulseHz: 1.6, pulseAmp: 0.25, slamHitstop: 6, slamFlash: 2, slamShake: 7, slamHaptic: 220 },
 
   shoulderCheck: {
     /** §7 0.25s burst that smashes one mass class up (unchanged in v0.3). */
@@ -461,6 +468,8 @@ export const TUNING = {
     aheadDistance: 480,
     /** Render-only road behind the start line (segments), so the opening head-on shot has road behind him. */
     leadInSegments: 6,
+    /** Perf (2026-11-25): new road segments built per rendered frame (the first frame builds all), so no frame pays for several. */
+    segBuildsPerFrame: 1,
     keepBehind: 120,
     /** Concrete edge walls. */
     wallHeight: 1.0,
@@ -550,7 +559,8 @@ export const TUNING = {
    * Landmarks keep their own patterns. The flag rides the leaderboard submission so the server replays it the same.
    */
   /** meterGain: Rampage meter gains × this during the calm, so a first-timer's first Rampage lands inside it (bot: 21s → ~12s). */
-  guided: { calmFor: 25, clearFor: 400, meterGain: 1.8 },
+  /** rampageBy: if Rampage hasn't fired by this sim time (s), the audience tops up so the first one lands in the first minute. */
+  guided: { calmFor: 25, clearFor: 400, meterGain: 1.8, rampageBy: 55 },
 
   /**
    * Things worth aiming for (Mike, 2026-11-17: "not enough to do during the runs, especially during Rampage").
@@ -651,8 +661,6 @@ export const TUNING = {
     shotAfter: 0.2, shotWidth: 960,
     /** The recap's looping clip: recorded off the canvas during the replay at this frame rate and bitrate; under `clipMin` s (skipped early) the still stays. */
     clipFps: 30, clipBitrate: 2_500_000, clipMin: 1.5,
-    /** Between plays of the clip, the still (the moment as it lands) holds this long (s). Mike: "alternate photos and clips". */
-    clipStillHold: 3,
     score: { policeCrash: 10, unitSmash: 7, leapLand: 4, breakawayLand: 5, heavyAcross: 6, heavy: 4, nearMiss: 4, ramMiss: 4 },
   },
 
@@ -760,11 +768,11 @@ export const TUNING = {
       { name: 'Wide Side', yawDeg: 35, pitchDeg: 52, distance: 55, fov: 35, lookAheadTime: 0.5 },
       { name: 'Long Lens', yawDeg: 15, pitchDeg: 40, distance: 70, fov: 22, lookAheadTime: 0.7 },
       // Mike: head-on as a cut-away, from higher up (44° vs the 18° experiment). Far and telephoto so ≥2s of road ahead fits below him.
-      { name: 'Head-On', yawDeg: 12, pitchDeg: 44, distance: 108, fov: 16, headOn: true, swoopHome: true },
+      { name: 'Head-On', yawDeg: 12, pitchDeg: 44, distance: 128, fov: 16, headOn: true, swoopHome: true },
       // Mike: a higher head-on. Steeper means more road per screen, so further out to keep ≥2s below him.
-      { name: 'High Head-On', yawDeg: 10, pitchDeg: 58, distance: 122, fov: 17, headOn: true, swoopHome: true },
+      { name: 'High Head-On', yawDeg: 10, pitchDeg: 58, distance: 140, fov: 17, headOn: true, swoopHome: true },
       // Mike: almost directly above. Travel stays screen-up; shows lanes, merges and the convoy like a map.
-      { name: 'Overhead', yawDeg: 0, pitchDeg: 82, distance: 70, fov: 30, swoopHome: true },
+      { name: 'Overhead', yawDeg: 0, pitchDeg: 82, distance: 80, fov: 30, swoopHome: true },
       // Mike (2026-11-17): the sign-off sweeps deeper into a head-on, low and close, looking back down the road he came
       // along; framed behind him so the end of the ramp ahead of him is out of shot. Outro only.
       { name: 'Sign-Off', yawDeg: 16, pitchDeg: 20, distance: 46, fov: 24, headOn: true, outro: true, lookBehind: 9, swoopHome: true },
@@ -811,8 +819,8 @@ export const TUNING = {
     cutFlashFrames: 1,
     /** Frame the point this many seconds ahead of the giant (speed × time). */
     lookAheadTime: 1.6,
-    /** The giant never sits lower than this fraction of the screen height (0 top, 1 bottom). */
-    giantMaxScreenY: 0.85,
+    /** The giant never sits lower than this fraction of the screen height (0 top, 1 bottom). Mike (2026-11-24): 0.85 put him under the chyron in landscape. */
+    giantMaxScreenY: 0.7,
     /** At least this much road visible ahead, in seconds at current speed. */
     minRoadAheadSeconds: 2,
     /** Distance changes between tiers ease over this long. */
@@ -840,6 +848,8 @@ export const TUNING = {
    * never catch up and never attack (pursuit AI is Phase 2); they sell the chase.
    */
   escort: {
+    /** Oncoming cars count as in the way from this far ahead (m): they close at both speeds. */
+    oncomingLook: 60,
     count: 3,
     /** LOCKED (§1): pursuers never spawn within 40m. Spawning 100m back also keeps them behind every camera angle. */
     spawnBehind: 100,
@@ -1100,8 +1110,14 @@ export const TUNING = {
     ticketTtl: 6 * 3600,
     /** Roads handed out per player per minute. */
     ticketsPerMinute: 10,
+    /** Submissions per player id per minute (a broadcast takes minutes; this only stops scripted bursts). */
+    perPlayerMinute: 4,
+    /** Names that pass as staff are refused (no impersonating the station or the developer). Matched like `blocked`. */
+    /** Innocent words that contain a blocked one (the Scunthorpe problem): taken out before matching. */
+    allowed: ['grape', 'drape', 'scrape', 'trapeze', 'peacock', 'hancock', 'cockpit', 'shuttlecock', 'woodcock', 'scunthorpe', 'shitake', 'fagan'],
+    reserved: ['admin', 'moderator', 'official', 'wyfnews', 'wyf6', 'staff', 'developer', 'support', 'anthropic', 'claude'],
     /** Never on the board (rule 10: never mean). Matched inside the name's letters. */
-    blocked: ['fuck', 'shit', 'cunt', 'nigg', 'fag', 'rape', 'nazi', 'hitler', 'retard', 'whore', 'slut', 'bitch', 'cock', 'pussy', 'kike', 'chink', 'spic', 'tranny'],
+    blocked: ['fuck', 'shit', 'cunt', 'nigg', 'fag', 'rape', 'nazi', 'hitler', 'retard', 'whore', 'slut', 'bitch', 'cock', 'pussy', 'kike', 'chink', 'spic', 'tranny', 'dyke', 'wetback', 'beaner', 'gook', 'raghead', 'towelhead', 'kkk', 'jizz', 'penis', 'vagina', 'porn', 'molest', 'pedo', 'twat', 'wank'],
   },
 
   /**
@@ -1227,6 +1243,8 @@ export const TUNING = {
     coldOpen: 2.2,
     /** The anchor desk split screen holds this long when a higher tier hits. */
     deskTime: 4.5,
+    /** Anchor desk window shown at all (Mike, 2026-11-24: off for now; it fought the CAM button, and the chopper shot is the show). */
+    anchorDesk: false,
     /** Viewer video (picture-in-picture): length, minimum gap, minimum Ratings tier. */
     /** Viewer video's far plane (m): it frames him from ~10–25m, and drawing the city to 500m tripled the frame's draw calls (release pass, 2026-11-24). */
     pipFar: 80,
@@ -1237,6 +1255,8 @@ export const TUNING = {
 
   /** Phase 0c look: night by default; LIVE TIME follows the local clock. */
   look: {
+    /** Art pass (2026-11-24): the ink outline on vehicles (m per side), matching the giant's. */
+    inkWidth: 0.06,
     /** Bloom (Settings; review #66): only the brightest things glow (lights, sparks, embers, lit windows at night). */
     /** By look: daylight lifts the road and cars near white, so the day threshold sits above them (Mike, 2026-11-18: "entirely too much"). */
     bloom: { radius: 0.35, night: { strength: 0.55, threshold: 0.82 }, dusk: { strength: 0.35, threshold: 0.9 }, day: { strength: 0.15, threshold: 0.97 } },
@@ -1258,7 +1278,7 @@ export const TUNING = {
     /** Real point lights reused on the nearest lamps (the rest are glow decals). Each light costs every lit pixel. */
     lampLights: 2,
     /** Chopper spotlight: ground pool radius (m), lag following the giant (s), wander (m). */
-    spotRadius: 7.5,
+    spotRadius: 8.5, // 7.5 → 8.5 (2026-11-25): more lit road around him at night, so his silhouette holds in the head-on angles
     spotLag: 0.25,
     spotWander: 1.2,
     /** Chopper shadow crosses the road every this many seconds (random in range). */
@@ -1288,7 +1308,7 @@ export const TUNING = {
     flickThreshold: 0.6,
     flickRelease: 0.3,
     /** Swipe: at least this many px, within this time. */
-    swipeMinPx: 40,
+    swipeMinPx: 48,
     swipeMaxTime: 0.35,
     /** Swipe down and hold to brake: downward drag past this many px. */
     swipeDownBrakePx: 40,

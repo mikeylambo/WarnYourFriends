@@ -8,7 +8,7 @@ import type { SimEvent } from './sim/types';
  * instructions with the button on them, never a voice or a quote (the producer notes were cut on 2026-11-16).
  * At most one on screen, `gap` s apart. Presentation only: reads the sim, never writes it.
  */
-export type PromptId = 'lanes' | 'blocked' | 'concrete' | 'meter' | 'ready' | 'hit' | 'ram' | 'rampage' | 'audience' | 'kite' | 'boxed' | 'caught' | 'exit' | 'ability' | 'ability2';
+export type PromptId = 'lanes' | 'blocked' | 'concrete' | 'meter' | 'ready' | 'hit' | 'ram' | 'rampage' | 'audience' | 'kite' | 'boxed' | 'caught' | 'exit' | 'ability' | 'ability2' | 'exclusive' | 'nearMiss';
 
 /** v2: the Rampage loop (2026-11-17) teaches new lessons, so everyone sees them once. */
 const STORE = 'wyf.prompts.v2';
@@ -69,6 +69,9 @@ export class Onboarding {
     if (e.type === 'tell' && e.kind === 'cruiser') this.want('ram');
     else if (e.type === 'tell' && e.kind === 'net') this.want('boxed');
     else if (e.type === 'meterFull') this.want('ready');
+    // The first of each, the moment it happens (the teaching opening): what it was and what it's for.
+    else if (e.type === 'scoop') this.want('exclusive');
+    else if (e.type === 'dodge' || e.type === 'nearMiss') this.want('nearMiss');
     // Changed lanes without being told: that lesson is learned.
     else if (e.type === 'laneChange' && !this.seen.has('lanes')) {
       this.seen.add('lanes');

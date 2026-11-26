@@ -90,10 +90,10 @@ var TUNING = {
     storySpare: 1,
     storyOffer: [2, 2, 2],
     storyAsks: [
-      { id: "s-scoops", tier: 1, kind: "scoops", n: 8, text: "Grab {n} Scoops" },
+      { id: "s-scoops", tier: 1, kind: "scoops", n: 8, text: "Grab {n} Exclusives" },
       { id: "s-rampage", tier: 1, kind: "rampage", n: 3, text: "Go Rampage {n} times" },
       { id: "s-rivals", tier: 1, kind: "rivals", n: 2, text: "Flatten {n} rival news vans" },
-      { id: "s-near", tier: 1, kind: "nearMiss", n: 12, text: "{n} close calls" },
+      { id: "s-near", tier: 1, kind: "nearMiss", n: 12, text: "{n} near misses" },
       { id: "s-bridge", tier: 2, kind: "cleanDistrict", district: 1, n: 1, text: "Cross Saltmarsh Bridge without a hit", requires: "s-scoops", unlock: "heavyLoad" },
       { id: "s-crash", tier: 2, kind: "crashBefore", district: 3, n: 2, text: "Crash {n} police cars before the tunnel", requires: "s-rampage", unlock: "hotPursuit" },
       { id: "s-chain", tier: 2, kind: "chain", n: 15, text: "Combo {n} stunts", requires: "s-near", unlock: "glassJaw" },
@@ -105,7 +105,7 @@ var TUNING = {
       { id: "s-tunnel", tier: 3, kind: "cleanDistrict", district: 3, n: 1, text: "Through the tunnel without a hit", requires: "s-bridge" },
       { id: "s-units", tier: 3, kind: "units", n: 4, text: "Flatten {n} police cars", requires: "s-crash", unlock: "shortLeash" },
       // Replaces 'Shake the police chopper' (Mike, 2026-11-24: there's no real way to lose it).
-      { id: "s-scoops20", tier: 3, kind: "scoops", n: 20, text: "Grab {n} Scoops", requires: "s-scoops", unlock: "liveWire" },
+      { id: "s-scoops20", tier: 3, kind: "scoops", n: 20, text: "Grab {n} Exclusives", requires: "s-scoops", unlock: "liveWire" },
       { id: "s-clean", tier: 3, kind: "cleanRun", n: 1, text: "Sign off without a single hit", requires: "s-tunnel" },
       { id: "s-modded", tier: 3, kind: "finishModded", n: 1, text: "Sign off with a traffic mod on", requires: "s-finish" }
     ],
@@ -267,7 +267,13 @@ var TUNING = {
    */
   /** Activation: hit-pause frames, a one-frame flash (off under Reduce Flashes), a camera jolt (px) and a rumble (ms). */
   rampageFx: {
-    rimColor: 16734751,
+    /**
+     * Gold aura (Mike, 2026-11-24: "Hercules glow / SSJ aura", gold): halo + flame tongues behind him, additive.
+     * height: aura height per unit of his size (m, a head above him); behind: pushed away from the camera (m) so he
+     * stays in front; flicker/lick under 3 Hz (photosensitivity); burst: the gold shockwave rings when it fires.
+     */
+    aura: { color: 16762938, height: 4.8, behind: 0.8, haloScale: 1.25, haloOpacity: 0.55, flames: 5, flameWidth: 0.42, flameHeight: 0.95, flameLick: 0.25, flameOpacity: 0.6, flicker: 0.12, flickerHz: 2.2, lickHz: 2.6, burst: [[16, 0.7, 0.95], [10, 0.5, 0.9], [22, 0.9, 0.6]] },
+    rimColor: 16761402,
     rimBoost: 2.4,
     rimFloor: 0.5,
     /** Dusk and day: barely brighter, just hotter in colour. */
@@ -377,6 +383,8 @@ var TUNING = {
     aheadDistance: 480,
     /** Render-only road behind the start line (segments), so the opening head-on shot has road behind him. */
     leadInSegments: 6,
+    /** Perf (2026-11-25): new road segments built per rendered frame (the first frame builds all), so no frame pays for several. */
+    segBuildsPerFrame: 1,
     keepBehind: 120,
     /** Concrete edge walls. */
     wallHeight: 1
@@ -461,7 +469,8 @@ var TUNING = {
    * Landmarks keep their own patterns. The flag rides the leaderboard submission so the server replays it the same.
    */
   /** meterGain: Rampage meter gains × this during the calm, so a first-timer's first Rampage lands inside it (bot: 21s → ~12s). */
-  guided: { calmFor: 25, clearFor: 400, meterGain: 1.8 },
+  /** rampageBy: if Rampage hasn't fired by this sim time (s), the audience tops up so the first one lands in the first minute. */
+  guided: { calmFor: 25, clearFor: 400, meterGain: 1.8, rampageBy: 55 },
   /**
    * Things worth aiming for (Mike, 2026-11-17: "not enough to do during the runs, especially during Rampage").
    * - Rival news vans (a rival station's van, dish on the roof): `newsvanChance` of Heavy traffic slots. Flattening one
@@ -575,8 +584,6 @@ var TUNING = {
     clipFps: 30,
     clipBitrate: 25e5,
     clipMin: 1.5,
-    /** Between plays of the clip, the still (the moment as it lands) holds this long (s). Mike: "alternate photos and clips". */
-    clipStillHold: 3,
     score: { policeCrash: 10, unitSmash: 7, leapLand: 4, breakawayLand: 5, heavyAcross: 6, heavy: 4, nearMiss: 4, ramMiss: 4 }
   },
   /**
@@ -697,11 +704,11 @@ var TUNING = {
       { name: "Wide Side", yawDeg: 35, pitchDeg: 52, distance: 55, fov: 35, lookAheadTime: 0.5 },
       { name: "Long Lens", yawDeg: 15, pitchDeg: 40, distance: 70, fov: 22, lookAheadTime: 0.7 },
       // Mike: head-on as a cut-away, from higher up (44° vs the 18° experiment). Far and telephoto so ≥2s of road ahead fits below him.
-      { name: "Head-On", yawDeg: 12, pitchDeg: 44, distance: 108, fov: 16, headOn: true, swoopHome: true },
+      { name: "Head-On", yawDeg: 12, pitchDeg: 44, distance: 128, fov: 16, headOn: true, swoopHome: true },
       // Mike: a higher head-on. Steeper means more road per screen, so further out to keep ≥2s below him.
-      { name: "High Head-On", yawDeg: 10, pitchDeg: 58, distance: 122, fov: 17, headOn: true, swoopHome: true },
+      { name: "High Head-On", yawDeg: 10, pitchDeg: 58, distance: 140, fov: 17, headOn: true, swoopHome: true },
       // Mike: almost directly above. Travel stays screen-up; shows lanes, merges and the convoy like a map.
-      { name: "Overhead", yawDeg: 0, pitchDeg: 82, distance: 70, fov: 30, swoopHome: true },
+      { name: "Overhead", yawDeg: 0, pitchDeg: 82, distance: 80, fov: 30, swoopHome: true },
       // Mike (2026-11-17): the sign-off sweeps deeper into a head-on, low and close, looking back down the road he came
       // along; framed behind him so the end of the ramp ahead of him is out of shot. Outro only.
       { name: "Sign-Off", yawDeg: 16, pitchDeg: 20, distance: 46, fov: 24, headOn: true, outro: true, lookBehind: 9, swoopHome: true }
@@ -749,8 +756,8 @@ var TUNING = {
     cutFlashFrames: 1,
     /** Frame the point this many seconds ahead of the giant (speed × time). */
     lookAheadTime: 1.6,
-    /** The giant never sits lower than this fraction of the screen height (0 top, 1 bottom). */
-    giantMaxScreenY: 0.85,
+    /** The giant never sits lower than this fraction of the screen height (0 top, 1 bottom). Mike (2026-11-24): 0.85 put him under the chyron in landscape. */
+    giantMaxScreenY: 0.7,
     /** At least this much road visible ahead, in seconds at current speed. */
     minRoadAheadSeconds: 2,
     /** Distance changes between tiers ease over this long. */
@@ -777,6 +784,8 @@ var TUNING = {
    * never catch up and never attack (pursuit AI is Phase 2); they sell the chase.
    */
   escort: {
+    /** Oncoming cars count as in the way from this far ahead (m): they close at both speeds. */
+    oncomingLook: 60,
     count: 3,
     /** LOCKED (§1): pursuers never spawn within 40m. Spawning 100m back also keeps them behind every camera angle. */
     spawnBehind: 100,
@@ -1076,8 +1085,14 @@ var TUNING = {
     ticketTtl: 6 * 3600,
     /** Roads handed out per player per minute. */
     ticketsPerMinute: 10,
+    /** Submissions per player id per minute (a broadcast takes minutes; this only stops scripted bursts). */
+    perPlayerMinute: 4,
+    /** Names that pass as staff are refused (no impersonating the station or the developer). Matched like `blocked`. */
+    /** Innocent words that contain a blocked one (the Scunthorpe problem): taken out before matching. */
+    allowed: ["grape", "drape", "scrape", "trapeze", "peacock", "hancock", "cockpit", "shuttlecock", "woodcock", "scunthorpe", "shitake", "fagan"],
+    reserved: ["admin", "moderator", "official", "wyfnews", "wyf6", "staff", "developer", "support", "anthropic", "claude"],
     /** Never on the board (rule 10: never mean). Matched inside the name's letters. */
-    blocked: ["fuck", "shit", "cunt", "nigg", "fag", "rape", "nazi", "hitler", "retard", "whore", "slut", "bitch", "cock", "pussy", "kike", "chink", "spic", "tranny"]
+    blocked: ["fuck", "shit", "cunt", "nigg", "fag", "rape", "nazi", "hitler", "retard", "whore", "slut", "bitch", "cock", "pussy", "kike", "chink", "spic", "tranny", "dyke", "wetback", "beaner", "gook", "raghead", "towelhead", "kkk", "jizz", "penis", "vagina", "porn", "molest", "pedo", "twat", "wank"]
   },
   /**
    * Onboarding prompts (Mike, 2026-11-17). Each once per browser, one at a time, `gap` s apart, held `hold` s.
@@ -1211,6 +1226,8 @@ var TUNING = {
     coldOpen: 2.2,
     /** The anchor desk split screen holds this long when a higher tier hits. */
     deskTime: 4.5,
+    /** Anchor desk window shown at all (Mike, 2026-11-24: off for now; it fought the CAM button, and the chopper shot is the show). */
+    anchorDesk: false,
     /** Viewer video (picture-in-picture): length, minimum gap, minimum Ratings tier. */
     /** Viewer video's far plane (m): it frames him from ~10–25m, and drawing the city to 500m tripled the frame's draw calls (release pass, 2026-11-24). */
     pipFar: 80,
@@ -1220,6 +1237,8 @@ var TUNING = {
   },
   /** Phase 0c look: night by default; LIVE TIME follows the local clock. */
   look: {
+    /** Art pass (2026-11-24): the ink outline on vehicles (m per side), matching the giant's. */
+    inkWidth: 0.06,
     /** Bloom (Settings; review #66): only the brightest things glow (lights, sparks, embers, lit windows at night). */
     /** By look: daylight lifts the road and cars near white, so the day threshold sits above them (Mike, 2026-11-18: "entirely too much"). */
     bloom: { radius: 0.35, night: { strength: 0.55, threshold: 0.82 }, dusk: { strength: 0.35, threshold: 0.9 }, day: { strength: 0.15, threshold: 0.97 } },
@@ -1241,7 +1260,8 @@ var TUNING = {
     /** Real point lights reused on the nearest lamps (the rest are glow decals). Each light costs every lit pixel. */
     lampLights: 2,
     /** Chopper spotlight: ground pool radius (m), lag following the giant (s), wander (m). */
-    spotRadius: 7.5,
+    spotRadius: 8.5,
+    // 7.5 → 8.5 (2026-11-25): more lit road around him at night, so his silhouette holds in the head-on angles
     spotLag: 0.25,
     spotWander: 1.2,
     /** Chopper shadow crosses the road every this many seconds (random in range). */
@@ -1269,7 +1289,7 @@ var TUNING = {
     flickThreshold: 0.6,
     flickRelease: 0.3,
     /** Swipe: at least this many px, within this time. */
-    swipeMinPx: 40,
+    swipeMinPx: 48,
     swipeMaxTime: 0.35,
     /** Swipe down and hold to brake: downward drag past this many px. */
     swipeDownBrakePx: 40,
@@ -1427,11 +1447,11 @@ var RunState = class {
 // src/awards.ts
 var AWARDS = [
   { id: "liveAtEleven", title: "Live at Eleven", how: "Sign off once", stat: "signOffs", n: 1 },
-  { id: "specialReport", title: "Special Report", how: "Reach segment 3 of a broadcast", stat: "bestSegment", n: 3, upgrade: "breakaway" },
+  { id: "specialReport", title: "Special Report", how: "Reach Downtown, the third district", stat: "bestSegment", n: 3, upgrade: "breakaway" },
   { id: "pursuitOfTheYear", title: "Pursuit of the Year", how: "Lead 10 police cars into a crash", stat: "policeWrecked", n: 10, upgrade: "slipstream" },
   { id: "regularFixture", title: "Regular Fixture", how: "Sign off 3 times", stat: "signOffs", n: 3, outfit: "midnight" },
   { id: "trafficHazard", title: "Traffic Hazard of the Year", how: "Lead 25 police cars into a crash", stat: "policeWrecked", n: 25, outfit: "parade" },
-  { id: "seasonFinale", title: "Season Finale", how: "Finish all five segments", stat: "runsWon", n: 1, outfit: "gold" },
+  { id: "seasonFinale", title: "Season Finale", how: "Finish the Story: all five districts", stat: "runsWon", n: 1, outfit: "gold" },
   { id: "lifetime", title: "Lifetime Achievement", how: "Flatten 1,000 objects", stat: "objects", n: 1e3 }
 ];
 var LOCKED_UPGRADES = AWARDS.flatMap((a) => a.upgrade ? [a.upgrade] : []);
@@ -1500,6 +1520,10 @@ var CHUNKS = [
   { id: "six-two-way-squeeze", lanes: 6, level: 5, oncoming: "ooo...", rows: [[0, "o.o.cv"], [24, ".o.c.v"], [48, "o.ocv."], [72, ".o.c.v"], [96, ".o..cv"]] },
   { id: "six-two-way-weave", lanes: 6, level: 5, oncoming: "ooo...", rows: [[0, "o.o.cc"], [28, ".o.cc."], [56, "o.o.cv"], [84, ".o.vc."], [112, "oo..vc"]] },
   { id: "four-blockade", lanes: 4, level: 5, rows: [[0, "bdc."], [34, "c.vd"], [64, ".cbd"], [94, "cv.d"], [124, "d.cv"]] }
+];
+var TUTORIAL = [
+  { id: "tutorial-4", lanes: 4, level: 0, rows: [[0, "..c."], [50, "ssss"], [95, ".c.."], [135, "...c"], [175, "c..."], [210, "ssss"]] },
+  { id: "tutorial-3", lanes: 3, level: 0, rows: [[0, ".c."], [50, "sss"], [95, "c.."], [135, "..c"], [175, ".c."], [210, "sss"]] }
 ];
 var CHUNK_KINDS = { c: "car", v: "van", n: "newsvan", d: "dozer", b: "barricade", f: "foodtruck", s: "scoop", o: "car", t: "foodtruck", l: "car", r: "car" };
 function mirror(c) {
@@ -1571,6 +1595,7 @@ var Track = class {
     this.hardMult = hardMult;
     this.segmentNo = segment;
     this.hardFrom = guided ? TUNING.guided.clearFor : TUNING.props.immovableFrom;
+    this.tutorial = guided;
     const Pc = TUNING.pacing;
     this.gapScale = Pc.rowGapScale[Math.min(segment, Pc.rowGapScale.length - 1)];
     this.landmarkScale = Pc.landmarkEveryScale[Math.min(segment, Pc.landmarkEveryScale.length - 1)];
@@ -1627,6 +1652,8 @@ var Track = class {
   segmentNo;
   /** Guided first broadcast: nothing unbreakable this close to the start (m). */
   hardFrom;
+  /** First broadcast ever: the next chunk is the teaching opening (once). */
+  tutorial = false;
   /** Edition: × bulldozer and concrete chances. */
   hardMult;
   get end() {
@@ -2090,7 +2117,9 @@ var Track = class {
         if (s0 >= end) return;
         const lanes = this.lanesAt(s0);
         const span = this.twoWay.find((w) => w.district && s0 >= w.s0 && s0 < w.s1);
-        const c = this.pickChunk(lanes, this.levelAt(s0), seg.zone, span?.split ?? 0);
+        const teach = this.tutorial && !span ? TUTORIAL.find((t) => t.lanes === lanes) : void 0;
+        this.tutorial = false;
+        const c = teach ?? this.pickChunk(lanes, this.levelAt(s0), seg.zone, span?.split ?? 0);
         if (!c) {
           this.nextChunkS = s0 + 10;
           continue;
@@ -2302,13 +2331,19 @@ var Escort = class {
     for (const p of this.solid(s - 4, s + 10)) {
       if (p.alive && Math.abs(p.d - d) < p.hw + 1.1) return true;
     }
+    return this.oncomingIn(s, d);
+  }
+  oncomingIn(s, d) {
+    for (const p of this.track.propsBetween(s - 4, s + TUNING.escort.oncomingLook)) {
+      if (p.alive && p.oncoming && Math.abs(p.d - d) < p.hw + 1.1) return true;
+    }
     return false;
   }
   /** Something solid in the lane right in front of its nose (within `convoyGap` + a car)? */
   blockedAhead(s, d) {
     const E = TUNING.escort;
     const near = [...this.track.propsBetween(s, s + E.hl + 6), ...this.solid(s, s + E.hl + 6)];
-    return near.some((p) => p.alive && Math.abs(p.d - d) < p.hw + E.hw && p.s - p.hl > s && p.s - p.hl < s + E.hl * 2 + E.convoyGap);
+    return near.some((p) => p.alive && Math.abs(p.d - d) < p.hw + E.hw && p.s - p.hl > s && p.s - p.hl < s + E.hl * 2 + E.convoyGap) || this.oncomingIn(s, d);
   }
   /** Returns ids of cruisers that joined this tick. */
   /**
@@ -3359,6 +3394,12 @@ var Pursuit = class {
         break;
     }
     u.s += u.speed * dt;
+    for (const p of sim.track.propsBetween(u.s - u.hl - 3, u.s + u.hl + 3)) {
+      if (!p.alive || p.mover || Math.abs(p.s - u.s) >= p.hl + u.hl || Math.abs(p.d - u.d) >= p.hw + u.hw - 0.15) continue;
+      if (p.cls !== "medium" && p.cls !== "light" && p.cls !== "heavy") continue;
+      p.alive = false;
+      sim.emitPublic({ type: "policeSmash", id: u.id, propId: p.id, cls: p.cls, mat: p.mat, s: p.s, d: p.d, speed: Math.max(u.speed, 6) });
+    }
     if (Math.abs(u.toD - u.d) > 1e-3) {
       const step = TUNING.lanes.width / TUNING.pursuit.blockade.shiftTime * dt;
       u.d += Math.max(-step, Math.min(step, u.toD - u.d));
@@ -3908,6 +3949,7 @@ var Sim = class {
   edition;
   /** First broadcast ever: a calm opening (no drain or police for `guided.calmFor` s, nothing unbreakable for `guided.clearFor` m). */
   guided;
+  rampagedOnce = false;
   /** The product of one effect over the traffic mods on (1 when none sets it). */
   modProduct(k) {
     return this.mods.reduce((x, m) => x * (TUNING.proto.mods[m][k] ?? 1), 1);
@@ -4091,6 +4133,8 @@ var Sim = class {
     }
     if (this.endless) this.show.decayMult = this.baseDecayMult * (1 + this.time / TUNING.proto.endlessRamp);
     this.show.step(dt, this.time + dt, this.giant.tier, outnumbered, this.events);
+    if (this.guided && TUNING.proto.on && !this.rampagedOnce && !this.inRampage && this.time >= TUNING.guided.rampageBy) this.show.ratings = 100;
+    if (this.inRampage) this.rampagedOnce = true;
     if (TUNING.proto.on && !this.inRampage) {
       const was = this.giant.meter;
       this.giant.meter = this.show.ratings;
@@ -5067,8 +5111,19 @@ function cleanName(raw) {
   if (typeof raw !== "string") return null;
   const name = raw.replace(/\s+/g, " ").trim();
   if (name.length < 2 || name.length > TUNING.leaderboard.nameMax || !/^[A-Za-z0-9 ._-]+$/.test(name)) return null;
-  const flat = name.toLowerCase().replace(/[^a-z]/g, "");
-  if (TUNING.leaderboard.blocked.some((w) => flat.includes(w))) return null;
+  const leet = { "0": "o", "1": "i", "3": "e", "4": "a", "5": "s", "7": "t", "8": "b", "9": "g", "$": "s", "@": "a", "!": "i" };
+  const lower = name.toLowerCase();
+  const flat = lower.replace(/[^a-z]/g, "");
+  const mapped = lower.replace(/./g, (c) => leet[c] ?? c).replace(/[^a-z]/g, "");
+  const squeezed = mapped.replace(/(.)\1+/g, "$1");
+  const L = TUNING.leaderboard;
+  const clear = (f) => L.allowed.reduce((x, w) => x.split(w).join("_"), f);
+  const forms = [flat, mapped, squeezed].map(clear);
+  const squeeze = (w) => {
+    const q = w.replace(/(.)\1+/g, "$1");
+    return q.length >= 4 ? q : w;
+  };
+  if ([...L.blocked, ...L.reserved].some((w) => forms.some((f) => f.includes(w) || f.includes(squeeze(w))))) return null;
   return name;
 }
 
@@ -5112,7 +5167,41 @@ async function board(store2, mode, player, day) {
   const you = player && rank !== null && rank !== void 0 ? { rank: Number(rank) + 1, score: Number(score) } : null;
   return { top, you };
 }
-async function handle(store2, method, query, body, ip, now = Date.now()) {
+var BANNED = "wyf:lb:banned";
+var ALL_MODES = ["run", "broadcast", "endless", "daily"];
+async function moderate(store2, b, adminKey, now) {
+  if (!adminKey || typeof b.admin !== "string" || sha(b.admin) !== sha(adminKey)) return { status: 403, body: { error: "admin" } };
+  if (b.action === "list") {
+    const day = dailyDay(now);
+    const boards = {};
+    for (const [label, key] of [["run", KEY("run")], ["endless", KEY("endless")], ["broadcast", KEY("broadcast")], ["daily", KEY("daily", day)]]) {
+      const flat = (await store2.run([["ZRANGE", key, 0, 99, "REV", "WITHSCORES"]]))[0] ?? [];
+      const ids = flat.filter((_, i) => i % 2 === 0);
+      const names = ids.length ? (await store2.run([["HMGET", NAMES, ...ids]]))[0] : [];
+      boards[label] = ids.map((id, i) => ({ player: id, name: names[i] ?? "\u2014", score: Number(flat[i * 2 + 1]) }));
+    }
+    return { status: 200, body: { boards } };
+  }
+  if (!isPlayer(b.player)) return { status: 400, body: { error: "player" } };
+  const p = b.player;
+  if (b.action === "ban") {
+    const day = dailyDay(now);
+    await store2.run([["HSET", BANNED, p, now], ...ALL_MODES.filter((m) => m !== "daily").map((m) => ["ZREM", KEY(m), p]), ["ZREM", KEY("daily", day), p], ["ZREM", KEY("daily", day - 1), p], ["HSET", NAMES, p, "\u2014"]]);
+    return { status: 200, body: { ok: true, banned: p } };
+  }
+  if (b.action === "unban") {
+    await store2.run([["HDEL", BANNED, p]]);
+    return { status: 200, body: { ok: true } };
+  }
+  if (b.action === "rename") {
+    const name = cleanName(b.name);
+    if (!name) return { status: 400, body: { error: "name" } };
+    await store2.run([["HSET", NAMES, p, name]]);
+    return { status: 200, body: { ok: true } };
+  }
+  return { status: 400, body: { error: "action" } };
+}
+async function handle(store2, method, query, body, ip, now = Date.now(), adminKey) {
   if (!store2) return { status: 503, body: { error: "leaderboard not configured" } };
   if (method === "GET" && query.ticket !== void 0) {
     if (!isPlayer(query.player)) return { status: 400, body: { error: "player" } };
@@ -5139,7 +5228,12 @@ async function handle(store2, method, query, body, ip, now = Date.now()) {
   if (Number(total) > TUNING.leaderboard.perMinuteAll) return { status: 429, body: { error: "busy" } };
   const b = typeof body === "string" ? safeJson(body) : body;
   if (!b || typeof b !== "object") return { status: 400, body: { error: "body" } };
+  if (b.admin !== void 0) return moderate(store2, b, adminKey, now);
   if (!isPlayer(b.player)) return { status: 400, body: { error: "player" } };
+  const prl = `wyf:rl:p:${b.player}:${Math.floor(now / 6e4)}`;
+  const [pcount] = await store2.run([["INCR", prl], ["EXPIRE", prl, 120]]);
+  if (Number(pcount) > TUNING.leaderboard.perPlayerMinute) return { status: 429, body: { error: "slow down" } };
+  if ((await store2.run([["HGET", BANNED, b.player]]))[0]) return { status: 403, body: { error: "banned" } };
   const name = cleanName(b.name);
   if (!name) return { status: 400, body: { error: "name" } };
   if (!isMode(b.mode)) return { status: 400, body: { error: "mode" } };
@@ -5186,7 +5280,7 @@ async function leaderboard(req, res) {
   const fwd = req.headers["x-forwarded-for"];
   const ip = (Array.isArray(fwd) ? fwd[0] : fwd)?.split(",")[0].trim() || req.socket?.remoteAddress || "unknown";
   try {
-    const r = await handle(store, req.method ?? "GET", req.query ?? {}, req.body, ip);
+    const r = await handle(store, req.method ?? "GET", req.query ?? {}, req.body, ip, Date.now(), process.env.LB_ADMIN_KEY);
     res.setHeader("Cache-Control", req.method === "GET" ? "public, s-maxage=10, stale-while-revalidate=30" : "no-store");
     res.status(r.status).json(r.body);
   } catch (e) {

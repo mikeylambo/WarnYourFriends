@@ -105,7 +105,7 @@ try {
   // 1–2. Desktop: click the real start button.
   {
     const { ctx, page, problems } = await bootAndStart(browser, 'desktop click', { viewport: { width: 1280, height: 720 } }, async (p) => {
-      // One menu: the mode is on it. A first broadcast shows How to Play; Go live starts it.
+      // One menu: the mode is on it. A first broadcast goes straight in (teach by doing).
       for (const id of ['start', 'run']) {
         await p.click(`[data-choice-id="${id}"]`);
         await p.waitForTimeout(150);
@@ -115,11 +115,11 @@ try {
       if (!(await p.isVisible('#recap .preshow'))) fail("Tonight's Rundown did not show for Story");
       else ok("Tonight's Rundown shows for Story");
       await p.click('#ps-go');
-      await p.waitForSelector('#brief-go', { timeout: 3000 }).catch(() => {});
-      if (!(await p.isVisible('#brief-go'))) fail('How to Play did not show before the first broadcast');
-      else ok('How to Play shows before the first broadcast');
-      if (await p.evaluate(() => window.__GAME.started)) fail('broadcast started behind How to Play');
-      await p.click('#brief-go');
+      // Teach by doing (2026-11-24): the first broadcast goes straight in, guided, opening on the tutorial chunk.
+      await p.waitForFunction(() => window.__GAME.started, null, { timeout: 5000 }).catch(() => {});
+      const g = await p.evaluate(() => ({ started: window.__GAME.started, guided: window.__GAME.sim.guided, card: !!document.querySelector('#brief-go'), tut: window.__GAME.sim.track.props.filter((x) => x.kind === 'scoop' && x.s < 300).length }));
+      if (g.started && g.guided && !g.card && g.tut >= 4) ok(`first broadcast: straight in, guided, the teaching opening on the road (${g.tut} Exclusives)`);
+      else fail(`first broadcast: ${JSON.stringify(g)}`);
     });
     // Authored SFX: every file decodes once audio is unlocked by the start click.
     await page.waitForFunction(() => Object.keys(window.__GAME.sfx()).length >= 16, null, { timeout: 8000 }).catch(() => {});
@@ -159,17 +159,24 @@ try {
 
   // 2. Mobile: tap the start button.
   {
-    const { ctx, problems } = await bootAndStart(browser, 'mobile tap', { viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true }, async (p) => {
+    const { ctx, problems } = await bootAndStart(browser, 'mobile tap', { viewport: { width: 844, height: 390 }, isMobile: true, hasTouch: true }, async (p) => {
       for (const id of ['start', 'run']) {
         await p.tap(`[data-choice-id="${id}"]`);
         await p.waitForTimeout(150);
       }
       await p.waitForSelector('#recap .preshow', { timeout: 3000 }).catch(() => {});
       await p.tap('#ps-go');
-      await p.waitForSelector('#brief-go', { timeout: 3000 }).catch(() => {});
-      await p.tap('#brief-go');
+      // No rules card on the first broadcast any more (teach by doing); tap it only if a build still shows one.
+      if (await p.waitForSelector('#brief-go', { timeout: 1500 }).catch(() => null)) await p.tap('#brief-go');
     });
     if (problems.length) fail(`mobile boot problems:\n    ${problems.join('\n    ')}`);
+    // Play is landscape on phones (2026-11-24): turned upright mid-broadcast, the rotate card covers it and it pauses.
+    const page = ctx.pages()[0];
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.waitForTimeout(400);
+    const up = await page.evaluate(() => ({ card: getComputedStyle(document.getElementById('rotate')).display !== 'none', paused: window.__GAME.paused }));
+    if (up.card && up.paused) ok('phone upright: rotate card shown, broadcast paused');
+    else fail(`phone upright: rotate card ${up.card}, paused ${up.paused}`);
     await ctx.close();
   }
 
@@ -379,7 +386,7 @@ try {
     if (!parsed?.broadcasts?.length) fail('Copy play data produced no JSON');
     else ok(`Copy play data: ${parsed.broadcasts.length} broadcast(s), ${copied.length} bytes`);
     const last = heads[heads.length - 1];
-    if (!last || !['SIGN-OFF', 'BUSTED'].includes(last.kicker)) fail(`last headline isn't the ending (${JSON.stringify(last)})`);
+    if (!last || !['SIGN-OFF', 'CAUGHT'].includes(last.kicker)) fail(`last headline isn't the ending (${JSON.stringify(last)})`);
     // Run it again: Enter restarts from the recap.
     await page.waitForTimeout(400);
     await page.keyboard.press('Enter');
@@ -427,7 +434,7 @@ try {
     const r1 = await page.evaluate(() => ({ run: window.__GAME.run(), kicker: document.querySelector('#recap .kicker')?.textContent }));
     if (r1.run?.phase !== 'meeting') fail(`run: segment 1 should lead to a meeting (${JSON.stringify(r1.run)})`);
     else ok(`run: segment 1 ${r1.run.results[0].cleared ? 'cleared' : 'lost'}, budget ${r1.run.purse} · "${r1.kicker}"`);
-    if (!/SEGMENT 1 OF 5/.test(r1.kicker ?? '')) fail(`run: recap kicker lacks the segment (${r1.kicker})`);
+    if (!/BROADCAST 1 OF 5/.test(r1.kicker ?? '')) fail(`run: recap kicker lacks the segment (${r1.kicker})`);
     await page.waitForTimeout(400); // a new card ignores accept for 250ms
     await page.keyboard.press('Enter'); // focused: Producer's Meeting
     await page.waitForTimeout(400);
@@ -518,7 +525,7 @@ try {
     await page.keyboard.press('Escape');
     await page.waitForTimeout(400);
     if (m.hud || m.asks) fail(`broadcast HUD shows behind the menu (${JSON.stringify(m)})`);
-    else if (m.choices !== 'run|endless|daily|awards|howto|settings') fail(`main menu choices: ${m.choices}`);
+    else if (m.choices !== 'run|endless|daily|awards|howto|settings|credits') fail(`main menu choices: ${m.choices}`);
     else ok(`main menu over a clean chopper shot: ${m.choices}`);
     await ctx.close();
   }

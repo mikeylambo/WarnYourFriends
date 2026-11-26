@@ -4,7 +4,13 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
     <meta name="theme-color" content="#1c0b30" />
-    <title>Giant at Large</title>
+    <link rel="manifest" href="./manifest.webmanifest" />
+    <link rel="apple-touch-icon" href="./icon-180.png" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Giant at Large" />
+    <title>Giant at Large: Warn Your Friends</title>
     <link rel="stylesheet" href="/src/style.css" />
   </head>
   <body>
@@ -16,6 +22,8 @@
       <div id="debug" hidden></div>
 
       <!-- Phase 0c broadcast HUD (§21): LIVE badge, station bug, chyron. -->
+      <div id="menucard" aria-live="polite"></div>
+      <div id="rotate" aria-live="polite"><div><i></i><b>Turn your phone sideways</b><span>The broadcast plays in landscape.</span></div></div>
       <div id="hud">
         <div id="live"><span class="dot"></span><b>LIVE</b><span id="clocklbl" hidden>SIGN-OFF IN</span><span id="clock">0:00</span><span id="fuel" aria-label="Chopper fuel"><em>FUEL</em><span class="tank"><i></i></span></span><span id="segno" hidden></span><span id="camtag" aria-hidden="true"></span></div>
         <div id="desk" hidden aria-hidden="true"><div class="set"><i class="a1"></i><i class="a2"></i><div class="counter">WYF <b>6</b> NEWS DESK</div></div><span class="tag">STUDIO</span></div>
@@ -47,7 +55,7 @@
       <div id="touch-ui" hidden>
         <button id="btn-ability" disabled aria-label="Ability (none equipped)">ABL</button>
         <button id="btn-ability2" disabled aria-label="Ability 2 (none equipped)">AB2</button>
-        <button id="btn-shoulder" aria-label="Rampage">RAMP</button>
+        <button id="btn-shoulder" aria-label="Rampage"><span>RAMPAGE</span></button>
         <button id="btn-cam" aria-label="Next camera angle">CAM</button>
       </div>
       <button id="btn-pause" aria-label="Pause">II</button>

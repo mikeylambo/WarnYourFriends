@@ -73,6 +73,15 @@ export class Escort {
     for (const p of this.solid(s - 4, s + 10)) {
       if (p.alive && Math.abs(p.d - d) < p.hw + 1.1) return true;
     }
+    // Oncoming traffic closes at both speeds: a lane with one coming is blocked from much further out (2026-11-25:
+    // escort cruisers drove through oncoming cars).
+    return this.oncomingIn(s, d);
+  }
+
+  private oncomingIn(s: number, d: number): boolean {
+    for (const p of this.track.propsBetween(s - 4, s + TUNING.escort.oncomingLook)) {
+      if (p.alive && p.oncoming && Math.abs(p.d - d) < p.hw + 1.1) return true;
+    }
     return false;
   }
 
@@ -80,7 +89,7 @@ export class Escort {
   private blockedAhead(s: number, d: number): boolean {
     const E = TUNING.escort;
     const near = [...this.track.propsBetween(s, s + E.hl + 6), ...this.solid(s, s + E.hl + 6)];
-    return near.some((p) => p.alive && Math.abs(p.d - d) < p.hw + E.hw && p.s - p.hl > s && p.s - p.hl < s + E.hl * 2 + E.convoyGap);
+    return near.some((p) => p.alive && Math.abs(p.d - d) < p.hw + E.hw && p.s - p.hl > s && p.s - p.hl < s + E.hl * 2 + E.convoyGap) || this.oncomingIn(s, d);
   }
 
   /** Returns ids of cruisers that joined this tick. */
