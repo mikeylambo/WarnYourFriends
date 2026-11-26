@@ -1355,3 +1355,21 @@ html.touch #pip, #pip, html.autoramp #pip { --pip-top: calc(var(--edge) + env(sa
 #recap .credits .cr-note { font-size: 12px; opacity: 0.75; margin: 6px 0; }
 #recap .credits .cr-note a { color: inherit; text-decoration: underline; }
 @media (max-width: 560px) { #recap .credits dl.cr { grid-template-columns: 1fr; gap: 2px; } #recap .credits dd { margin-bottom: 6px; } }
+
+/* === Every menu card scrolls, and its buttons stay reachable (Mike, 2026-11-25: stuck on Awards on a phone) ========
+   The page blocks touch scrolling (swipes steer the giant), so a card taller than the screen could never be scrolled,
+   and its Back button sat below the edge. Each card is now its own scroll area that allows vertical panning, and its
+   button row sticks to the card's bottom, so a way back is always on screen. */
+#recap .card {
+  max-height: calc(100dvh - 24px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+  overflow-y: auto; overscroll-behavior: contain; touch-action: pan-y; -webkit-overflow-scrolling: touch;
+}
+#recap .card * { touch-action: pan-y; }
+#recap .card > .row { position: sticky; bottom: 0; z-index: 2; margin-bottom: 0; padding: 10px 0 14px; background: inherit; }
+#recap .card > .row::before { content: ''; position: absolute; left: 0; right: 0; top: -22px; height: 22px; background: linear-gradient(to bottom, transparent, var(--c-paper, #ece0c8)); pointer-events: none; }
+/* The shell's menu panels scroll by touch too (Settings ran past the bottom of a landscape phone). */
+#ui .slu-panel { touch-action: pan-y; overscroll-behavior: contain; }
+#ui .slu-panel * { touch-action: pan-y; }
+/* The shell's Back stays pinned to the bottom of its panel, so it's on screen however long the list (Settings on a
+   landscape phone put it below the edge). */
+#ui .slu-panel .slu-back { position: sticky; bottom: 8px; z-index: 3; box-shadow: 0 -10px 18px rgba(10, 8, 20, 0.6); }
