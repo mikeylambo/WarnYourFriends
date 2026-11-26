@@ -77,7 +77,6 @@ export class Newsroom {
   private escortCount = 0;
   private lastTier = 0;
   private lastRatings: SimEvent | null = null;
-  private rampages = 0;
   /** Heat as last reported: only a rise is news (the Pose spends Heat; that's the pose's story). */
   private heatSeen = 0;
 
@@ -246,7 +245,9 @@ export class Newsroom {
     this.placeZone = ctx.zone;
     const L = BANK.lines;
     const V = BANK.verbs;
-    const kicker = BANK.kicker[Math.min(ctx.ratingsTier, BANK.kicker.length - 1)];
+    // UNREAL and CITY IN CHAOS take turns from 60% Audience up (Mike, 2026-11-26: CITY IN CHAOS is an alt for UNREAL).
+    const top = BANK.kicker[Math.min(ctx.ratingsTier, BANK.kicker.length - 1)];
+    const kicker = top === 'UNREAL' && this.history.filter((h) => h.kicker === 'UNREAL' || h.kicker === BANK.kickerAlt).length % 2 ? BANK.kickerAlt : top;
     const mk = (text: string, verb: string | null, place: string | null, breaking = false): Headline => ({ t: ctx.time, kicker: breaking ? this.breakKicker() : kicker, text, breaking, verb, place, sources: q.events, at: ctx });
     switch (q.kind) {
       case 'spotted': {
@@ -264,9 +265,8 @@ export class Newsroom {
       }
       case 'tierUp': {
         // Rampage starting is news, not BREAKING (Audience tiers are). "Resumes" / "Returns" only from the second.
-        const line = this.freshLine(L.rampage.filter((l) => this.rampages > 0 || !['Returns', 'Resumes'].includes(l[0])));
-        this.rampages++;
-        return line ? mk(line[1], line[0], null) : null;
+        const line = this.freshLine(L.rampage);
+        return line ? mk(this.fill(line[1], { subject: this.subject(TUNING.tiers.length - 1) }), line[0], null) : null;
       }
       case 'policeCrash':
       case 'policeSmash': {
@@ -333,7 +333,7 @@ export class Newsroom {
         const counts = new Map<PropKind, { n: number; heavy: boolean; across: boolean }>();
         for (const e of smashes) {
           const k = propKind(e.propId);
-          if (!k || k === 'scoop') continue; // an Exclusive is picked up, not smashed: never "Tramples Exclusive"
+          if (!k || k === 'scoop') continue; // a Water Bottle is picked up, not smashed: never "Tramples Water Bottle"
           const c = counts.get(k) ?? { n: 0, heavy: e.cls === 'heavy', across: false };
           c.n++;
           c.across ||= e.across;
@@ -368,7 +368,8 @@ export class Newsroom {
         const e = q.events[0] as Extract<SimEvent, { type: 'merge' }>;
         const lanes = String(e.to);
         const line = this.freshLine(e.to < e.from ? L.narrows : L.widens);
-        if (!line) return mk(this.fill(L.mergeFallback, { lanes }), null, null);
+        // Widening isn't news (Mike, 2026-11-26); a narrowing with no fresh line falls back to the plain count.
+        if (!line) return e.to < e.from ? mk(this.fill(L.mergeFallback, { lanes }), null, null) : null;
         return mk(this.fill(line[1], { lanes }), line[0], null);
       }
       case 'escort': {

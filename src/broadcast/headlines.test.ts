@@ -1,3 +1,4 @@
+import BANK from './headlines.json';
 import { describe, expect, it } from 'vitest';
 import { Sim } from '../sim/sim';
 import { Bot } from '../sim/bot';
@@ -82,7 +83,9 @@ describe('headlines (§21)', () => {
       // §21: a Ratings tier rise breaks in on the same tick.
       let prev = 0;
       for (const x of tiers) {
-        if (x.tier > prev) expect(out.some(({ h }) => h.breaking && Math.abs(h.t - x.t) < 1e-9 && h.sources[0].type === 'ratings')).toBe(true);
+        // A level with no lines in the word bank only changes the red label (CITY IN CHAOS, 2026-11-26).
+        const has = x.tier === 1 || (BANK.lines.ratingsTier[x.tier]?.length ?? 0) > 0;
+        if (x.tier > prev && has) expect(out.some(({ h }) => h.breaking && Math.abs(h.t - x.t) < 1e-9 && h.sources[0].type === 'ratings')).toBe(true);
         prev = Math.max(prev, x.tier);
       }
       // Heat only makes news going up (a Pose spends it).

@@ -153,7 +153,7 @@ const chainClock = chainEl.querySelector('.clock i') as HTMLElement;
 /** Spectacle stunt names on the combo counter (what just counted, so the player learns the menu). */
 /** Ability levels on cards and the chip. */
 const ROMAN = ['', 'I', 'II', 'III'];
-const STUNT_LABEL: Record<string, string> = { rival: 'RIVAL NEWS VAN', medium: 'SMASH', heavy: 'HEAVY SMASH', unit: 'POLICE CAR', policeCrash: 'POLICE CRASH', collateral: 'COLLATERAL', nearMiss: 'NEAR MISS', ramDodge: 'DODGED', lostTrack: 'SHOOK ONE', chopperShaken: 'LOST THE CHOPPER', leapLand: 'LANDING', breakawayLand: 'BREAKAWAY', scoop: 'EXCLUSIVE', target: 'TARGET' };
+const STUNT_LABEL: Record<string, string> = { rival: 'RIVAL NEWS VAN', medium: 'SMASH', heavy: 'HEAVY SMASH', unit: 'POLICE CAR', policeCrash: 'POLICE CRASH', collateral: 'COLLATERAL', nearMiss: 'NEAR MISS', ramDodge: 'DODGED', lostTrack: 'SHOOK ONE', chopperShaken: 'LOST THE CHOPPER', leapLand: 'LANDING', breakawayLand: 'BREAKAWAY', scoop: 'WATER BOTTLE', target: 'TARGET' };
 let chainResultT = 0;
 const gearPips = [...gearsEl.querySelectorAll('i')] as HTMLElement[];
 const gearName = gearsEl.querySelector('.nm') as HTMLElement;
@@ -389,8 +389,8 @@ const onboarding = new Onboarding($('prompt'), (id: PromptId) => {
     lanes: PROTO ? `Change lanes ${k('lanes')}: weave through the traffic` : `Change lanes ${k('lanes')} and smash the traffic`,
     blocked: PROTO ? `Cars and trucks don't break until Rampage. Dodge them ${k('lanes')}` : `Bulldozers and armored trucks don't break. Change lanes ${k('lanes')}`,
     concrete: `Concrete and yellow-roof police lines only break in <b>RAMPAGE</b>. Save it, or go round`,
-    meter: PROTO ? `Squeeze past cars for a <b>NEAR MISS</b>. Grab yellow <b>EXCLUSIVES</b>. Both fill the <b>AUDIENCE</b>; full audience: <b>RAMPAGE</b>` : `Smash and dodge to fill the <b>RAMPAGE</b> meter`,
-    exclusive: `<b>EXCLUSIVE!</b> Yellow pickups fill the <b>AUDIENCE</b>`,
+    meter: PROTO ? `Squeeze past cars for a <b>NEAR MISS</b>. Grab <b>WATER BOTTLES</b>. Both fill the <b>AUDIENCE</b>; full audience: <b>RAMPAGE</b>` : `Smash and dodge to fill the <b>RAMPAGE</b> meter`,
+    exclusive: `<b>WATER BOTTLE!</b> Bottles fill the <b>AUDIENCE</b>`,
     nearMiss: `<b>NEAR MISS!</b> Squeezing past cars fills the <b>AUDIENCE</b>`,
     ready: `<b>RAMPAGE READY</b> ${settings.autoRampage ? 'Here it goes' : `Press ${k('shoulder')}`}`,
     hit: PROTO ? `Hits lose the audience, and the police close in` : `Hits cost Rampage meter`,
@@ -753,7 +753,7 @@ function openBriefing(goLive: boolean): Promise<void> {
     <div class="kicker">YOU'RE GOING LIVE</div>
     <ol class="steps">
       <li><b>Run.</b> He never stops. ${k('lanes')} change lanes.</li>
-      ${PROTO ? `<li><b>Dodge.</b> Weave through the traffic. Near misses (squeezing past cars) and yellow Exclusives win the audience; hits lose it, and the police close in.</li>
+      ${PROTO ? `<li><b>Dodge.</b> Weave through the traffic. Near misses (squeezing past cars) and Water Bottles win the audience; hits lose it, and the police close in.</li>
       <li><b>Rampage.</b> Full audience? ${settings.autoRampage ? 'It fires by itself' : `Press ${k('shoulder')}`} and he smashes everything.</li>` : `<li><b>Smash.</b> Run through the traffic. Go round bulldozers.</li>
       <li><b>Rampage.</b> Smashing fills the meter. Full? ${settings.autoRampage ? 'It fires by itself' : `Press ${k('shoulder')}`} and he runs through everything.</li>`}
     </ol>
@@ -1516,7 +1516,7 @@ function present(e: SimEvent) {
       break;
     }
     case 'scoop':
-      // Exclusive: a bright ding (the chain tick, a step up), a gold ring where it was, a tick in the hand. The smash
+      // Water Bottle: a bright ding (the chain tick, a step up), a gold ring where it was, a tick in the hand. The smash
       // event already threw its confetti.
       audio.chainTick(3);
       sim.track.posAt(e.s, e.d, pos);
@@ -3317,5 +3317,49 @@ if (import.meta.env.DEV || import.meta.env.VITE_TEST_HOOK === '1') window.__GAME
   /** Phase 3: the run (null in a single broadcast). */
   run: () => (run ? { segment: run.segment, phase: run.phase, purse: run.purse, earned: run.earned, owned: [...run.owned], offers: run.phase === 'meeting' ? run.offers() : [], results: run.results.slice() } : null),
   meeting: () => (recapEl.querySelector('.meeting') ? [...recapEl.querySelectorAll<HTMLButtonElement>('.pitch')].map((b) => ({ id: b.dataset.id, disabled: b.disabled })) : null),
+  /** Drawn size vs hit-box per prop kind (local box of each view with its yaw undone), and the giant's drawn width. */
+  fit: () => {
+    const out: Record<string, { n: number; len: number; wid: number; hl: number; hw: number }> = {};
+    const box = new THREE.Box3();
+    const size = new THREE.Vector3();
+    for (const p of sim.track.props) {
+      const g = highway.propView(p.id);
+      if (!g || !p.alive || out[p.kind]?.n >= 3) continue;
+      const pos = g.position.clone(), ry = g.rotation.y;
+      g.position.set(0, 0, 0); g.rotation.y = 0; g.updateMatrixWorld(true);
+      box.makeEmpty();
+      g.traverse((o) => {
+        const m = o as THREE.Mesh;
+        const mat = m.material as THREE.Material | undefined;
+        if (!m.isMesh || !mat || mat.transparent || !m.visible) return; // bodies only: no beams, glows or shadows
+        m.geometry.computeBoundingBox();
+        box.union(m.geometry.boundingBox!.clone().applyMatrix4(m.matrixWorld));
+      });
+      box.getSize(size);
+      g.position.copy(pos); g.rotation.y = ry; g.updateMatrixWorld(true);
+      const o = (out[p.kind] ??= { n: 0, len: 0, wid: 0, hl: p.hl, hw: p.hw });
+      o.n++; o.len = Math.max(o.len, Math.max(size.x, size.z)); o.wid = Math.max(o.wid, Math.min(size.x, size.z));
+    }
+    // The giant's drawn half-width across the road: every visible body mesh (skinned, posed), on the lateral axis.
+    const h = sim.track.headingAt(sim.giant.s);
+    const lat = new THREE.Vector3(Math.sin(h), 0, Math.cos(h));
+    const c = new THREE.Vector3();
+    sim.track.posAt(sim.giant.s, sim.giant.d, c);
+    let half = 0;
+    const v = new THREE.Vector3();
+    for (const root of giant.bodyObjects) root.traverse((o) => {
+      const m = o as THREE.Mesh;
+      const mat = m.material as THREE.Material | undefined;
+      if (!m.isMesh || !mat || mat.transparent || !m.visible || o.userData.outline) return;
+      const pos = m.geometry.getAttribute('position');
+      for (let i = 0; i < pos.count; i += 7) {
+        v.fromBufferAttribute(pos, i);
+        if ((m as THREE.SkinnedMesh).isSkinnedMesh) (m as THREE.SkinnedMesh).applyBoneTransform(i, v);
+        v.applyMatrix4(m.matrixWorld);
+        half = Math.max(half, Math.abs(v.clone().sub(c).dot(lat)));
+      }
+    });
+    return { props: out, giantR: sim.radius(), giantHalf: half, rampage: sim.inRampage };
+  },
   ability: () => ({ id: sim.ability, level: sim.abilityLevel, cd: sim.giant.abilityCd, air: sim.giant.air, airKind: sim.giant.airKind, prime: sim.giant.prime, chip: !abilEl.hidden }),
 };

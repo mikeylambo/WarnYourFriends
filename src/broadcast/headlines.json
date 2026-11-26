@@ -9,7 +9,7 @@
     "SPOTTED",
     "AT LARGE",
     "UNREAL",
-    "CITY IN CHAOS"
+    "UNREAL"
   ],
   "subject": [
     [
@@ -90,8 +90,8 @@
       "Rival News Vans"
     ],
     "scoop": [
-      "Exclusive",
-      "Exclusives"
+      "Water Bottle",
+      "Water Bottles"
     ]
   },
   "verbs": {
@@ -139,34 +139,14 @@
     "atLarge": "Giant At Large. Warn Your Friends.",
     "rampage": [
       [
-        "Reaches",
-        "Giant Reaches Full Rampage"
-      ],
-      [
-        "Goes",
-        "Giant Goes Full Rampage"
-      ],
-      [
-        "Stops",
-        "Giant Stops Going Around Things"
-      ],
-      [
-        "Resumes",
-        "Rampage Resumes"
-      ],
-      [
-        "Returns",
-        "Giant Returns To Rampage"
+        "Goes Through",
+        "{subject} Goes Through Everything"
       ]
     ],
     "rampageLost": [
       [
         "Ends",
         "Rampage Ends"
-      ],
-      [
-        "Drops",
-        "Giant Drops Out Of Rampage"
       ],
       [
         "Calms",
@@ -199,24 +179,7 @@
         "Road Squeezes To {lanes} Lanes; Giant Makes It Work"
       ]
     ],
-    "widens": [
-      [
-        "Widens",
-        "Highway Widens To {lanes} Lanes, For Some Reason"
-      ],
-      [
-        "Gains",
-        "Highway Gains A Lane; Giant Uses All Of Them"
-      ],
-      [
-        "Opens",
-        "Extra Lane Opens Up"
-      ],
-      [
-        "Gives",
-        "Road Gives Him {lanes} Lanes To Work With"
-      ]
-    ],
+    "widens": [],
     "escort": [
       [
         "Join",
@@ -252,16 +215,7 @@
           "Giant Goes Off"
         ]
       ],
-      [
-        [
-          "Chaos",
-          "City In Chaos; Giant Has Places To Be"
-        ],
-        [
-          "Erupts",
-          "City Erupts; Giant Has Not Looked Up"
-        ]
-      ]
+      []
     ],
     "ramHit": [
       [
@@ -271,26 +225,9 @@
       [
         "Nudges",
         "Cruiser Nudges Giant; Giant Notices"
-      ],
-      [
-        "Bumps",
-        "Cruiser Bumps Giant, Regrets It"
       ]
     ],
-    "ramMiss": [
-      [
-        "Misses",
-        "Cruiser Misses Giant By Inches"
-      ],
-      [
-        "Catches Only Air",
-        "Cruiser Swerves, Catches Only Air"
-      ],
-      [
-        "Whiffs",
-        "Cruiser Whiffs"
-      ]
-    ],
+    "ramMiss": [],
     "lostTrack": [
       [
         "Lose",
@@ -309,10 +246,6 @@
       [
         "Steps On",
         "Giant Steps On Spike Strip, Seems Annoyed"
-      ],
-      [
-        "Finds",
-        "Giant Finds Spike Strip The Hard Way"
       ]
     ],
     "heat": [
@@ -339,10 +272,6 @@
     "zone": {
       "tunnel": [
         [
-          "Enters",
-          "Giant Enters {name}; Chopper Waits At Other End"
-        ],
-        [
           "Disappears",
           "Giant Disappears Into {name}"
         ]
@@ -367,16 +296,7 @@
           "Giant Heads Into {name}; Shops Close Early"
         ]
       ],
-      "highway": [
-        [
-          "Rejoins",
-          "Giant Rejoins {name}"
-        ],
-        [
-          "Back On",
-          "Giant Back On {name}"
-        ]
-      ]
+      "highway": []
     },
     "chopperLost": [],
     "policeCrash": [
@@ -404,62 +324,10 @@
       ]
     ],
     "landmark": {
-      "toll": [
-        [
-          "Runs",
-          "Giant Runs {name}; Does Not Pay"
-        ],
-        [
-          "Skips",
-          "Giant Skips The Line At {name}"
-        ],
-        [
-          "No Change",
-          "{name} Reports Giant, No Change Given"
-        ]
-      ],
-      "foodtrucks": [
-        [
-          "Visits",
-          "Giant Visits {name}; Vendors Report No Purchases"
-        ],
-        [
-          "Drops In",
-          "Giant Drops In On {name}"
-        ],
-        [
-          "Crashes",
-          "Giant Crashes {name}"
-        ]
-      ],
-      "works": [
-        [
-          "Passes",
-          "Giant Passes {name}; Crews On Break"
-        ],
-        [
-          "Delays",
-          "{name} Delayed By Giant"
-        ],
-        [
-          "Inspects",
-          "Giant Inspects {name} At Speed"
-        ]
-      ],
-      "jam": [
-        [
-          "Meets",
-          "Giant Meets {name} Traffic"
-        ],
-        [
-          "Joins",
-          "Giant Joins {name} Gridlock; Does Not Wait"
-        ],
-        [
-          "Commutes",
-          "Giant Commutes Through {name}"
-        ]
-      ]
+      "toll": [],
+      "foodtrucks": [],
+      "works": [],
+      "jam": []
     },
     "tellNet": [
       [
@@ -499,16 +367,7 @@
         "Giant Wriggles Free Of Police Box"
       ]
     ],
-    "caughtSlip": [
-      [
-        "Shakes",
-        "Police Catch Up To Giant; Giant Leaves Anyway"
-      ],
-      [
-        "Shrugs",
-        "Giant Shrugs Off Police At Walking Pace"
-      ]
-    ],
+    "caughtSlip": [],
     "netEscape": [
       [
         "Breaks Out",
@@ -527,5 +386,6 @@
   "breaking": [
     "BREAKING",
     "LIVE REPORT"
-  ]
+  ],
+  "kickerAlt": "CITY IN CHAOS"
 }

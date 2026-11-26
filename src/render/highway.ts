@@ -153,8 +153,9 @@ export function partsFor(p: Prop): Part[] {
   const W = p.hw * 2;
   switch (p.kind as PropKind) {
     case 'scoop':
-      // A floating tile: the station's yellow with a red "6" panel, read from the chopper.
-      return [[0, 1.25, 0, 1.3, 0.22, 1.3, 'kind'], [0, 1.38, 0, 0.78, 0.06, 0.78, 0xb3122a], [0, 0.6, 0, 0.12, 1.1, 0.12, 0x8c939b]];
+      // A Water Bottle (Mike, 2026-11-26: Exclusives become Water Bottles): a giant's bottle lying across the road
+      // (round: the wheel cylinder), with a white label and the station's red band, so it reads from the chopper.
+      return [[0, 0.5, -0.15, 0.9, 0.9, 1.0, 'kind', 'wheel'], [0, 0.5, -0.15, 0.93, 0.93, 0.42, 0xf3f1ea, 'wheel'], [0, 0.5, -0.15, 0.95, 0.95, 0.12, 0xb3122a, 'wheel'], [0, 0.5, 0.45, 0.5, 0.5, 0.2, 'kind', 'wheel'], [0, 0.5, 0.62, 0.42, 0.42, 0.14, 0xf3f1ea, 'wheel']];
     case 'sawhorse':
       return [[0, 0.75, 0, L, 0.28, W, 'kind'], [0, 0.4, W * 0.4, L * 0.8, 0.8, 0.12, 0x8a6240], [0, 0.4, -W * 0.4, L * 0.8, 0.8, 0.12, 0x8a6240]];
     case 'cart':
@@ -345,6 +346,10 @@ const MAX_DEBRIS = 400; // §36: max 400 dynamic debris objects, pooled.
 export class HighwayView {
   readonly group = new THREE.Group();
   private segViews = new Map<number, THREE.Group>();
+  /** Test probe: the drawn group for a prop id (dev / test builds read it through __GAME). */
+  propView(id: number): THREE.Group | undefined {
+    return this.propViews.get(id);
+  }
   private propViews = new Map<number, THREE.Group>();
   private twoWayLines: THREE.Mesh[] = [];
   private ground: THREE.Mesh;
