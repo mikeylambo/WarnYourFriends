@@ -11,7 +11,7 @@ const SPATIAL = { panWidth: 14, panMax: 0.85, near: 6, falloff: 28, duckDepth: 0
 
 const SFX_FILES = import.meta.glob('./assets/sfx/*.mp3', { eager: true, query: '?url', import: 'default' }) as Record<string, string>;
 /** Music (Suno, Mikey Lambo, 2026-11-26): the in-game theme loops under the run, the busted theme plays once. */
-const MUSIC_FILES = import.meta.glob('./assets/music/{game-theme,busted,sign-off}.mp3', { eager: true, query: '?url', import: 'default' }) as Record<string, string>;
+const MUSIC_FILES = import.meta.glob('./assets/music/{game-theme,busted,sign-off,title}.mp3', { eager: true, query: '?url', import: 'default' }) as Record<string, string>;
 export type SfxKind =
   | 'foot' | 'smash-light' | 'smash-medium' | 'smash-heavy' | 'bounce' | 'scrape' | 'shoulder' | 'leap' | 'land'
   | 'whoosh' | 'tierup' | 'tierdown' | 'banked' | 'cape' | 'spike' | 'roadblock'
@@ -22,7 +22,7 @@ export type SfxKind =
  * Loop mix (presentation): the loops are peak-normalised at -3 dBFS, so these set how loud they sit.
  * Sirens at full level, the rotor at rest and at Rampage, the theme on the music bus.
  */
-const LOOP_MIX = { siren: 0.25, rotorBase: 0.2, rotorGear: 0.25, theme: 0.85, busted: 0.9, signOff: 0.85 };
+const LOOP_MIX = { siren: 0.25, rotorBase: 0.2, rotorGear: 0.25, theme: 0.85, busted: 0.9, signOff: 0.85, title: 0.8 };
 /**
  * The in-game theme (stems mixed by hand, 103 BPM): an intro of six bars plays once, then bars 7–14 loop. The file
  * ends exactly at bar 14's end, with a 60 ms equal-power crossfade into the audio before the loop start baked into its
@@ -52,6 +52,11 @@ export class Audio {
   /** The in-game theme loop (null until decoded; the synth bed plays until then) and the gain under it. */
   private theme: { src: AudioBufferSourceNode | null; gain: GainNode } | null = null;
   private music = new Map<string, AudioBuffer>();
+  /** The title theme: loops while the menus are up, straight to the master so the cover's hush doesn't mute it. */
+  private title: { gain: GainNode; src: AudioBufferSourceNode | null } | null = null;
+  private titleWant = false;
+  /** A one-shot song in flight (busted, sign-off): stopped by the next broadcast or the menus. */
+  private song: { name: string; src: AudioBufferSourceNode; gain: GainNode } | null = null;
   private bed: { next: number; step: number; timer: number } | null = null;
   /** Rampage layer on the music bus (driving kick, 16th hats, brass stabs): in at Rampage, out when it's lost. */
   private rampLayer: GainNode | null = null;
@@ -133,6 +138,7 @@ export class Audio {
         .then((buf) => {
           this.music.set(name, buf);
           if (name === 'game-theme') this.startTheme();
+          if (name === 'title') this.syncTitle();
         })
         .catch((e) => console.warn(`music ${path} failed to load:`, e));
     }
@@ -182,8 +188,77 @@ export class Audio {
     this.restartTheme();
   }
 
+  /** Menus up (true) or a broadcast live (false): the title theme plays over the menus, the run theme under the broadcast. */
+  setTitle(on: boolean) {
+    if (on === this.titleWant) return;
+    this.titleWant = on;
+    if (on) this.stopSong();
+    if (this.theme && this.ctx) {
+      const g = this.theme.gain.gain;
+      const t = this.ctx.currentTime;
+      g.cancelScheduledValues(t);
+      g.setTargetAtTime(on ? 0 : LOOP_MIX.theme, t, 0.15);
+    }
+    this.syncTitle();
+  }
+  /** Start or stop the title loop to match what's wanted (once the context is up and the file has decoded). */
+  private syncTitle() {
+    const c = this.ctx;
+    const buf = this.music.get('title');
+    if (!c || !buf) return;
+    if (!this.title) {
+      const gain = c.createGain();
+      gain.gain.value = 0;
+      gain.connect(this.master);
+      this.title = { gain, src: null };
+    }
+    const T = this.title;
+    const level = this.titleWant ? 0.55 * this.vol.music * LOOP_MIX.title : 0;
+    if (this.titleWant && !T.src) {
+      const src = c.createBufferSource();
+      src.buffer = buf;
+      src.loop = true;
+      src.connect(T.gain);
+      src.start();
+      T.src = src;
+    }
+    T.gain.gain.cancelScheduledValues(c.currentTime);
+    T.gain.gain.setTargetAtTime(level, c.currentTime, this.titleWant ? 0.4 : 0.2);
+    if (!this.titleWant && T.src) {
+      const old = T.src;
+      T.src = null;
+      old.stop(c.currentTime + 1.2); // after the fade-out
+    }
+  }
+
+  /** The recap of a clear: the sign-off theme, once. The run theme is already out; leaving the recap stops it. */
+  signOff() {
+    const c = this.ctx;
+    const buf = this.music.get('sign-off');
+    if (!this.ready || !c || !buf || this.song?.name === 'sign-off') return;
+    this.stopSong();
+    const src = c.createBufferSource();
+    src.buffer = buf;
+    const gain = c.createGain();
+    gain.gain.value = LOOP_MIX.signOff;
+    src.connect(gain).connect(this.buses.music);
+    src.start();
+    this.song = { name: 'sign-off', src, gain };
+  }
+  private stopSong() {
+    const c = this.ctx;
+    if (!c || !this.song) return;
+    const { src, gain } = this.song;
+    this.song = null;
+    gain.gain.setTargetAtTime(0, c.currentTime, 0.12);
+    try {
+      src.stop(c.currentTime + 0.6);
+    } catch { /* already ended */ }
+  }
+
   /** Back to the top of the theme (a new broadcast): a few ms fade-in so the cut is clean. */
   restartTheme() {
+    this.stopSong();
     const c = this.ctx;
     const buf = this.music.get('game-theme');
     if (!c || !buf || !this.theme) return;
@@ -196,7 +271,7 @@ export class Audio {
     src.loopStart = THEME_LOOP_START;
     src.loopEnd = buf.duration;
     this.theme.gain.gain.cancelScheduledValues(c.currentTime);
-    this.theme.gain.gain.setValueAtTime(LOOP_MIX.theme, c.currentTime);
+    this.theme.gain.gain.setValueAtTime(this.titleWant ? 0 : LOOP_MIX.theme, c.currentTime);
     src.connect(this.theme.gain);
     src.start();
     this.theme.src = src;
@@ -252,6 +327,7 @@ export class Audio {
       this.startSirens(3);
       this.startBed();
       this.applyVolumes();
+      this.syncTitle();
     }
     if (this.ctx.state === 'suspended') void this.ctx.resume();
   }
@@ -274,6 +350,7 @@ export class Audio {
     this.buses.music.gain.setTargetAtTime(0.55 * this.vol.music * on, this.ctx.currentTime, 0.12);
     this.buses.sfx.gain.setTargetAtTime(this.vol.sfx * on, this.ctx.currentTime, 0.12);
     this.buses.voice.gain.setTargetAtTime(on, this.ctx.currentTime, 0.12);
+    if (this.title && this.titleWant) this.title.gain.gain.setTargetAtTime(0.55 * this.vol.music * LOOP_MIX.title, this.ctx.currentTime, 0.12);
   }
 
   /** The cover art hides the attract broadcast: all its sound (steps, sirens, rotor, theme, voice) waits until it shows or a broadcast starts. */
@@ -869,21 +946,22 @@ export class Audio {
     if (!this.ready) return;
     this.duck(SPATIAL.duckDepth, SPATIAL.duckHold * 1.4);
     const t = this.ctx!.currentTime;
-    // The recorded endings (busted: "And We're Out of Time"; sign-off): the run's theme fades out under them, once,
-    // and stays out until the next broadcast restarts it (the recap and menus are silent, 2026-11-17).
-    const song = this.music.get(cleared ? 'sign-off' : 'busted');
-    if (song) {
+    // Busted: "And We're Out of Time", once. Either ending fades the run theme out; it stays out until the next
+    // broadcast restarts it. A clear's sign-off theme waits for the recap screen (signOff()).
+    if (this.theme) {
+      const tg = this.theme.gain.gain;
+      tg.cancelScheduledValues(t);
+      tg.setTargetAtTime(0, t, 0.25);
+    }
+    const busted = this.music.get('busted');
+    if (!cleared && busted) {
       const src = this.ctx!.createBufferSource();
-      src.buffer = song;
+      src.buffer = busted;
       const g = this.ctx!.createGain();
-      g.gain.value = cleared ? LOOP_MIX.signOff : LOOP_MIX.busted;
+      g.gain.value = LOOP_MIX.busted;
       src.connect(g).connect(this.buses.music);
       src.start(t);
-      if (this.theme) {
-        const tg = this.theme.gain.gain;
-        tg.cancelScheduledValues(t);
-        tg.setTargetAtTime(0, t, 0.25);
-      }
+      this.song = { name: 'busted', src, gain: g };
       return;
     }
     const chord = cleared ? [293.66, 369.99, 440, 587.33] : [293.66, 349.23, 415.3, 220];

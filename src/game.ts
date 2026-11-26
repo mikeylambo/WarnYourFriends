@@ -1167,6 +1167,7 @@ function showRecap() {
   audio.setGear(0, true); // a replay may have raised it
   const sh = sim.show;
   const cleared = sh.state === 'cleared';
+  if (cleared) audio.signOff(); // the sign-off theme plays on the recap
   const reason = cleared ? 'cleared' : (sh.reason ?? 'ratings');
   const VIEWERS_PER_POINT = TUNING.show.viewersPerPoint;
   const viewers = (r: number) => (r * VIEWERS_PER_POINT >= 1e6 ? `${((r * VIEWERS_PER_POINT) / 1e6).toFixed(2)}M` : `${Math.round((r * VIEWERS_PER_POINT) / 1000)}K`);
@@ -2877,6 +2878,7 @@ function updateTitleShot(dt: number, t: CameraTarget): boolean {
   coverEl.classList.toggle('away', !cover);
   document.documentElement.classList.toggle('cover', cover);
   audio.setHushed(cover); // no footsteps from a giant hidden behind the cover art
+  audio.setTitle(inMenus); // the title theme plays over every menu (the cover's hush doesn't touch it)
   if (inMenus) {
     titleK = 1;
     const seg = sim.track.segmentAt(sim.giant.s);
