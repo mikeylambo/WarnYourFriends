@@ -139,8 +139,20 @@
     "atLarge": "Giant At Large. Warn Your Friends.",
     "rampage": [
       [
+        "Unbelievable",
+        "{subject} On An Unbelievable Rampage"
+      ],
+      [
         "Goes Through",
         "{subject} Goes Through Everything"
+      ],
+      [
+        "Utter",
+        "{subject} On A Complete And Utter Rampage Through The City"
+      ],
+      [
+        "City Rampage",
+        "{subject} On City Rampage"
       ]
     ],
     "rampageLost": [
@@ -224,7 +236,7 @@
       ],
       [
         "Nudges",
-        "Cruiser Nudges Giant; Giant Notices"
+        "Cruiser Nudges Giant; Giant Barely Notices"
       ]
     ],
     "ramMiss": [],

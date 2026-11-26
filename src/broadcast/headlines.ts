@@ -266,7 +266,8 @@ export class Newsroom {
       case 'tierUp': {
         // Rampage starting is news, not BREAKING (Audience tiers are). "Resumes" / "Returns" only from the second.
         const line = this.freshLine(L.rampage);
-        return line ? mk(this.fill(line[1], { subject: this.subject(TUNING.tiers.length - 1) }), line[0], null) : null;
+        // Any of his names fits a Rampage line (Mike, 2026-11-26: "Large Man", "Fugitive Giant" too).
+        return line ? mk(this.fill(line[1], { subject: this.rng.pick([...new Set(BANK.subject.flat())]) }), line[0], null) : null;
       }
       case 'policeCrash':
       case 'policeSmash': {
