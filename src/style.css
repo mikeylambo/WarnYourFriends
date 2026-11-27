@@ -1399,3 +1399,23 @@ html.touch #pip, #pip, html.autoramp #pip { --pip-top: calc(var(--edge) + env(sa
 #menucard .mc-rank b { letter-spacing: 0.14em; margin-right: 6px; }
 #menucard .mc-rank.on { opacity: 1; }
 #menucard .mc-rank.on b { color: var(--red); }
+
+/* Audio mix panel (M, ?mix=1 or ?playtest=1). */
+#mix {
+  position: absolute; top: 56px; left: 8px; width: 330px; max-height: calc(100% - 120px); overflow: auto; z-index: 30;
+  background: rgba(20, 8, 36, 0.92); color: var(--paper); padding: 8px 10px; border-radius: 4px;
+  font: 12px/1.3 ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+#mix[hidden] { display: none; }
+#mix .mix-head { display: flex; gap: 6px; align-items: center; margin-bottom: 4px; }
+#mix .mix-head span { opacity: 0.6; flex: 1; }
+#mix button { background: var(--bone); color: var(--ink); border: 0; padding: 3px 8px; font: inherit; font-weight: 700; cursor: pointer; }
+#mix button:disabled { opacity: 0.25; cursor: default; }
+#mix .mix-note { opacity: 0.6; margin-bottom: 4px; }
+#mix h4 { margin: 10px 0 2px; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--bone); }
+#mix label { display: grid; grid-template-columns: 1fr 26px 90px 40px; gap: 6px; align-items: center; margin: 3px 0; }
+#mix .mix-play { padding: 1px 0; }
+#mix input[type=range] { width: 100%; }
+#mix output { text-align: right; }
+#mix output.dirty { color: #ff8a96; font-weight: 700; }
+@media (max-width: 700px) { #mix { width: calc(100% - 16px); max-height: 60%; } }
