@@ -22,15 +22,15 @@ export type SfxKind =
  * Loop mix (presentation): the loops are peak-normalised at -3 dBFS, so these set how loud they sit.
  * Sirens at full level, the rotor at rest and at Rampage, the theme on the music bus.
  */
-const LOOP_MIX = { rotorBase: 0.32, rotorGear: 0.12, theme: 0.35, busted: 0.6, signOff: 0.6, title: 0.55 };
+const LOOP_MIX = { rotorBase: 0.32, rotorGear: 0.12, theme: 0.6, busted: 0.6, signOff: 0.6, title: 0.55 };
 /**
  * Balance pass (Mike, 2026-11-27: "only heard the whoop"). Measured against the loudness of each file (loudest 200 ms,
- * high-passed), with the music bus and the SFX bus as the code sets them. The run theme sits at about -36 dBFS mean
+ * high-passed), with the music bus and the SFX bus as the code sets them. The run theme sits at about -28 dBFS mean in the groove (first cut -32.6 was barely audible: Mike, 2026-11-27)
  * (the old synth bed's level, which every older SFX was tuned against; the recorded theme had come in ~8 dB hotter and
- * buried the new sounds). Ambient loops sit about 3 dB over it at full level (measured on the master: music -32.6 mean in the groove, each siren about -30 alone, the rotor about -33 at rest and -30.5 at Rampage); the cues a player must hear
+ * buried the new sounds). Ambient loops sit about 3 dB over it at full level (measured on the master: music -28 mean in the groove, each siren about -28.5 alone, the rotor about -33 at rest and -30.5 at Rampage); the cues a player must hear
  * (tells, whoop, spotlight lock) sit at about -14 to -19; the rest follow in the play() calls.
  */
-const SIREN_K: Record<string, number> = { 'siren-wail-loop': 1.0, 'siren-yelp-loop': 0.5, 'siren-hilo-loop': 0.45 };
+const SIREN_K: Record<string, number> = { 'siren-wail-loop': 0.75, 'siren-yelp-loop': 0.62, 'siren-hilo-loop': 0.56 };
 /**
  * The in-game theme (stems mixed by hand, 103 BPM): an intro of six bars plays once, then bars 7–14 loop. The file
  * ends exactly at bar 14's end, with a 60 ms equal-power crossfade into the audio before the loop start baked into its
