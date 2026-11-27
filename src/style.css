@@ -1405,7 +1405,7 @@ html.touch #pip, #pip, html.autoramp #pip { --pip-top: calc(var(--edge) + env(sa
    quarters that fills clockwise from the top. Full, it turns gold and pulses (the tap target on touch); in Rampage
    it is the clock running down. Overrides every earlier #gears bar rule. */
 #gears {
-  --ring: 116px;
+  --ring: 140px;
   width: var(--ring); height: var(--ring); padding: 0; gap: 0; border-radius: 50%; clip-path: none;
   flex-direction: column; justify-content: center; align-items: center; text-align: center;
   background: radial-gradient(circle, var(--c-panel) 62%, transparent 63%);
@@ -1420,7 +1420,7 @@ html.touch #pip, #pip, html.autoramp #pip { --pip-top: calc(var(--edge) + env(sa
 html.proto #gears.ramp .lbl.proto::after { content: ''; }
 html.proto #gears.ramp .lbl.proto { font-size: 0; }
 html.proto #gears.ramp .lbl.proto::before { content: 'RAMPAGE'; font-size: 9px; }
-#gears .nm { position: relative; z-index: 1; margin: 0; min-width: 0; font: 900 26px/1 var(--f-num); flex-direction: column; justify-content: center; gap: 3px; }
+#gears .nm { position: relative; z-index: 1; margin: 0; min-width: 0; font: 900 32px/1 var(--f-num); flex-direction: column; justify-content: center; gap: 3px; }
 #gears.ready { background: radial-gradient(circle, #f2b632 62%, transparent 63%); box-shadow: none; }
 #gears.ready .ring .val { stroke: #ffd23c; }
 #gears.ready .nm { font-size: 20px; }
@@ -1430,8 +1430,8 @@ html:not(.reduceflashes) #gears.ready { animation: ringready 0.9s ease-in-out in
 @media (prefers-reduced-motion: reduce) { html #gears.ready { animation: none; } }
 #gears.ramp { background: radial-gradient(circle, #5a1208 62%, transparent 63%); }
 #gears.ramp .ring .val { stroke: #ffd23c; }
-html.touch #gears, html.phone #gears { --ring: 92px; }
-html.touch #gears .nm { font-size: 21px; }
+html.touch #gears, html.phone #gears { --ring: 112px; }
+html.touch #gears .nm { font-size: 26px; }
 html.touch #gears.ready .nm { font-size: 18px; }
 /* Audio mix panel (M, ?mix=1 or ?playtest=1). */
 #mix {

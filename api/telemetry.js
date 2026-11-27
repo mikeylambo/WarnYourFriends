@@ -180,12 +180,14 @@ var TUNING = {
    */
   shoulderAnim: { time: 0.5, windup: 0.18, strikeEnd: 0.6, twistBack: 0.45, twistDrive: -1.15, leanDrive: 0.55, leanBack: -0.12, drop: 0.22, armTuck: 1.25, armFling: 1.1 },
   giantModel: {
-    /** Cape clasp height on the torso (m, torso space; the far corner 0.2 higher): across the upper back (was 1.2, the low back). */
-    capeClaspY: 1.6,
+    /** Cape clasp height on the torso (m, torso space; the far corner 0.2 higher). 1.6 put its top edge at head height
+     *  from behind with his forward lean, so only the top of his head showed (Mike, 2026-11-27); 1.3 sits between
+     *  the shoulder blades (1.2 was the low back). */
+    capeClaspY: 1.3,
     /** Cape length from the clasp line (m): knee length at Jog (v0.3 §10). */
     capeLength: 1.9,
     /** Cape half-width at the shoulders and at the hem (m): narrow so the legs read past it. */
-    capeHalfWidthTop: 0.42,
+    capeHalfWidthTop: 0.34,
     capeHalfWidthHem: 0.62,
     /** How fast the cape angle follows a tier change (s): a gear change, so quick. */
     capeAngleTime: 0.25,
