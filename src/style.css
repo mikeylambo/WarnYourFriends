@@ -1390,3 +1390,12 @@ html.touch #pip, #pip, html.autoramp #pip { --pip-top: calc(var(--edge) + env(sa
 #recap .rc * { touch-action: pan-y; }
 #recap .rc > .row { position: sticky; bottom: 0; z-index: 2; margin-bottom: 0; padding: 10px 0 12px; background: inherit; }
 #recap .rc .row { position: sticky; bottom: 4px; z-index: 2; background: linear-gradient(to top, rgba(8, 5, 16, 0.96) 72%, rgba(8, 5, 16, 0)); padding-top: 18px; }
+
+/* Ranked or not, said before it matters: beside LIVE at go-live, and on the menu card. */
+#live #ranktag { display: flex; align-items: center; align-self: stretch; margin-left: 6px; padding: 0 22px 0 14px; background: var(--c-panel); color: var(--c-text); font: 800 15px/1 var(--f-num, inherit); letter-spacing: 0.14em; opacity: 0.8; clip-path: polygon(12px 0, 100% 0, calc(100% - 12px) 100%, 0 100%); border: 0; }
+#live #ranktag.on { opacity: 1; background: var(--red); color: #fff; }
+#live #ranktag[hidden] { display: none; }
+#menucard .mc-rank { margin-top: 8px; font-size: 12px; letter-spacing: 0.04em; opacity: 0.75; }
+#menucard .mc-rank b { letter-spacing: 0.14em; margin-right: 6px; }
+#menucard .mc-rank.on { opacity: 1; }
+#menucard .mc-rank.on b { color: var(--red); }

@@ -77,7 +77,7 @@ Status: `[ ]` todo · `[~]` in progress · `[x]` done. Last reviewed 2026-11-26.
 | The bar you fill | **Audience** | ratings, meter (in UI text) |
 | Full bar mode | **Rampage** | rampage mode, frenzy |
 | Squeezing past a car | **Near miss** | close call, close dodge |
-| Yellow pickup | **Exclusive** | scoop |
+| Pickup | **Water Bottle** (was Exclusive) | scoop |
 | One play from go-live to sign-off | **Broadcast** | run, segment (in UI text) |
 | The five-district mode | **Story** | full broadcast |
 | The producer's goals | **Asks** | challenges, missions |

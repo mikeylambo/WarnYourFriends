@@ -90,7 +90,7 @@ var TUNING = {
     storySpare: 1,
     storyOffer: [2, 2, 2],
     storyAsks: [
-      { id: "s-scoops", tier: 1, kind: "scoops", n: 8, text: "Grab {n} Exclusives" },
+      { id: "s-scoops", tier: 1, kind: "scoops", n: 8, text: "Grab {n} Water Bottles" },
       { id: "s-rampage", tier: 1, kind: "rampage", n: 3, text: "Go Rampage {n} times" },
       { id: "s-rivals", tier: 1, kind: "rivals", n: 2, text: "Flatten {n} rival news vans" },
       { id: "s-near", tier: 1, kind: "nearMiss", n: 12, text: "{n} near misses" },
@@ -105,7 +105,7 @@ var TUNING = {
       { id: "s-tunnel", tier: 3, kind: "cleanDistrict", district: 3, n: 1, text: "Through the tunnel without a hit", requires: "s-bridge" },
       { id: "s-units", tier: 3, kind: "units", n: 4, text: "Flatten {n} police cars", requires: "s-crash", unlock: "shortLeash" },
       // Replaces 'Shake the police chopper' (Mike, 2026-11-24: there's no real way to lose it).
-      { id: "s-scoops20", tier: 3, kind: "scoops", n: 20, text: "Grab {n} Exclusives", requires: "s-scoops", unlock: "liveWire" },
+      { id: "s-scoops20", tier: 3, kind: "scoops", n: 20, text: "Grab {n} Water Bottles", requires: "s-scoops", unlock: "liveWire" },
       { id: "s-clean", tier: 3, kind: "cleanRun", n: 1, text: "Sign off without a single hit", requires: "s-tunnel" },
       { id: "s-modded", tier: 3, kind: "finishModded", n: 1, text: "Sign off with a traffic mod on", requires: "s-finish" }
     ],
@@ -156,8 +156,12 @@ var TUNING = {
   giant: {
     /** §9 the giant is 3.6m tall (his Jog size; see growth). */
     height: 3.6,
-    /** Collision circle. Shoulder width; fits a 4m lane with room either side. */
-    radius: 1.1,
+    /**
+     * Collision circle (before growth's 1.3x). 1.27 -> 1.65m at his size (Mike, 2026-11-26: he ran through cars):
+     * his drawn body reaches 1.81m out mid lane change; at 1.43m up to ~40cm of him passed through cars unhit.
+     * 1.65m still clears the next lane (1.9m to the nearest prop edge there).
+     */
+    radius: 1.27,
     /** LOCKED (§9, Law 1): the giant always runs; speed never below 2 m/s. */
     speedFloor: 2,
     /** Drop in already jogging. */
@@ -405,7 +409,7 @@ var TUNING = {
     /** Chance a highway segment has an overpass crossing it. */
     overpassChance: 0.18,
     names: {
-      first: ["Harbor", "Quarry", "Ninth", "Kessler", "Orchard", "Lantern", "Millbrook", "Ashgrove", "Redline", "Copper", "Dunmore", "Saltmarsh"],
+      first: ["Harbor", "Quarry", "Ninth", "Kessler", "Orchard", "Lantern", "Millbrook", "Ashgrove", "Kennedy", "Copper", "Dunmore", "Saltmarsh"],
       suffix: { highway: "Expressway", avenue: "Avenue", bridge: "Bridge", tunnel: "Tunnel" }
     }
   },
@@ -645,6 +649,8 @@ var TUNING = {
    */
   /** `rampWarn`: Rampage's last this-many seconds pulse red and tick (review pick 2: see it ending). */
   hud: {
+    /** RANKED / UNRANKED tag beside LIVE at the start of a broadcast (s): long enough to read, gone before the first hazard needs the eye. */
+    rankTagSecs: 5,
     /** Chopper fuel gauge: red and pulsing for this many seconds before the segment's hard end. */
     fuelCritical: 15,
     minScale: 0.5,
@@ -1083,6 +1089,8 @@ var TUNING = {
     perMinuteAll: 120,
     /** A road the server hands out stays rankable for this player this long (s): Run Again on it counts, a road picked by hand doesn't. */
     ticketTtl: 6 * 3600,
+    /** The client stops using a prefetched road this long after it was issued (s): ticketTtl less an hour, so the longest broadcast (~20 min Endless) still posts before the server forgets it. */
+    ticketUseBy: 5 * 3600,
     /** Roads handed out per player per minute. */
     ticketsPerMinute: 10,
     /** Submissions per player id per minute (a broadcast takes minutes; this only stops scripted bursts). */

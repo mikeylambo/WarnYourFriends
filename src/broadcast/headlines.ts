@@ -9,7 +9,7 @@ import BANK from './headlines.json';
  * Grammar: [tier phrase] + [act] + [place]. Events are queued as they happen and
  * published at most every 4s; tier changes interrupt immediately as BREAKING.
  * The chyron never lies: every headline is built from events that happened,
- * places are facts about the giant right now (heading, lane, mile), counts are
+ * the only place is the road at the first sighting (and road names on zone news), counts are
  * exact. Anti-repeat: no verb or place reused within the last 5 headlines.
  */
 
@@ -49,13 +49,11 @@ export interface Headline {
   at?: NewsContext;
 }
 
-type Kind = 'zone' | 'spotted' | 'ratingsTier' | 'tierUp' | 'tierDown' | 'smash' | 'bounce' | 'wall' | 'merge' | 'escort' | 'ramHit' | 'ramMiss' | 'lostTrack' | 'spiked' | 'heat' | 'tell' | 'exitOpen' | 'end' | 'leap' | 'stare' | 'breakaway' | 'primeTime' | 'spotlight' | 'chopperLost' | 'policeCrash' | 'policeSmash' | 'forkZone' | 'landmark' | 'netSlip' | 'netEscape';
+type Kind = 'zone' | 'spotted' | 'ratingsTier' | 'tierUp' | 'tierDown' | 'smash' | 'bounce' | 'wall' | 'merge' | 'escort' | 'ramHit' | 'ramMiss' | 'lostTrack' | 'spiked' | 'heat' | 'tell' | 'exitOpen' | 'end' | 'policeCrash' | 'policeSmash' | 'forkZone' | 'landmark' | 'netSlip' | 'netEscape';
 /** `at`: where he was when it happened (places come from here, not from publish time). */
 type Item = { kind: Kind; t: number; prio: number; events: SimEvent[]; at?: NewsContext };
 
-const PRIO: Partial<Record<Kind, number>> = { netSlip: 96, netEscape: 74, landmark: 60, zone: 66, spotted: 95, ratingsTier: 100, end: 200, exitOpen: 90, tell: 75, ramHit: 65, ramMiss: 58, lostTrack: 57, spiked: 62, heat: 52, escort: 60, merge: 55, leap: 86, stare: 84, breakaway: 87, primeTime: 88, forkZone: 98, spotlight: 63, chopperLost: 59, policeCrash: 70, policeSmash: 35, tierUp: 50, bounce: 45, tierDown: 40, wall: 10 };
-/** The player's own ability moments: kept queued longer so they get their headline. */
-const ABILITY_NEWS: Kind[] = ['leap', 'stare', 'breakaway', 'primeTime'];
+const PRIO: Partial<Record<Kind, number>> = { netSlip: 96, netEscape: 74, landmark: 60, zone: 66, spotted: 95, ratingsTier: 100, end: 200, exitOpen: 90, tell: 75, ramHit: 65, ramMiss: 58, lostTrack: 57, spiked: 62, heat: 52, escort: 60, merge: 55, forkZone: 98, policeCrash: 70, policeSmash: 35, tierUp: 50, bounce: 45, tierDown: 40, wall: 10 };
 /** These break in immediately, ignoring the 4s cadence (§21: tier changes; and the end of the broadcast). */
 /** These break in now; `forkZone` is the new road after a fork (the cut needs its chyron). */
 const IMMEDIATE: Kind[] = ['ratingsTier', 'end', 'exitOpen', 'forkZone'];
@@ -79,12 +77,8 @@ export class Newsroom {
   private escortCount = 0;
   private lastTier = 0;
   private lastRatings: SimEvent | null = null;
-  private rampages = 0;
   /** Heat as last reported: only a rise is news (the Pose spends Heat; that's the pose's story). */
   private heatSeen = 0;
-  /** Smashes seen this instant (a leap landing's shockwave smashes arrive just before its leapLand). */
-  private nowSmashes: { t: number; e: SimEvent }[] = [];
-  private leapSmashes = new Map<SimEvent, number[]>();
 
   constructor(seed: number, startHeat = 0) {
     this.rng = new Rng((seed ^ 0x6e657773) >>> 0);
@@ -98,11 +92,10 @@ export class Newsroom {
       case 'ratings':
         this.lastRatings = e;
         break;
-      case 'tierUp': add('tierUp'); break;
-      case 'tierDown': add('tierDown'); break;
+      // Rampage starting and ending are the only gear news (Jog and Stride are gone from the loop).
+      case 'tierUp': if (e.tier === TUNING.tiers.length - 1) add('tierUp'); break;
+      case 'tierDown': if (e.tier === TUNING.tiers.length - 2) add('tierDown'); break;
       case 'smash': {
-        this.nowSmashes = this.nowSmashes.filter((x) => x.t === time);
-        this.nowSmashes.push({ t: time, e });
         const open = this.queue.find((q) => q.kind === 'smash' && time - q.t <= TUNING.broadcast.tallyWindow);
         if (open) open.events.push(e);
         else this.queue.push({ kind: 'smash', t: time, prio: 0, events: [e], at: this.lastCtx ?? undefined });
@@ -113,8 +106,8 @@ export class Newsroom {
       case 'merge': add('merge'); break;
       case 'escortJoin': add('escort'); break;
       case 'ram': add(e.hit ? 'ramHit' : 'ramMiss'); break;
-      case 'lostTrack': add(e.kind === 'chopper' ? 'chopperLost' : 'lostTrack'); break;
-      case 'spotlight': add('spotlight'); break;
+      // The chopper's search, light and loss are off the chyron (2026-11-26: not part of the game the player sees).
+      case 'lostTrack': if (e.kind !== 'chopper') add('lostTrack'); break;
       case 'policeCrash': if (e.onAir) add('policeCrash'); break;
       case 'policeSmash': add('policeSmash'); break;
       case 'netSlip': add('netSlip'); break;
@@ -124,19 +117,10 @@ export class Newsroom {
         if (this.heatSeen && e.heat > this.heatSeen) add('heat');
         this.heatSeen = e.heat;
         break;
-      case 'leapLand': {
-        // Claim this landing's shockwave smashes: the landing headline reports them, the tally doesn't.
-        const mine = e.smashed > 0 ? this.nowSmashes.filter((x) => x.t === time).slice(-e.smashed).map((x) => x.e) : [];
-        for (const q of this.queue) if (q.kind === 'smash') q.events = q.events.filter((x) => !mine.includes(x));
-        this.queue = this.queue.filter((q) => q.kind !== 'smash' || q.events.length);
-        this.leapSmashes.set(e, mine.map((x) => (x as Extract<SimEvent, { type: 'smash' }>).propId));
-        this.queue.push({ kind: 'leap', t: time, prio: PRIO.leap ?? 0, events: [e, ...mine], at: this.lastCtx ?? undefined });
-        break;
-      }
-      case 'stare': if (e.moved.length || e.backedOff) add('stare'); break;
-      case 'breakawayLand': add('breakaway'); break;
-      case 'primeTime': if (e.on) add('primeTime'); break;
-      case 'tell': if (e.kind !== 'cruiser') add('tell'); break;
+      // Abilities (Leap, The Stare, Breakaway, Prime Time) are out of the game: no lines for them (2026-11-26).
+      // Only the warnings for events that fill the screen: a Police Net closing, a Car Carrier dropping cars. A roadblock or
+      // spike strip is past him before the line could air, so the chyron would report something he never saw (2026-11-26).
+      case 'tell': if (e.kind === 'net' || e.kind === 'carrier') add('tell'); break;
       case 'exitOpen': add('exitOpen'); break;
       case 'fork':
         // Off the highway: queued road news (zones, merges) is about a road he's no longer on.
@@ -179,7 +163,7 @@ export class Newsroom {
     this.lastTier = Math.max(this.lastTier, ctx.ratingsTier);
     // Stale news is dropped, not shown late.
     const B0 = TUNING.broadcast;
-    this.queue = this.queue.filter((q) => now - q.t <= (ABILITY_NEWS.includes(q.kind) ? B0.staleAfterAbility : B0.staleAfter) || IMMEDIATE.includes(q.kind));
+    this.queue = this.queue.filter((q) => now - q.t <= B0.staleAfter || IMMEDIATE.includes(q.kind));
     if (!this.queue.length) return null;
 
     const tierUp = this.queue.filter((q) => IMMEDIATE.includes(q.kind)).sort((a, b) => b.prio - a.prio)[0];
@@ -228,16 +212,19 @@ export class Newsroom {
     return ok.length ? this.rng.pick(ok) : null;
   }
 
-  /** True places for the giant right now, minus any used in the last 5 headlines. */
-  private freshPlace(ctx: NewsContext): string | null {
+  /**
+   * Places only where they're news (2026-11-26, Mike: "City/street names only ever really need to show where
+   * applicable"): the road he's on at the first sighting. Lanes, miles and compass points read as filler.
+   */
+  private roadPlace(ctx: NewsContext): string | null {
     const P = BANK.places;
-    const all = [...(onHighway(ctx.zone) ? P.road : []), P.bound.replace('{dir}', compass(ctx.heading)), P.lane.replace('{n}', String(ctx.lane + 1)), P.mile.replace('{m}', (ctx.s / 1609.344).toFixed(1))];
-    if (ctx.zone && ctx.zoneName) all.push(P.zone[ctx.zone].replace('{name}', ctx.zoneName));
-    if (ctx.lanes > 1 && ctx.lane === 0) all.push(P.fast);
-    if (ctx.lanes > 1 && ctx.lane === ctx.lanes - 1) all.push(P.slow);
-    const used = new Set(this.recent().map((h) => h.place));
-    const ok = all.filter((p) => !used.has(p));
-    return ok.length ? this.rng.pick(ok) : null;
+    return ctx.zone && ctx.zoneName ? P.zone[ctx.zone].replace('{name}', ctx.zoneName) : null;
+  }
+
+  /** Break-ins alternate their red label: BREAKING, then LIVE REPORT (Mike, 2026-11-26). */
+  private breakKicker(): string {
+    const n = this.history.filter((h) => BANK.breaking.includes(h.kicker)).length;
+    return BANK.breaking[n % BANK.breaking.length];
   }
 
   private subject(tier: number): string {
@@ -258,11 +245,13 @@ export class Newsroom {
     this.placeZone = ctx.zone;
     const L = BANK.lines;
     const V = BANK.verbs;
-    const kicker = BANK.kicker[Math.min(ctx.ratingsTier, BANK.kicker.length - 1)];
-    const mk = (text: string, verb: string | null, place: string | null, breaking = false): Headline => ({ t: ctx.time, kicker: breaking ? 'BREAKING' : kicker, text, breaking, verb, place, sources: q.events, at: ctx });
+    // UNREAL and CITY IN CHAOS take turns from 60% Audience up (Mike, 2026-11-26: CITY IN CHAOS is an alt for UNREAL).
+    const top = BANK.kicker[Math.min(ctx.ratingsTier, BANK.kicker.length - 1)];
+    const kicker = top === 'UNREAL' && this.history.filter((h) => h.kicker === 'UNREAL' || h.kicker === BANK.kickerAlt).length % 2 ? BANK.kickerAlt : top;
+    const mk = (text: string, verb: string | null, place: string | null, breaking = false): Headline => ({ t: ctx.time, kicker: breaking ? this.breakKicker() : kicker, text, breaking, verb, place, sources: q.events, at: ctx });
     switch (q.kind) {
       case 'spotted': {
-        const place = this.freshPlace(ctx);
+        const place = this.roadPlace(ctx);
         return mk(this.fill(L.spotted, { subject: this.subject(0), place }), 'Spotted', place);
       }
       case 'ratingsTier': {
@@ -271,20 +260,14 @@ export class Newsroom {
           this.atLargeDone = true;
           return mk(L.atLarge, 'At Large', null, true);
         }
-        const place = this.freshPlace(ctx);
         const line = this.freshLine(L.ratingsTier[Math.min(ctx.ratingsTier, L.ratingsTier.length - 1)]);
-        if (!line) return mk(`Giant: ${BANK.kicker[ctx.ratingsTier]}`, null, null, true);
-        return mk(this.fill(line[1], { place, dir: compass(ctx.heading) + 'bound' }), line[0], place, true);
+        return line ? mk(line[1], line[0], null, true) : null;
       }
       case 'tierUp': {
-        // Momentum tier-ups are news, not BREAKING (Ratings tiers are).
-        const e = q.events[0] as Extract<SimEvent, { type: 'tierUp' }>;
-        const pool = e.tier >= 2 ? L.rampage.filter((l) => this.rampages > 0 || !['Returns', 'Resumes'].includes(l[0])) : L.stride;
-        if (e.tier >= 2) this.rampages++;
-        const line = this.freshLine(pool);
-        if (!line) return null;
-        const place = this.freshPlace(ctx);
-        return mk(this.fill(line[1], { subject: this.subject(e.tier), place }), line[0], place);
+        // Rampage starting is news, not BREAKING (Audience tiers are). "Resumes" / "Returns" only from the second.
+        const line = this.freshLine(L.rampage);
+        // Any of his names fits a Rampage line (Mike, 2026-11-26: "Large Man", "Fugitive Giant" too).
+        return line ? mk(this.fill(line[1], { subject: this.rng.pick([...new Set(BANK.subject.flat())]) }), line[0], null) : null;
       }
       case 'policeCrash':
       case 'policeSmash': {
@@ -294,17 +277,14 @@ export class Newsroom {
         if (!kind) return null;
         const line = this.freshLine(L[q.kind]);
         if (!line) return null;
-        const place = line[1].includes('{place}') ? this.freshPlace(ctx) : null;
         const noun = e.type === 'policeCrash' && e.spikes ? L.spikeStrip : e.type === 'policeCrash' && e.offRoad ? L.guardrail : BANK.nouns[kind][0];
-        return mk(this.fill(line[1], { noun, place }), line[0], place);
+        return mk(this.fill(line[1], { noun }), line[0], null);
       }
       case 'netSlip': {
         // Caught once: it breaks in (the chyron says exactly what happened).
         const line = this.freshLine(q.events[0]?.type === 'netSlip' && q.events[0].cause === 'caught' ? L.caughtSlip : L.netSlip);
         return line ? mk(line[1], line[0], null, true) : null;
       }
-      case 'spotlight':
-      case 'chopperLost':
       case 'netEscape':
       case 'ramHit':
       case 'ramMiss':
@@ -312,17 +292,12 @@ export class Newsroom {
       case 'spiked':
       case 'heat': {
         const line = this.freshLine(L[q.kind]);
-        if (!line) return null;
-        const place = line[1].includes('{place}') ? this.freshPlace(ctx) : null;
-        return mk(this.fill(line[1], { place, heat: String(ctx.heat) }), line[0], place);
+        return line ? mk(this.fill(line[1], { subject: this.subject(ctx.tier) }), line[0], null) : null;
       }
       case 'tell': {
         const e = q.events[0] as Extract<SimEvent, { type: 'tell' }>;
-        const pool = e.kind === 'roadblock' ? L.tellRoadblock : e.kind === 'rolling' ? L.tellRolling : e.kind === 'chopper' ? L.tellChopper : e.kind === 'net' ? L.tellNet : e.kind === 'carrier' ? L.tellCarrier : L.tellSpike;
-        const line = this.freshLine(pool);
-        if (!line) return null;
-        const place = line[1].includes('{place}') ? this.freshPlace(ctx) : null;
-        return mk(this.fill(line[1], { place }), line[0], place);
+        const line = this.freshLine(e.kind === 'net' ? L.tellNet : L.tellCarrier);
+        return line ? mk(line[1], line[0], null) : null;
       }
       case 'forkZone':
       case 'zone': {
@@ -350,18 +325,8 @@ export class Newsroom {
         return h;
       }
       case 'tierDown': {
-        const e = q.events[0] as Extract<SimEvent, { type: 'tierDown' }>;
-        if (e.tier === TUNING.tiers.length - 2) {
-          const line = this.freshLine(L.rampageLost);
-          if (line) {
-            const place = this.freshPlace(ctx);
-            return mk(this.fill(line[1], { place }), line[0], place);
-          }
-        }
-        const verb = this.freshVerb(V.slow);
-        if (!verb) return null;
-        const place = this.freshPlace(ctx);
-        return mk(this.fill(L.slowed, { subject: this.subject(ctx.tier), verb, place }), verb, place);
+        const line = this.freshLine(L.rampageLost);
+        return line ? mk(line[1], line[0], null) : null;
       }
       case 'smash': {
         // Report the heaviest kind smashed in the window, with its exact count.
@@ -369,7 +334,7 @@ export class Newsroom {
         const counts = new Map<PropKind, { n: number; heavy: boolean; across: boolean }>();
         for (const e of smashes) {
           const k = propKind(e.propId);
-          if (!k) continue;
+          if (!k || k === 'scoop') continue; // a Water Bottle is picked up, not smashed: never "Tramples Water Bottle"
           const c = counts.get(k) ?? { n: 0, heavy: e.cls === 'heavy', across: false };
           c.n++;
           c.across ||= e.across;
@@ -382,10 +347,9 @@ export class Newsroom {
         const verbs = c.n === 1 && c.across ? V.across : c.heavy ? V.heavy : V.medium;
         const verb = this.freshVerb(verbs) ?? this.freshVerb(c.heavy ? V.heavy : V.medium);
         if (!verb) return null;
-        const place = this.freshPlace(ctx);
-        const text = c.n === 1 ? this.fill(L.smashOne, { subject: this.subject(ctx.tier), verb, noun: nouns[0], place }) : this.fill(L.smashMany, { subject: this.subject(ctx.tier), verb, count: String(c.n), nouns: nouns[1], place });
+        const text = c.n === 1 ? this.fill(L.smashOne, { subject: this.subject(ctx.tier), verb, noun: nouns[0] }) : this.fill(L.smashMany, { subject: this.subject(ctx.tier), verb, count: String(c.n), nouns: nouns[1] });
         // Only the smashes of the reported kind are this headline's sources.
-        const h = mk(text, verb, place);
+        const h = mk(text, verb, null);
         h.sources = smashes.filter((e) => propKind(e.propId) === kind);
         return h;
       }
@@ -394,66 +358,26 @@ export class Newsroom {
         const k = propKind(e.propId);
         const verb = this.freshVerb(V.bounce);
         if (!k || !verb) return null;
-        const place = this.freshPlace(ctx);
-        return mk(this.fill(L.bounce, { subject: this.subject(ctx.tier), verb, noun: BANK.nouns[k][0], place }), verb, place);
+        return mk(this.fill(L.bounce, { subject: this.subject(ctx.tier), verb, noun: BANK.nouns[k][0] }), verb, null);
       }
       case 'wall': {
         const verb = this.freshVerb(V.wall);
         if (!verb) return null;
-        const place = this.freshPlace(ctx);
-        return mk(this.fill(L.wall, { subject: this.subject(ctx.tier), verb, place }), verb, place);
+        return mk(this.fill(L.wall, { subject: this.subject(ctx.tier), verb }), verb, null);
       }
       case 'merge': {
         const e = q.events[0] as Extract<SimEvent, { type: 'merge' }>;
         const lanes = String(e.to);
         const line = this.freshLine(e.to < e.from ? L.narrows : L.widens);
-        if (!line) return mk(this.fill(L.mergeFallback, { lanes }), null, null);
+        // Widening isn't news (Mike, 2026-11-26); a narrowing with no fresh line falls back to the plain count.
+        if (!line) return e.to < e.from ? mk(this.fill(L.mergeFallback, { lanes }), null, null) : null;
         return mk(this.fill(line[1], { lanes }), line[0], null);
       }
-      case 'leap': {
-        const e = q.events[0] as Extract<SimEvent, { type: 'leapLand' }>;
-        const subject = this.subject(ctx.tier);
-        if (e.smashed > 0) {
-          // The shockwave's smashes follow the landing; count them from the same instant (exact, or not at all).
-          const kinds = new Map<PropKind, number>();
-          for (const id of this.leapSmashes.get(e) ?? []) {
-            const k = propKind(id);
-            if (k) kinds.set(k, (kinds.get(k) ?? 0) + 1);
-          }
-          if (kinds.size === 1) {
-            const [[k, n]] = [...kinds.entries()];
-            const line = this.freshLine(n === 1 ? L.leapSmashOne : L.leapSmash);
-            if (line) {
-              const h = mk(this.fill(line[1], { subject, count: String(n), noun: BANK.nouns[k][0], nouns: BANK.nouns[k][1] }), line[0], null);
-              h.sources = q.events.slice(1);
-              return h;
-            }
-          }
-        }
-        const line = this.freshLine(L.leap);
-        if (!line) return null;
-        const place = line[1].includes('{place}') ? this.freshPlace(ctx) : null;
-        return mk(this.fill(line[1], { subject, place }), line[0], place);
-      }
-      case 'stare': {
-        const e = q.events[0] as Extract<SimEvent, { type: 'stare' }>;
-        const line = this.freshLine(e.backedOff > 0 ? L.stareCops : L.stare);
-        if (!line) return null;
-        const place = line[1].includes('{place}') ? this.freshPlace(ctx) : null;
-        return mk(this.fill(line[1], { place }), line[0], place);
-      }
-      case 'breakaway':
-      case 'primeTime': {
-        const line = this.freshLine(L[q.kind]);
-        if (!line) return null;
-        const place = line[1].includes('{place}') ? this.freshPlace(ctx) : null;
-        return mk(this.fill(line[1], { subject: this.subject(ctx.tier), place }), line[0], place);
-      }
       case 'escort': {
-        const [verb, tpl] = L.escort[Math.min(this.escortCount++, L.escort.length - 1)];
-        if (this.recent().some((h) => h.verb === verb)) return null;
-        const place = tpl.includes('{place}') ? this.freshPlace(ctx) : null;
-        return mk(this.fill(tpl, { place }), verb, place);
+        // The first cruiser is news; the rest are the same story.
+        if (this.escortCount++ > 0) return null;
+        const [verb, text] = L.escort[0];
+        return mk(text, verb, null);
       }
     }
   }

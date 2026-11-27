@@ -1,3 +1,4 @@
+import BANK from './headlines.json';
 import { describe, expect, it } from 'vitest';
 import { Sim } from '../sim/sim';
 import { Bot } from '../sim/bot';
@@ -69,11 +70,12 @@ describe('headlines (§21)', () => {
         if (n && !/Lanes/.test(h.text)) expect(h.sources.length).toBe(Number(n[1]));
         // Places are facts about where it happened (the headline carries that moment's context).
         const at = h.at ?? ctx;
-        const lane = h.place?.match(/^In Lane (\d)$/);
-        if (lane) expect(at.lane + 1).toBe(Number(lane[1]));
-        if (h.place === 'In The Fast Lane') expect(at.lane).toBe(0);
-        if (h.place?.endsWith('bound')) expect(h.place).toBe(`${compass(at.heading)}bound`);
-        if (h.place === 'On Highway' || h.place === 'On The Interstate') expect(at.zone ?? 'highway').toBe('highway');
+        // The only place is the road at the sighting (2026-11-26): no lane, mile or compass filler, anywhere.
+        if (h.place) expect(h.text).toMatch(/Spotted/);
+        if (h.place) expect(h.place.replace(/^(On|In) /, '')).toBe(at.zoneName);
+        expect(h.text).not.toMatch(/\b(In Lane \d|Near Mile|[A-Z][a-z]+bound|Fast Lane|Slow Lane)\b/);
+        // Red side: an Audience label, a break-in label, or an ending; never RAMPAGE (Mike, 2026-11-26).
+        expect(['SPOTTED', 'AT LARGE', 'UNREAL', 'CITY IN CHAOS', 'BREAKING', 'LIVE REPORT', 'SIGN-OFF', 'CAUGHT', 'CUT TO COMMERCIAL', 'SIGNAL LOST']).toContain(h.kicker);
         // BREAKING: a Ratings tier, the exit, the ending, or the new road after a fork (the station cut away).
         if (h.breaking) expect(['ratings', 'exitOpen', 'busted', 'signOff', 'zone', 'netSlip']).toContain(h.sources[0].type);
         if (h.breaking && h.sources[0].type === 'zone') expect(log.has(h.sources[0]) && [...log].some((e) => e.type === 'fork' && e.taken)).toBe(true);
@@ -81,15 +83,23 @@ describe('headlines (§21)', () => {
       // §21: a Ratings tier rise breaks in on the same tick.
       let prev = 0;
       for (const x of tiers) {
-        if (x.tier > prev) expect(out.some(({ h }) => h.breaking && Math.abs(h.t - x.t) < 1e-9 && h.sources[0].type === 'ratings')).toBe(true);
+        // A level with no lines in the word bank only changes the red label (CITY IN CHAOS, 2026-11-26).
+        const has = x.tier === 1 || (BANK.lines.ratingsTier[x.tier]?.length ?? 0) > 0;
+        if (x.tier > prev && has) expect(out.some(({ h }) => h.breaking && Math.abs(h.t - x.t) < 1e-9 && h.sources[0].type === 'ratings')).toBe(true);
         prev = Math.max(prev, x.tier);
       }
       // Heat only makes news going up (a Pose spends it).
       for (const { h } of out) if (h.sources[0]?.type === 'heat') expect((h.sources[0] as Extract<SimEvent, { type: 'heat' }>).heat).toBeGreaterThan(0);
-      // An ability he actually used makes the news (Stride smashes most things now, so a Leap isn't always needed).
-      const used = [...log].some((e) => ['leapLand', 'stare', 'breakawayLand', 'primeTime'].includes(e.type));
-      // (A Leap's landing can run as what it flattened: "Lands On Fruit Cart", sourced from the smash.)
-      if (ups.length && used && out.length > 10) expect(out.some(({ h }) => /\bLands\b/.test(h.text) || h.sources.some((e) => ['leapLand', 'stare', 'breakawayLand', 'primeTime'].includes(e.type)))).toBe(true);
+      // Off the chyron (2026-11-26): abilities, the police chopper, and warnings for things gone before the line airs.
+      for (const { h } of out) {
+        expect(h.sources.some((e) => ['leapLand', 'stare', 'breakawayLand', 'primeTime', 'spotlight'].includes(e.type))).toBe(false);
+        const e0 = h.sources[0];
+        if (e0?.type === 'tell') expect(['net', 'carrier']).toContain(e0.kind);
+        if (e0?.type === 'lostTrack') expect(e0.kind).not.toBe('chopper');
+      }
+      // Break-ins alternate BREAKING / LIVE REPORT.
+      const breaks = out.map(({ h }) => h.kicker).filter((k) => k === 'BREAKING' || k === 'LIVE REPORT');
+      breaks.forEach((k, i) => expect(k).toBe(i % 2 ? 'LIVE REPORT' : 'BREAKING'));
       // The broadcast ends with a sign-off or busted line, from the event that ended it.
       const final = out[out.length - 1].h;
       expect(["SIGN-OFF", "BUSTED", "CUT TO COMMERCIAL", "SIGNAL LOST"]).toContain(final.kicker);
@@ -105,7 +115,7 @@ describe('headlines (§21)', () => {
       const { out, zones } = run(seed, 150);
       for (const { h } of out) {
         // Zone names ("On Ninth Expressway") are facts about the zone itself; strip the place they came from.
-        const text = h.place && /^(On|In) /.test(h.place) && !['On Highway', 'On The Interstate'].includes(h.place) ? h.text.replace(h.place, '') : h.text;
+        const text = h.place ? h.text.replace(h.place, '') : h.text;
         if (!road.test(text) || ['CAUGHT', 'CUT TO COMMERCIAL', 'SIGNAL LOST', 'SIGN-OFF'].includes(h.kicker)) continue;
         checked++;
         // The event is at most `staleAfter` old: he must have been on a highway then.

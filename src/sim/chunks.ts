@@ -88,7 +88,7 @@ export const CHUNKS: Chunk[] = [
 
 /**
  * The teaching opening (Mike, 2026-11-24: "teach by doing"): the first chunk of a player's very first broadcast.
- * A car straight ahead in his starting lane (the swipe), a row of Exclusives across every lane (the pickup), then
+ * A car straight ahead in his starting lane (the swipe), a row of Water Bottles across every lane (the pickup), then
  * single cars spaced for easy near misses. Never picked otherwise. He starts in lane floor(lanes / 2).
  */
 export const TUTORIAL: Chunk[] = [

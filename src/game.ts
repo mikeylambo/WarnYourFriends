@@ -34,7 +34,7 @@ import { AWARD_BADGE, MOD_ART, OUTFIT_ART } from './unlockArt';
 import { PlayLog, appendLog, exportLog, type PlayEntry } from './playlog';
 import { readFlags } from './debug';
 import { dailyDay, dailySeed, encodeInputs, type BoardMode, type Submission } from './leaderboard/verify';
-import { mountBoard, prefetchSeed, takeSeed } from './leaderboardClient';
+import { boardReachable, mountBoard, nextRanked, onRankChange, prefetchSeed, takeSeed, ticketFresh } from './leaderboardClient';
 import { Onboarding, type PromptId } from './onboarding';
 import { AWARDS, loadProfile, modUnlocked, storyAskOffer, outfitUnlocked, record, rewardLine, saveProfile, upgradePool, type Award } from './awards';
 import { GAME_SPEEDS, HUD_SIZES, loadSettings, saveSettings } from './settings';
@@ -153,7 +153,7 @@ const chainClock = chainEl.querySelector('.clock i') as HTMLElement;
 /** Spectacle stunt names on the combo counter (what just counted, so the player learns the menu). */
 /** Ability levels on cards and the chip. */
 const ROMAN = ['', 'I', 'II', 'III'];
-const STUNT_LABEL: Record<string, string> = { rival: 'RIVAL NEWS VAN', medium: 'SMASH', heavy: 'HEAVY SMASH', unit: 'POLICE CAR', policeCrash: 'POLICE CRASH', collateral: 'COLLATERAL', nearMiss: 'NEAR MISS', ramDodge: 'DODGED', lostTrack: 'SHOOK ONE', chopperShaken: 'LOST THE CHOPPER', leapLand: 'LANDING', breakawayLand: 'BREAKAWAY', scoop: 'EXCLUSIVE', target: 'TARGET' };
+const STUNT_LABEL: Record<string, string> = { rival: 'RIVAL NEWS VAN', medium: 'SMASH', heavy: 'HEAVY SMASH', unit: 'POLICE CAR', policeCrash: 'POLICE CRASH', collateral: 'COLLATERAL', nearMiss: 'NEAR MISS', ramDodge: 'DODGED', lostTrack: 'SHOOK ONE', chopperShaken: 'LOST THE CHOPPER', leapLand: 'LANDING', breakawayLand: 'BREAKAWAY', scoop: 'WATER BOTTLE', target: 'TARGET' };
 let chainResultT = 0;
 const gearPips = [...gearsEl.querySelectorAll('i')] as HTMLElement[];
 const gearName = gearsEl.querySelector('.nm') as HTMLElement;
@@ -389,8 +389,8 @@ const onboarding = new Onboarding($('prompt'), (id: PromptId) => {
     lanes: PROTO ? `Change lanes ${k('lanes')}: weave through the traffic` : `Change lanes ${k('lanes')} and smash the traffic`,
     blocked: PROTO ? `Cars and trucks don't break until Rampage. Dodge them ${k('lanes')}` : `Bulldozers and armored trucks don't break. Change lanes ${k('lanes')}`,
     concrete: `Concrete and yellow-roof police lines only break in <b>RAMPAGE</b>. Save it, or go round`,
-    meter: PROTO ? `Squeeze past cars for a <b>NEAR MISS</b>. Grab yellow <b>EXCLUSIVES</b>. Both fill the <b>AUDIENCE</b>; full audience: <b>RAMPAGE</b>` : `Smash and dodge to fill the <b>RAMPAGE</b> meter`,
-    exclusive: `<b>EXCLUSIVE!</b> Yellow pickups fill the <b>AUDIENCE</b>`,
+    meter: PROTO ? `Squeeze past cars for a <b>NEAR MISS</b>. Grab <b>WATER BOTTLES</b>. Both fill the <b>AUDIENCE</b>; full audience: <b>RAMPAGE</b>` : `Smash and dodge to fill the <b>RAMPAGE</b> meter`,
+    exclusive: `<b>WATER BOTTLE!</b> Bottles fill the <b>AUDIENCE</b>`,
     nearMiss: `<b>NEAR MISS!</b> Squeezing past cars fills the <b>AUDIENCE</b>`,
     ready: `<b>RAMPAGE READY</b> ${settings.autoRampage ? 'Here it goes' : `Press ${k('shoulder')}`}`,
     hit: PROTO ? `Hits lose the audience, and the police close in` : `Hits cost Rampage meter`,
@@ -431,7 +431,7 @@ let lastEntry: PlayEntry | null = null;
 let simOpts: { seed: number; segment: number; upgrades: UpgradeId[]; levels: Partial<Record<AbilityId, number>>; growth: boolean; guided?: boolean; edition?: number; endless?: boolean; asks?: string[]; mods?: string[] } = { seed: 0, segment: 0, upgrades: [], levels: {}, growth: false };
 const inputLog: SimInput[] = [];
 /** Leaderboard: this broadcast's (or run's) seed, each segment's inputs and the meeting buys, for the server to re-play. */
-let lb: { mode: BoardMode; day?: number; seed: number; segments: string[]; buys: UpgradeId[][]; pool: UpgradeId[]; guided?: boolean; edition?: number } = { mode: 'broadcast', seed: 0, segments: [], buys: [], pool: [] };
+let lb: { mode: BoardMode; day?: number; seed: number; segments: string[]; buys: UpgradeId[][]; pool: UpgradeId[]; guided?: boolean; edition?: number; issuedAt?: number; ranked?: boolean } = { mode: 'broadcast', seed: 0, segments: [], buys: [], pool: [] };
 /** Why this browser's scores can't go on the board (a setting that changes the sim), or null. */
 const lbBlocked = () =>
   !PROTO
@@ -753,7 +753,7 @@ function openBriefing(goLive: boolean): Promise<void> {
     <div class="kicker">YOU'RE GOING LIVE</div>
     <ol class="steps">
       <li><b>Run.</b> He never stops. ${k('lanes')} change lanes.</li>
-      ${PROTO ? `<li><b>Dodge.</b> Weave through the traffic. Near misses (squeezing past cars) and yellow Exclusives win the audience; hits lose it, and the police close in.</li>
+      ${PROTO ? `<li><b>Dodge.</b> Weave through the traffic. Near misses (squeezing past cars) and Water Bottles win the audience; hits lose it, and the police close in.</li>
       <li><b>Rampage.</b> Full audience? ${settings.autoRampage ? 'It fires by itself' : `Press ${k('shoulder')}`} and he smashes everything.</li>` : `<li><b>Smash.</b> Run through the traffic. Go round bulldozers.</li>
       <li><b>Rampage.</b> Smashing fills the meter. Full? ${settings.autoRampage ? 'It fires by itself' : `Press ${k('shoulder')}`} and he runs through everything.</li>`}
     </ol>
@@ -1253,7 +1253,9 @@ function showRecap() {
   mountClip();
   const boardEl = recapEl.querySelector<HTMLElement>('.rc-board');
   if (boardEl) {
-    const blocked = lbBlocked();
+    // A road the station never issued, or one it has since forgotten, can't rank: say so rather than fail the post.
+    const unissued = lb.mode !== 'daily' && !ticketFresh(lb.issuedAt) ? 'Unranked road: the station didn’t issue it (offline, or it sat too long), so this score stays off the board.' : null;
+    const blocked = lbBlocked() ?? unissued;
     const sub: Submission | null = blocked || lb.segments.length === 0
       ? null
       : { mode: lb.mode, seed: lb.seed, growth: simOpts.growth, segments: lb.segments, buys: lb.buys, pool: lb.pool, ...(lb.guided ? { guided: true } : {}), ...(lb.edition ? { edition: lb.edition } : {}), ...(lb.day !== undefined ? { day: lb.day } : {}), ...(simOpts.asks ? { asks: simOpts.asks } : {}), ...(simOpts.mods ? { mods: simOpts.mods } : {}), claimed: Math.round(run ? run.earned : sim.show.banked) };
@@ -1514,7 +1516,7 @@ function present(e: SimEvent) {
       break;
     }
     case 'scoop':
-      // Exclusive: a bright ding (the chain tick, a step up), a gold ring where it was, a tick in the hand. The smash
+      // Water Bottle: a bright ding (the chain tick, a step up), a gold ring where it was, a tick in the hand. The smash
       // event already threw its confetti.
       audio.chainTick(3);
       sim.track.posAt(e.s, e.d, pos);
@@ -2160,12 +2162,18 @@ function beginBroadcast(mode = 'broadcast') {
   endlessMode = PROTO && (mode === 'endless' || dailyMode);
   if (endlessMode) mode = 'broadcast'; // one long broadcast, no run around it
   const day = dailyDay(Date.now());
-  const seed = dailyMode ? dailySeed(day) : nextSeed ?? takeSeed() ?? (Math.random() * 1e9) | 0;
+  // Run Again keeps the road (and its ticket's age); a fresh broadcast takes the prefetched road if it's still fresh.
+  const again = nextSeed !== null && nextSeed === lb.seed ? lb.issuedAt : undefined;
+  const taken = dailyMode || nextSeed !== null ? null : takeSeed();
+  const seed = dailyMode ? dailySeed(day) : nextSeed ?? taken?.seed ?? (Math.random() * 1e9) | 0;
+  const issuedAt = dailyMode ? undefined : nextSeed !== null ? again : taken?.at;
   nextSeed = null;
   // The very first broadcast a player goes live in is the guided one (TUNING.guided): its first segment opens calm.
   const guided = !flags.bot && !flags.autostart && !briefingSeen();
   const edition = 0; // Editions off (2026-11-19)
-  lb = { mode: dailyMode ? 'daily' : endlessMode ? 'endless' : mode === 'run' ? 'run' : 'broadcast', ...(dailyMode ? { day } : {}), seed, segments: [], buys: [], pool: upgradePool(profile), ...(guided ? { guided } : {}), ...(edition ? { edition } : {}) };
+  lb = { mode: dailyMode ? 'daily' : endlessMode ? 'endless' : mode === 'run' ? 'run' : 'broadcast', ...(dailyMode ? { day } : {}), seed, segments: [], buys: [], pool: upgradePool(profile), ...(guided ? { guided } : {}), ...(edition ? { edition } : {}), ...(issuedAt !== undefined ? { issuedAt } : {}) };
+  lb.ranked = !lbBlocked() && (dailyMode ? boardReachable() !== false : ticketFresh(issuedAt));
+  showRankTag();
   if (mode === 'run') {
     run = new RunState(seed, lb.pool, edition); // Awards unlock the rest of the pool
     newRun(run.segmentSeed(), 0, [], {}, guided);
@@ -2961,7 +2969,22 @@ async function renderMenuCard() {
     best?.runs ? `<div class="mc-row"><small>STORIES FINISHED</small><b>${best.runsWon ?? 0}<span>/${best.runs}</span></b></div>` : '',
   ].join('');
   const nx = next ? `<div class="mc-next"><small>NEXT AWARD</small><b>${esc(next.a.title)}</b><span>${esc(next.a.how)} · ${next.have.toLocaleString()}/${next.a.n.toLocaleString()}${rewardLine(next.a) ? ` · ${esc(rewardLine(next.a))}` : ''}</span><i style="--p:${((next.have / next.a.n) * 100).toFixed(0)}%"></i></div>` : `<div class="mc-next"><small>AWARDS</small><b>Every award won</b></div>`;
-  el.innerHTML = rows ? `<div class="mc-rows">${rows}</div>${nx}` : nx;
+  const rs = nextRanked('run');
+  const rk = rs === 'checking' ? `<div class="mc-rank"><b>CHECKING THE BOARD…</b></div>` : rs === 'ranked' ? `<div class="mc-rank on"><b>RANKED</b><span>Scores go on the board</span></div>` : `<div class="mc-rank"><b>UNRANKED</b><span>Can’t reach the board, so scores stay off it (Daily still counts once it’s back)</span></div>`;
+  el.innerHTML = (rows ? `<div class="mc-rows">${rows}</div>${nx}` : nx) + rk;
+}
+onRankChange(() => void renderMenuCard());
+
+/** RANKED / UNRANKED beside LIVE for the first seconds of a player broadcast, so the player knows what counts. */
+let rankTagTimer = 0;
+function showRankTag() {
+  const t = document.getElementById('ranktag');
+  if (!t) return;
+  clearTimeout(rankTagTimer);
+  t.hidden = attract || !!flags.bot;
+  t.textContent = lb.ranked ? 'RANKED' : 'UNRANKED';
+  t.classList.toggle('on', !!lb.ranked);
+  rankTagTimer = window.setTimeout(() => (t.hidden = true), TUNING.hud.rankTagSecs * 1000);
 }
 
 /** Persist the bests (shell storage, per game id). */
@@ -3186,7 +3209,8 @@ declare global {
     __GAME: unknown;
   }
 }
-window.__GAME = {
+// Test builds only (VITE_TEST_HOOK=1, or dev): the public build ships no control surface for automated play.
+if (import.meta.env.DEV || import.meta.env.VITE_TEST_HOOK === '1') window.__GAME = {
   get sim() {
     return sim;
   },
@@ -3293,5 +3317,49 @@ window.__GAME = {
   /** Phase 3: the run (null in a single broadcast). */
   run: () => (run ? { segment: run.segment, phase: run.phase, purse: run.purse, earned: run.earned, owned: [...run.owned], offers: run.phase === 'meeting' ? run.offers() : [], results: run.results.slice() } : null),
   meeting: () => (recapEl.querySelector('.meeting') ? [...recapEl.querySelectorAll<HTMLButtonElement>('.pitch')].map((b) => ({ id: b.dataset.id, disabled: b.disabled })) : null),
+  /** Drawn size vs hit-box per prop kind (local box of each view with its yaw undone), and the giant's drawn width. */
+  fit: () => {
+    const out: Record<string, { n: number; len: number; wid: number; hl: number; hw: number }> = {};
+    const box = new THREE.Box3();
+    const size = new THREE.Vector3();
+    for (const p of sim.track.props) {
+      const g = highway.propView(p.id);
+      if (!g || !p.alive || out[p.kind]?.n >= 3) continue;
+      const pos = g.position.clone(), ry = g.rotation.y;
+      g.position.set(0, 0, 0); g.rotation.y = 0; g.updateMatrixWorld(true);
+      box.makeEmpty();
+      g.traverse((o) => {
+        const m = o as THREE.Mesh;
+        const mat = m.material as THREE.Material | undefined;
+        if (!m.isMesh || !mat || mat.transparent || !m.visible) return; // bodies only: no beams, glows or shadows
+        m.geometry.computeBoundingBox();
+        box.union(m.geometry.boundingBox!.clone().applyMatrix4(m.matrixWorld));
+      });
+      box.getSize(size);
+      g.position.copy(pos); g.rotation.y = ry; g.updateMatrixWorld(true);
+      const o = (out[p.kind] ??= { n: 0, len: 0, wid: 0, hl: p.hl, hw: p.hw });
+      o.n++; o.len = Math.max(o.len, Math.max(size.x, size.z)); o.wid = Math.max(o.wid, Math.min(size.x, size.z));
+    }
+    // The giant's drawn half-width across the road: every visible body mesh (skinned, posed), on the lateral axis.
+    const h = sim.track.headingAt(sim.giant.s);
+    const lat = new THREE.Vector3(Math.sin(h), 0, Math.cos(h));
+    const c = new THREE.Vector3();
+    sim.track.posAt(sim.giant.s, sim.giant.d, c);
+    let half = 0;
+    const v = new THREE.Vector3();
+    for (const root of giant.bodyObjects) root.traverse((o) => {
+      const m = o as THREE.Mesh;
+      const mat = m.material as THREE.Material | undefined;
+      if (!m.isMesh || !mat || mat.transparent || !m.visible || o.userData.outline) return;
+      const pos = m.geometry.getAttribute('position');
+      for (let i = 0; i < pos.count; i += 7) {
+        v.fromBufferAttribute(pos, i);
+        if ((m as THREE.SkinnedMesh).isSkinnedMesh) (m as THREE.SkinnedMesh).applyBoneTransform(i, v);
+        v.applyMatrix4(m.matrixWorld);
+        half = Math.max(half, Math.abs(v.clone().sub(c).dot(lat)));
+      }
+    });
+    return { props: out, giantR: sim.radius(), giantHalf: half, rampage: sim.inRampage };
+  },
   ability: () => ({ id: sim.ability, level: sim.abilityLevel, cd: sim.giant.abilityCd, air: sim.giant.air, airKind: sim.giant.airKind, prime: sim.giant.prime, chip: !abilEl.hidden }),
 };
