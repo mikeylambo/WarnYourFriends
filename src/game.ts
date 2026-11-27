@@ -26,6 +26,8 @@ import { Newsroom, compass, type Headline } from './broadcast/headlines';
 import type { PropKind } from './sim/types';
 import { Gait } from './anim/gait';
 import { Audio } from './audio';
+import { MIX } from './mix';
+import { mountMixPanel } from './mixPanel';
 import { DEFAULT_KEYS, Input, KEY_ACTIONS, RESERVED_KEYS, keyLabel, type KeyAction } from './input';
 import { registerGlyphs, padFamily, type GlyphAction } from './glyphs';
 import coverUrl from './assets/title-cover.webp';
@@ -365,6 +367,10 @@ const cutLog: { t: number; reason: CutDecision['reason']; index: number; laneBus
 const triggerLog: { t: number; kind: string }[] = [];
 let bot: Bot | null = null;
 const audio = new Audio();
+/** Audio mix panel (M): ?mix=1 or ?playtest=1. Levels live in mix.ts; the panel exports the changed ones as JSON. */
+const MIXPANEL = new URLSearchParams(location.search).has('mix') || new URLSearchParams(location.search).has('playtest');
+const mixPanel = mountMixPanel(audio);
+if (new URLSearchParams(location.search).has('mix')) mixPanel.toggle();
 // The audience bar is the RAMPAGE button on touch (Mike, 2026-11-25: one object, the meter and the action).
 const input = new Input(canvas, $('gears'), $('btn-pause'), $('btn-ability'), document.getElementById('btn-ability2'));
 $('btn-cam').addEventListener('pointerdown', (e) => {
@@ -2256,6 +2262,7 @@ window.addEventListener('keydown', (e) => {
     e.preventDefault();
   }
   if (e.code === 'KeyT' && (PLAYTEST || flags.tune)) tunePanel.toggle();
+  if (e.code === 'KeyM' && MIXPANEL) mixPanel.toggle();
   // Typing in a field (the leaderboard name): Enter submits that form, nothing else.
   if (e.target instanceof HTMLInputElement) return;
   if (!recapEl.hidden && (e.code === 'Enter' || e.code === 'Space')) {
@@ -2720,7 +2727,7 @@ function frame(now: number) {
   sirenRight.setFromMatrixColumn(rig.camera.matrixWorld, 0);
   audio.setListener(t.x, t.z, sirenRight.x, sirenRight.z);
   audio.setSirens(
-    sim.escort.cruisers.map((c) => (c.active ? Math.max(0.25, Math.min(1, 1 - (g.s - c.s - 8) / 60)) : 0)),
+    sim.escort.cruisers.map((c) => (c.active ? Math.max(MIX['amb.sirenFloor'], Math.min(1, 1 - (g.s - c.s - 8) / 60)) : 0)),
     sim.escort.cruisers.map((c) => (c.active ? where(c.s, c.d) : null)),
   );
 

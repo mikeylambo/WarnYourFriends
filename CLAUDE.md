@@ -27,6 +27,8 @@ src/sim/             pure TS simulation (no three/DOM): chunks.ts (authored traf
 src/anim/gait.ts     run cycle: pinned feet, two-bone IK, phase locked to distance (pure math, tested)
 src/render/          three.js views: highway (zones, ramp), units (police), giant (greybox pose rig) + giantModel (Meshy skin, assets/giant/giant.glb), cruisers, pip (viewer video), camera rig + director, lighting (night/dusk/day), glow, silhouette test, palette, toon
 src/broadcast/       headline generator (§21) + headlines.json word bank (pure TS, tested); coverage.ts (escalation ladder), viewers.json
+src/mix.ts           the audio mix: every level as a dB knob (buses, music, sirens, rotor, a trim per sound), saved per browser, JSON export/import
+src/mixPanel.ts      the mix panel (M, ?mix=1 or ?playtest=1): sliders, ▶ previews, Copy / Save / Paste / Reset
 src/audio.ts         Web Audio, music/sfx/voice buses: authored SFX (assets/sfx, ElevenLabs) with synth fallback
 src/input.ts         KBM, gamepad, touch → SimInput; rebindable keys, brake toggle
 src/onboarding.ts    one-time control prompts at the moment they matter
