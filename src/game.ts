@@ -157,6 +157,7 @@ const STUNT_LABEL: Record<string, string> = { rival: 'RIVAL NEWS VAN', medium: '
 let chainResultT = 0;
 const gearPips = [...gearsEl.querySelectorAll('i')] as HTMLElement[];
 const gearName = gearsEl.querySelector('.nm') as HTMLElement;
+const gearRing = gearsEl.querySelector('.ring .val') as SVGCircleElement;
 /** A shockwave waits for the first footfall after a gear-up (it lands with his foot). */
 let gearShockPending = false;
 const tierName = tierbar.querySelector('.name') as HTMLElement;
@@ -3099,11 +3100,14 @@ function updateHud(dt: number) {
   // Rampage meter (2026-11-17): fills in Stride; full, it shows the button; in Rampage it's the clock running down.
   const ramp = sim.inRampage;
   const ready = !ramp && g.meter >= 100;
-  gearPips[0].style.setProperty('--fill', (ramp ? Math.min(1, g.rampT / TUNING.rampage.duration) : g.meter / 100).toFixed(3));
+  const meterFill = ramp ? Math.min(1, g.rampT / TUNING.rampage.duration) : g.meter / 100;
+  gearPips[0].style.setProperty('--fill', meterFill.toFixed(3));
+  // Circular meter (Mike, 2026-11-26): the ring fills clockwise from the top (pathLength 100).
+  gearRing.style.strokeDashoffset = (100 - meterFill * 100).toFixed(1);
   gearsEl.classList.toggle('ready', ready);
   gearsEl.dataset.tier = String(g.tier);
   // Readability pass (Mike, 2026-11-17): the number says where it is; full, the button; in Rampage, the seconds left.
-  const nm = ramp ? `${g.rampT.toFixed(1)}s` : ready ? (settings.autoRampage ? 'READY!' : glyphFamily === 'touch' ? 'TAP FOR RAMPAGE' : `<kbd>${esc(glyph('shoulder'))}</kbd> GO!`) : `${Math.floor(g.meter)}%`;
+  const nm = ramp ? `${g.rampT.toFixed(1)}s` : ready ? (settings.autoRampage ? 'READY!' : glyphFamily === 'touch' ? 'TAP!' : `<kbd>${esc(glyph('shoulder'))}</kbd>GO!`) : `${Math.floor(g.meter)}%`;
   if (gearName.innerHTML !== nm) gearName.innerHTML = nm;
   gearsEl.classList.toggle('ramp', ramp);
   // Prototype: a clean run builds the sprint (it shows on the meter's label).

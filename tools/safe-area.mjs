@@ -65,6 +65,8 @@ for (const [w, h, label] of [[844, 390, 'iPhone 14/15'], [932, 430, 'iPhone Pro 
   await check('play');
   await p.evaluate(() => { const G = window.__GAME; G.viewerVideo(); G.sim.show.decayMult = 0; G.sim.show.ratings = 100; G.step(1); });
   await p.waitForTimeout(600);
+  // The viewer video slides in (0.3s): measure where it lands, not mid-slide (a loaded machine caught it in flight).
+  await p.waitForFunction(() => !document.getAnimations().some((a) => a.playState === 'running' && a.effect?.target?.id === 'pip'), null, { timeout: 5000 }).catch(() => {});
   await check('viewer video + audience full');
   await p.evaluate(() => { const G = window.__GAME; for (let i = 0; i < 60 * 600 && G.sim.live; i++) G.step(1); });
   await p.waitForFunction(() => !document.getElementById('recap').hidden, null, { timeout: 40000 }).catch(() => {});

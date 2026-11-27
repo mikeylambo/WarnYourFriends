@@ -1399,3 +1399,37 @@ html.touch #pip, #pip, html.autoramp #pip { --pip-top: calc(var(--edge) + env(sa
 #menucard .mc-rank b { letter-spacing: 0.14em; margin-right: 6px; }
 #menucard .mc-rank.on { opacity: 1; }
 #menucard .mc-rank.on b { color: var(--red); }
+
+/* === Circular Rampage meter (Mike, 2026-11-26) ======================================================================
+   The audience bar becomes a ring gauge in the same corner: the label and number in the middle, a ring in four
+   quarters that fills clockwise from the top. Full, it turns gold and pulses (the tap target on touch); in Rampage
+   it is the clock running down. Overrides every earlier #gears bar rule. */
+#gears {
+  --ring: 116px;
+  width: var(--ring); height: var(--ring); padding: 0; gap: 0; border-radius: 50%; clip-path: none;
+  flex-direction: column; justify-content: center; align-items: center; text-align: center;
+  background: radial-gradient(circle, var(--c-panel) 62%, transparent 63%);
+}
+#gears i.meter { display: none; }
+#gears .ring { position: absolute; inset: 0; width: 100%; height: 100%; transform: rotate(-90deg); overflow: visible; pointer-events: none; }
+#gears .ring circle { fill: none; stroke-width: 9; }
+#gears .ring .trk { stroke: rgba(255, 255, 255, 0.14); }
+#gears .ring .val { stroke: #ff6a1f; stroke-dasharray: 100 100; stroke-dashoffset: 100; transition: stroke-dashoffset 0.15s linear, stroke 0.2s; }
+#gears .ring .ticks { stroke: var(--c-panel); stroke-width: 11; stroke-dasharray: 0.8 24.2; stroke-dashoffset: 0.4; }
+#gears .lbl, html.proto #gears .lbl.proto { position: relative; z-index: 1; margin: 0 0 4px; font-size: 9px; letter-spacing: 0.18em; }
+html.proto #gears.ramp .lbl.proto::after { content: ''; }
+html.proto #gears.ramp .lbl.proto { font-size: 0; }
+html.proto #gears.ramp .lbl.proto::before { content: 'RAMPAGE'; font-size: 9px; }
+#gears .nm { position: relative; z-index: 1; margin: 0; min-width: 0; font: 900 26px/1 var(--f-num); flex-direction: column; justify-content: center; gap: 3px; }
+#gears.ready { background: radial-gradient(circle, #f2b632 62%, transparent 63%); box-shadow: none; }
+#gears.ready .ring .val { stroke: #ffd23c; }
+#gears.ready .nm { font-size: 20px; }
+#gears.ready .nm kbd { font-size: 12px; padding: 2px 6px; }
+html:not(.reduceflashes) #gears.ready { animation: ringready 0.9s ease-in-out infinite; transform-origin: center; }
+@keyframes ringready { 50% { transform: scale(1.07); filter: drop-shadow(0 0 14px rgba(255, 190, 40, 0.85)); } }
+@media (prefers-reduced-motion: reduce) { html #gears.ready { animation: none; } }
+#gears.ramp { background: radial-gradient(circle, #5a1208 62%, transparent 63%); }
+#gears.ramp .ring .val { stroke: #ffd23c; }
+html.touch #gears, html.phone #gears { --ring: 92px; }
+html.touch #gears .nm { font-size: 21px; }
+html.touch #gears.ready .nm { font-size: 18px; }
