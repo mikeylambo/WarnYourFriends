@@ -22,7 +22,15 @@ export type SfxKind =
  * Loop mix (presentation): the loops are peak-normalised at -3 dBFS, so these set how loud they sit.
  * Sirens at full level, the rotor at rest and at Rampage, the theme on the music bus.
  */
-const LOOP_MIX = { siren: 0.25, rotorBase: 0.2, rotorGear: 0.25, theme: 0.85, busted: 0.9, signOff: 0.85, title: 0.8 };
+const LOOP_MIX = { rotorBase: 0.32, rotorGear: 0.12, theme: 0.35, busted: 0.6, signOff: 0.6, title: 0.55 };
+/**
+ * Balance pass (Mike, 2026-11-27: "only heard the whoop"). Measured against the loudness of each file (loudest 200 ms,
+ * high-passed), with the music bus and the SFX bus as the code sets them. The run theme sits at about -36 dBFS mean
+ * (the old synth bed's level, which every older SFX was tuned against; the recorded theme had come in ~8 dB hotter and
+ * buried the new sounds). Ambient loops sit about 3 dB over it at full level (measured on the master: music -32.6 mean in the groove, each siren about -30 alone, the rotor about -33 at rest and -30.5 at Rampage); the cues a player must hear
+ * (tells, whoop, spotlight lock) sit at about -14 to -19; the rest follow in the play() calls.
+ */
+const SIREN_K: Record<string, number> = { 'siren-wail-loop': 1.0, 'siren-yelp-loop': 0.5, 'siren-hilo-loop': 0.45 };
 /**
  * The in-game theme (stems mixed by hand, 103 BPM): an intro of six bars plays once, then bars 7–14 loop. The file
  * ends exactly at bar 14's end, with a 60 ms equal-power crossfade into the audio before the loop start baked into its
@@ -163,7 +171,7 @@ export class Audio {
         src.connect(this.sirens[i]);
         src.start(0, Math.random() * buf.duration);
         this.sirenSynth[i].disconnect();
-        this.sirenK[i] = LOOP_MIX.siren;
+        this.sirenK[i] = SIREN_K[kind];
       }
     } else if (kind === 'rotor-loop' && this.rotor && !this.rotor.sample) {
       const g = c.createGain();
@@ -479,7 +487,7 @@ export class Audio {
   chainTick(mult: number) {
     if (!this.ready) return;
     // The recorded tick, stepped up a half-fifth-ish per multiplier like the synth was.
-    if (this.play('chain-tick', 0.5, Math.pow(2, (mult - 1) / 6), 0.01)) return;
+    if (this.play('chain-tick', 0.9, Math.pow(2, (mult - 1) / 6), 0.01)) return;
     const t = this.ctx!.currentTime;
     const f = 520 * Math.pow(2, (mult - 1) / 6);
     this.tone(t, 0.12, f, f * 1.5, 0.07, 'square');
@@ -502,7 +510,7 @@ export class Audio {
   /** Gear build-up: a short rising tick on each step of the last second before a gear-up (k 0..1). */
   gearTick(k: number) {
     if (!this.ready) return;
-    if (this.play('gear-tick', 0.35 + k * 0.3, 0.9 + k * 0.5, 0.01)) return;
+    if (this.play('gear-tick', 0.55 + k * 0.4, 0.9 + k * 0.5, 0.01)) return;
     const t = this.ctx!.currentTime;
     this.tone(t, 0.09, 420 + k * 520, 520 + k * 700, 0.05 + k * 0.05, 'triangle');
   }
@@ -544,7 +552,7 @@ export class Audio {
   tierUp(tier: number) {
     if (!this.ready) return;
     // Into Rampage: its own power-up, not the tier thump.
-    if (tier >= TUNING.tiers.length - 1 && this.play('rampage-on', 0.9, 1, 0.02)) return;
+    if (tier >= TUNING.tiers.length - 1 && this.play('rampage-on', 1.1, 1, 0.02)) return;
     // Lower and bigger at Rampage.
     if (this.play('tierup', tier >= 2 ? 1 : 0.8, tier >= 2 ? 0.85 : 1, 0.02)) return;
     const t = this.ctx!.currentTime;
@@ -555,7 +563,7 @@ export class Audio {
   tierDown() {
     if (!this.ready) return;
     // Losing Rampage (the gear is still Rampage until setGear follows): its own power-down.
-    if (this.gear === TUNING.tiers.length - 1 && this.play('rampage-off', 0.8, 1, 0.02)) return;
+    if (this.gear === TUNING.tiers.length - 1 && this.play('rampage-off', 1.2, 1, 0.02)) return;
     if (this.play('tierdown', 0.7)) return;
     const t = this.ctx!.currentTime;
     this.noise(t, 0.3, 'bandpass', 1400, 1.5, 0.2, 300);
@@ -676,7 +684,7 @@ export class Audio {
   }
   private honkAt(vol: number) {
     // Four recorded takes (sedan, van, truck, old compact), a little pitch spread so repeats don't match.
-    if (this.play('honk', 0.3 * vol, 1, 0.08)) return;
+    if (this.play('honk', 0.45 * vol, 1, 0.08)) return;
     const c = this.ctx!;
     const t = c.currentTime;
     const dur = 0.18 + Math.random() * 0.2;
@@ -890,7 +898,7 @@ export class Audio {
     }
     if (kind === 'carrier') {
       this.at(pos, () => {
-        if (this.play('tell-carrier', 0.8, 1, 0.02)) return;
+        if (this.play('tell-carrier', 1.1, 1, 0.02)) return;
         this.honkAt(0.9);
         this.tellAt('spike');
       });
@@ -903,7 +911,7 @@ export class Audio {
     switch (kind) {
       case 'cruiser':
         // Engine rev with a siren chirp over it.
-        if (this.play('tell-cruiser', 0.8, 1, 0.02)) {
+        if (this.play('tell-cruiser', 0.55, 1, 0.02)) {
           this.play('tell-cruiser-siren', 0.4, 1, 0.02);
           break;
         }
@@ -920,11 +928,11 @@ export class Audio {
         for (let k = 0; k < 8; k++) this.noise(t + k * 0.09, 0.05, 'highpass', 4500, 2, 0.12);
         break;
       case 'rolling':
-        if (this.play('tell-rolling', 0.8, 1, 0.02)) break;
+        if (this.play('tell-rolling', 0.9, 1, 0.02)) break;
         this.noise(t, 1.0, 'bandpass', 3400, 9, 0.12, 2400);
         break;
       case 'chopper':
-        if (this.play('tell-chopper', 0.8, 1, 0.02)) break;
+        if (this.play('tell-chopper', 1.3, 1, 0.02)) break;
         // A second rotor comes in, its pitch rising as the cone sweeps (§11 "rotor pitch rises").
         for (let k = 0; k < 14; k++) this.noise(t + k * 0.1, 0.06, 'lowpass', 260 + k * 22, 1.5, 0.16 + k * 0.01);
         this.tone(t, 1.5, 48, 74, 0.08, 'sawtooth');
@@ -935,7 +943,7 @@ export class Audio {
   /** Police chopper spotlight locks on: a hard electrical clunk. */
   spotlightLock() {
     if (!this.ready) return;
-    if (this.play('spotlight-lock', 0.7, 1, 0.02)) return;
+    if (this.play('spotlight-lock', 0.8, 1, 0.02)) return;
     const t = this.ctx!.currentTime;
     this.noise(t, 0.08, 'bandpass', 1800, 3, 0.35);
     this.tone(t, 0.25, 140, 120, 0.12, 'square');

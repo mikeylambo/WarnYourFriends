@@ -2711,7 +2711,7 @@ function frame(now: number) {
   sirenRight.setFromMatrixColumn(rig.camera.matrixWorld, 0);
   audio.setListener(t.x, t.z, sirenRight.x, sirenRight.z);
   audio.setSirens(
-    sim.escort.cruisers.map((c) => (c.active ? Math.max(0.25, Math.min(1, 1 - (g.s - c.s - 8) / 60)) : 0)),
+    sim.escort.cruisers.map((c) => (c.active ? Math.max(0.4, Math.min(1, 1 - (g.s - c.s - 8) / 60)) : 0)),
     sim.escort.cruisers.map((c) => (c.active ? where(c.s, c.d) : null)),
   );
 
