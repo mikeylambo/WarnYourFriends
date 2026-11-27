@@ -11,8 +11,9 @@
     "test": "vitest run",
     "soak": "tsx tools/soak.ts",
     "e2e": "node tools/e2e-smoke.mjs",
-    "gates": "npm run typecheck && npm run test && npm run soak && npm run build && npm run api-fresh && npm run e2e",
-    "api-fresh": "git diff --quiet -- api/leaderboard.js || (echo \"api/leaderboard.js is stale: the server would re-simulate scores with old rules. Commit the rebuilt bundle.\" && exit 1)"
+    "gates": "npm run typecheck && npm run test && npm run soak && npm run build && npm run api-fresh && npm run e2e && npm run safe-area",
+    "api-fresh": "git diff --quiet -- api/leaderboard.js || (echo \"api/leaderboard.js is stale: the server would re-simulate scores with old rules. Commit the rebuilt bundle.\" && exit 1)",
+    "safe-area": "node tools/safe-area.mjs"
   },
   "dependencies": {
     "@slu/web-shell": "git+https://github.com/mikeylambo/Web-Game-Shell-v1.02.git#7003ec7a46f0de4c86b8dbb28fea81c10d4f21fa",

@@ -529,6 +529,83 @@ try {
     else ok(`main menu over a clean chopper shot: ${m.choices}`);
     await ctx.close();
   }
+  // 9. Menu flow on a phone in landscape (Mike, 2026-11-25: stuck on Awards; Settings had no way back on touch).
+  //    Every menu screen has a way back that is fully on screen, and tapping it returns to the main menu.
+  {
+    const ctx = await browser.newContext({ viewport: { width: 750, height: 342 }, isMobile: true, hasTouch: true, deviceScaleFactor: 2 });
+    const page = await ctx.newPage();
+    const problems = watch(page);
+    await page.goto(URL);
+    await page.waitForSelector('[data-choice-id="start"]', { timeout: 15000 });
+    await page.tap('[data-choice-id="start"]');
+    await page.waitForSelector('#ui [data-screen-id="main-menu"]', { timeout: 5000 });
+    const onMenu = () => page.waitForSelector('#ui [data-screen-id="main-menu"]', { timeout: 4000 }).then(() => true).catch(() => false);
+    const inView = (sel) => page.evaluate((sel) => { const e = document.querySelector(sel); if (!e) return 'missing'; const r = e.getBoundingClientRect(); return r.top >= 0 && r.bottom <= innerHeight + 0.5 && r.left >= 0 && r.right <= innerWidth + 0.5 && r.width > 0 ? 'ok' : `off screen (${Math.round(r.top)}–${Math.round(r.bottom)} of ${innerHeight})`; }, sel);
+    for (const [choice, open, back] of [['howto', '#recap .briefing', '#brief-go'], ['awards', '#recap .awards', '#aw-back'], ['credits', '#recap .credits', '#cr-back'], ['settings', '#ui [data-screen-id="settings"]', '#ui [data-screen-id="settings"] [data-back]'], ['run', '#recap .preshow', '#ps-back']]) {
+      await page.tap(`[data-choice-id="${choice}"]`);
+      await page.waitForSelector(open, { timeout: 4000 }).catch(() => {});
+      await page.waitForTimeout(300); // cards ignore input for their first 250ms
+      const seen = await inView(back);
+      if (seen !== 'ok') { fail(`menu ${choice}: the way back is ${seen}`); continue; }
+      await page.tap(back);
+      if (await onMenu()) ok(`menu ${choice}: Back on screen and returns to the main menu (phone landscape)`);
+      else fail(`menu ${choice}: Back did not return to the main menu`);
+      await page.waitForTimeout(300);
+    }
+    // Awards scrolls by touch (the card is its own scroll area that allows panning).
+    await page.tap('[data-choice-id="awards"]');
+    await page.waitForSelector('#recap .awards', { timeout: 4000 }).catch(() => {});
+    const sc = await page.evaluate(() => { const c = document.querySelector('#recap .awards'); const cs = getComputedStyle(c); return { scrolls: c.scrollHeight > c.clientHeight, oy: cs.overflowY, ta: cs.touchAction }; });
+    if (sc.scrolls && sc.oy === 'auto' && sc.ta.includes('pan-y')) ok('awards card scrolls by touch');
+    else if (!sc.scrolls) ok('awards card fits without scrolling');
+    else fail(`awards card can't scroll by touch (${JSON.stringify(sc)})`);
+    await page.tap('#aw-back');
+    await onMenu();
+    await page.waitForTimeout(300);
+    // Settings → Controls → Rebind Keys: its Back is on screen and returns to Settings.
+    await page.tap('[data-choice-id="settings"]');
+    await page.waitForSelector('#ui [data-screen-id="settings"]', { timeout: 4000 }).catch(() => {});
+    await page.tap('[data-choice-id="wyf-tab-controls"]');
+    await page.waitForTimeout(250);
+    await page.tap('[data-choice-id="wyf-controls"]');
+    await page.waitForSelector('#ctl-back', { timeout: 4000 }).catch(() => {});
+    await page.waitForTimeout(300);
+    const cv = await inView('#ctl-back');
+    if (cv !== 'ok') fail(`rebind keys: Back is ${cv}`);
+    else {
+      await page.tap('#ctl-back');
+      const back = await page.waitForSelector('#ui [data-screen-id="settings"]', { timeout: 4000 }).then(() => true).catch(() => false);
+      if (back) ok('rebind keys: Back on screen and returns to Settings');
+      else fail('rebind keys: Back did not return to Settings');
+    }
+    await page.tap('#ui [data-screen-id="settings"] [data-back]');
+    await onMenu();
+    // In play: Pause → Settings → Back returns to the pause menu, and Resume returns to play.
+    await page.tap('[data-choice-id="endless"]');
+    await page.waitForFunction(() => window.__GAME.started && !window.__GAME.attract, null, { timeout: 8000 }).catch(() => {});
+    await page.waitForTimeout(500);
+    await page.tap('#btn-pause');
+    const paused = await page.waitForSelector('#ui [data-screen-id="pause"]', { timeout: 4000 }).then(() => true).catch(() => false);
+    if (!paused) fail('pause: the pause button did not open the pause menu');
+    else {
+      await page.tap('[data-choice-id="settings"]');
+      await page.waitForSelector('#ui [data-screen-id="settings"]', { timeout: 4000 }).catch(() => {});
+      const pv = await inView('#ui [data-screen-id="settings"] [data-back]');
+      if (pv !== 'ok') fail(`pause → settings: Back is ${pv}`);
+      else {
+        await page.tap('#ui [data-screen-id="settings"] [data-back]');
+        const toPause = await page.waitForSelector('#ui [data-screen-id="pause"]', { timeout: 4000 }).then(() => true).catch(() => false);
+        if (toPause) ok('pause → settings: Back returns to the pause menu');
+        else fail('pause → settings: Back did not return to the pause menu');
+      }
+      await page.tap('[data-choice-id="resume"]').catch(() => {});
+      const resumed = await page.waitForFunction(() => !window.__GAME.paused, null, { timeout: 4000 }).then(() => true).catch(() => false);
+      if (resumed) ok('pause: Resume returns to play');
+      else fail('pause: Resume did not return to play');
+    }
+    if (problems.length) fail(`menu flow problems:\n    ${problems.join('\n    ')}`);
+    await ctx.close();
+  }
   await browser.close();
 
   // 3. Regression: no WebGL → explicit message, never an inert title.
